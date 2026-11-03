@@ -1,0 +1,44 @@
+# 统一换行：仓库内一律 LF，检出时由 Git 自动处理
+* text=auto eol=lf
+
+# ---- 源码 ----
+*.py        text eol=lf diff=python
+*.pyi       text eol=lf diff=python
+*.toml      text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+*.txt       text eol=lf
+*.md        text eol=lf diff=markdown
+*.rst       text eol=lf
+*.json      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+
+# ---- 脚本 ----
+*.sh        text eol=lf
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# ---- 游戏资源（二进制，禁止任何换行/文本转换）----
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.bmp       binary
+*.webp      binary
+*.ico       binary
+*.ttf       binary
+*.otf       binary
+*.wav       binary
+*.ogg       binary
+*.mp3       binary
+*.flac      binary
+*.zip       binary
+*.gz        binary
+*.7z        binary
+*.pyc       binary
+
+# ---- Tiled / 文本型资源 ----
+*.tmx       text eol=lf
+*.tsx       text eol=lf

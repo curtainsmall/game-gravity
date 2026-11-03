@@ -1,0 +1,79 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg
+*.egg-info/
+.eggs/
+MANIFEST
+pip-wheel-metadata/
+
+# ---- 虚拟环境 / 依赖 ----
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ---- 构建 / 打包 ----
+build/
+dist/
+develop-eggs/
+sdist/
+wheels/
+*.spec
+# PyInstaller 产物
+*.manifest
+
+# ---- 测试 / 类型检查 / 代码质量缓存 ----
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+.tox/
+.nox/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# ---- 编辑器 / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.spyderproject
+.spyproject
+
+# ---- 操作系统 ----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ---- 运行时产物 ----
+*.log
+logs/
+saves/
+save/
+*.save
+*.tmp
+crash-*.txt
+
+# ---- 游戏资源缓存 / 生成物 ----
+# 由脚本从源资源烘焙出来的缓存（按需保留，勿提交单个文件）
+cache/
+*.cache
+# 音频导出中间文件
+*.wav.import
