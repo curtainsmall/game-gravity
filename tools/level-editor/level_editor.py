@@ -1,11 +1,17 @@
 """关卡编辑器：以「矩形」为最小单位编辑关卡。
 
-运行：uv run python tools/level-designer/level_designer.py
+运行：uv run python tools/level-editor/level_editor.py
 
 编辑模型
-  关卡数据里的方块与木板都是矩形（pos + size），编辑器同样按整体处理：
-  光标停在某格时，会高亮它所属的整个矩形；修改、删除都作用于整个矩形。
-  按钮、道具、玩家、终点是整格对象，单击放置。
+  关卡数据里的方块、木板与可移动方块都是矩形（pos + size），编辑器同样按
+  整体处理：光标停在某格时，会高亮它所属的整个矩形；修改、删除都作用于
+  整个矩形。按钮、道具是整格对象，喷口是点，都是单击放置。
+
+  起点和终点都是「只有一份」的对象：在新建菜单里选它们、在关卡里单击放置，
+  再放一次就是把原来那个挪过去；Delete 可以删掉，但同一时刻最多一个。两者画
+  成同一款标记（2px 方框 + 中心小方点），起点橙色、终点绿色。存档时没有的
+  对象就不写这个键。
+
   没有常驻的「当前工具」：右键弹出新建菜单，选一种对象就进入新建状态，
   在新建状态里左键画矩形 / 单击放置，右键退出。
 
@@ -13,8 +19,17 @@
   占一格。它按自己的位置画、按画出来的三角命中，不吸附到格心，所以手写
   的坐标（比如 01.json 里的 [6, 0]）也能原样显示和选中。
 
+  喷口还会画出两个标注：range（风区长度）用虚线框框住，power 用一条从 pos
+  指向目标的红色尺寸线，且只有目标那一端有箭头。
+
   画布底部有一条刻度，每 10 格一个刻度和编号（0、10、…、120），跟着网格
   一起缩放和平移。
+
+  新建对象的字段一律先给中性值（数值 0、布尔 false、字符串空），具体参数
+  再到右侧面板里调。
+
+  可移动方块会画出自己的支点：pos 那一格的中心一个红点，支点加上 offset
+  是目标点、又一个红点，两点之间用红色虚线直连（直线，不拐弯）。
 
 操作
   工具栏     新建 / 打开 / 保存 / 撤销 / 关卡设置（都可点击）
@@ -34,7 +49,14 @@
 面板里点一行选中字段、点左右小箭头改数值、点「删除对象」「关闭」，
 Esc 也能关。
 
-关卡设置是浮层：点字段选中、点小箭头改跳高、点「应用」「取消」，
+可移动方块的「纵向偏移」下面有「选择目标位置」：点它之后在关卡里左键点
+一下目标格，偏移就按「目标格 - pos」自动算出来；右键或 Esc 取消。
+
+可移动方块、按钮、道具的第一行是「名称」：点一下就能直接键入（退格删字，
+最长 24 字），Enter 或点别处结束输入。按钮的名字就是可移动方块「触发按钮」
+那一行能选到的列表。
+
+关卡设置是浮层：点字段选中、点小箭头改初始跳高、点「应用」「取消」，
 点面板外取消。
 
 关窗口或按 Esc 退出时，如果关卡还有未保存的改动（标题带 *），会先弹一个
@@ -76,6 +98,8 @@ ITEM_COLOR = (220, 20, 60)
 NOZZLE_COLOR = (220, 20, 60)
 PLAYER_COLOR = (255, 140, 0)
 DESTINATION_COLOR = (34, 139, 34)
+PIVOT_COLOR = (255, 70, 70)
+RANGE_COLOR = (200, 120, 130)
 GROUND_COLOR = (120, 120, 120)
 DIALOG_BG = (55, 55, 60)
 DIALOG_BORDER = (200, 200, 200)
@@ -87,11 +111,11 @@ TOOL_BLOCK, TOOL_PLANK, TOOL_MOVABLE, TOOL_BUTTON, TOOL_ITEM, TOOL_NOZZLE, TOOL_
 TOOL_SPECS = {
     TOOL_BLOCK: ("方块", "rect"),
     TOOL_PLANK: ("木板", "rect"),
-    TOOL_MOVABLE: ("可移动方块", "single"),
+    TOOL_MOVABLE: ("可移动方块", "rect"),
     TOOL_BUTTON: ("按钮", "single"),
     TOOL_ITEM: ("道具", "single"),
     TOOL_NOZZLE: ("喷口", "single"),
-    TOOL_PLAYER: ("玩家", "single"),
+    TOOL_PLAYER: ("起点", "single"),
     TOOL_DEST: ("终点", "single"),
 }
 TOOL_ORDER = [TOOL_BLOCK, TOOL_PLANK, TOOL_MOVABLE, TOOL_BUTTON, TOOL_ITEM, TOOL_NOZZLE, TOOL_PLAYER, TOOL_DEST]
@@ -111,6 +135,8 @@ NOZZLE_DEFAULT_POWER = 7
 NOZZLE_DEFAULT_RANGE = 5
 JUMP_HEIGHT_DEFAULT = 4
 JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX = 0, 7
+# 关卡设置里的字段数：名称、初始跳高
+SETTINGS_FIELD_COUNT = 2
 
 KIND_BLOCK = "block"
 KIND_PLANK = "plank"
@@ -121,6 +147,10 @@ KIND_NOZZLE = "nozzle"
 KIND_PLAYER = "player"
 KIND_DESTINATION = "destination"
 
+# 关卡数据里带 name 字段、会被别的对象引用的种类
+KIND_HAS_NAME = (KIND_MOVABLE, KIND_BUTTON, KIND_ITEM)
+NAME_MAX_LENGTH = 24
+
 KIND_TITLES = {
     KIND_BLOCK: "方块",
     KIND_PLANK: "木板",
@@ -128,7 +158,7 @@ KIND_TITLES = {
     KIND_BUTTON: "按钮",
     KIND_ITEM: "道具",
     KIND_NOZZLE: "喷口",
-    KIND_PLAYER: "玩家",
+    KIND_PLAYER: "起点",
     KIND_DESTINATION: "终点",
 }
 
@@ -149,6 +179,8 @@ DETAIL_PANEL_WIDTH = 250
 CREATE_MENU_WIDTH = 150
 RULER_HEIGHT = 24
 RULER_STEP = 10
+# 按钮朝向 -> 棱台旋转角度，和 renderer 里 PlaceholderFace.rotation 一致
+FACE_ROTATIONS = {"up": 0, "right": 90, "down": 180, "left": 270}
 
 
 def _display_path(path: str | None) -> str:
@@ -316,7 +348,6 @@ class Level:
             "width": COLS,
             "height": ROWS,
             "jump_height": self.jump_height,
-            "player": copy.deepcopy(self.player) or {"pos": [0, 0]},
             "blocks": copy.deepcopy(self.blocks),
             "planks": copy.deepcopy(self.planks),
             "movable_blocks": copy.deepcopy(self.movable_blocks),
@@ -324,6 +355,9 @@ class Level:
             "items": copy.deepcopy(self.items),
             "nozzles": copy.deepcopy(self.nozzles),
         }
+        # 起点和终点都只有一份，没有就不写这个键
+        if self.player is not None:
+            definition["player"] = copy.deepcopy(self.player)
         if self.destination is not None:
             definition["destination"] = copy.deepcopy(self.destination)
         return definition
@@ -344,6 +378,14 @@ class Level:
         return level
 
 
+def player_position(level: Level) -> tuple:
+    """起点坐标；没有起点时返回 None。"""
+    if level.player is None:
+        return None
+    pos = level.player.get("pos", [0, 0])
+    return int(pos[0]), int(pos[1])
+
+
 class Editor:
     def __init__(self) -> None:
         self.level = Level()
@@ -361,6 +403,8 @@ class Editor:
         self.pan_drag: tuple | None = None
         self.dialog: dict | None = None
         self.dialog_field = 0
+        self.picking_offset = False
+        self.name_focused = False
         self.menu_open = False
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
@@ -453,10 +497,22 @@ class Editor:
         if kind == "rect":
             x, y, w, h = normalize_drag(start, current)
             self.push_undo()
-            target = self.level.blocks if self.tool == TOOL_BLOCK else self.level.planks
-            target.append({"pos": [x, y], "size": [w, h]})
+            if self.tool == TOOL_BLOCK:
+                self.level.blocks.append({"pos": [x, y], "size": [w, h]})
+            elif self.tool == TOOL_PLANK:
+                self.level.planks.append({"pos": [x, y], "size": [w, h]})
+            else:
+                self.level.movable_blocks.append(
+                    {
+                        "name": "",
+                        "pos": [x, y],
+                        "size": [w, h],
+                        "offset": [0, 0],
+                        "sources": [],
+                    }
+                )
             self.dirty = True
-            self.status = f"新增矩形 ({x},{y}) {w}×{h}"
+            self.status = f"新增{TOOL_SPECS[self.tool][0]} ({x},{y}) {w}×{h}"
         else:
             self.place_single(start)
 
@@ -472,31 +528,18 @@ class Editor:
                 return
         self.push_undo()
         self.dirty = True
-        if self.tool == TOOL_MOVABLE:
-            level.movable_blocks.append(
-                {
-                    "name": f"g{len(level.movable_blocks) + 1}",
-                    "pos": [col, row],
-                    "size": [1, 1],
-                    "offset": [0, -3],
-                    "sources": [],
-                }
-            )
-        elif self.tool == TOOL_BUTTON:
-            level.buttons.append({"name": f"b{len(level.buttons) + 1}", "pos": [col, row], "face": "up"})
+        # 新对象的数值/布尔/字符串一律给中性默认值，具体参数再在面板里调
+        if self.tool == TOOL_BUTTON:
+            level.buttons.append({"name": "", "pos": [col, row], "face": ""})
         elif self.tool == TOOL_ITEM:
-            level.items.append({"name": f"i{len(level.items) + 1}", "pos": [col, row], "heavy": False})
+            level.items.append({"name": "", "pos": [col, row], "heavy": False})
         elif self.tool == TOOL_NOZZLE:
-            level.nozzles.append(
-                {
-                    "pos": [col + 0.5, row],
-                    "power": NOZZLE_DEFAULT_POWER,
-                    "range": NOZZLE_DEFAULT_RANGE,
-                }
-            )
+            level.nozzles.append({"pos": [col + 0.5, row], "power": 0, "range": 0})
         elif self.tool == TOOL_PLAYER:
+            # 起点只有一份：再放一次就是把它挪过去
             level.player = {"pos": [col, row]}
         elif self.tool == TOOL_DEST:
+            # 终点也只有一份
             level.destination = {"pos": [col, row]}
 
     def delete_entry(self, kind: str, entry: dict) -> None:
@@ -520,6 +563,7 @@ class Editor:
             self.level.destination = None
         self.dialog = None
         self.hovered = None
+        self.picking_offset = False
         self.status = f"已删除{KIND_TITLES.get(kind, '对象')}"
 
     # ---- 撤销 -------------------------------------------------------
@@ -534,6 +578,7 @@ class Editor:
             return
         self.level = Level.from_definition(self.undo_stack.pop())
         self.dialog = None
+        self.picking_offset = False
         self.dirty = True
         self.status = "已撤销"
 
@@ -544,6 +589,7 @@ class Editor:
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
+        self.picking_offset = False
         self.startup = False
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
@@ -568,6 +614,7 @@ class Editor:
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
+        self.picking_offset = False
         self.startup = False
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
@@ -626,9 +673,67 @@ class Editor:
         kind, entry = self.hovered
         self.dialog = {"kind": kind, "entry": entry}
         self.dialog_field = 0
+        self.picking_offset = False
+        self.name_focused = False
 
     def close_dialog(self) -> None:
         self.dialog = None
+        self.picking_offset = False
+        self.name_focused = False
+
+    # ---- 名称输入 ---------------------------------------------------
+    def focus_name(self) -> None:
+        if self.dialog is None or self.dialog["kind"] not in KIND_HAS_NAME:
+            return
+        if not self.name_focused:
+            self.push_undo()
+        self.name_focused = True
+        self.dialog_field = -1
+        self.status = "输入名称；Enter 或点别处结束"
+
+    def blur_name(self) -> None:
+        if self.dialog_field < 0:
+            self.dialog_field = 0
+        self.name_focused = False
+
+    def type_name(self, char: str) -> None:
+        if not self.name_focused or self.dialog is None:
+            return
+        name = self.dialog["entry"].get("name", "")
+        if char.isprintable() and len(name) < NAME_MAX_LENGTH:
+            self.dialog["entry"]["name"] = name + char
+            self.dirty = True
+
+    def erase_name_char(self) -> None:
+        if not self.name_focused or self.dialog is None:
+            return
+        name = self.dialog["entry"].get("name", "")
+        if name:
+            self.dialog["entry"]["name"] = name[:-1]
+            self.dirty = True
+
+    # ---- 拾取偏移 ---------------------------------------------------
+    def begin_pick_offset(self) -> None:
+        """等用户在关卡里点一下，用那一点和 pos 的差算出 offset。"""
+        if self.dialog is None or self.dialog["kind"] != KIND_MOVABLE:
+            return
+        self.picking_offset = True
+        self.status = "在关卡里左键点一下目标位置；右键或 Esc 取消"
+
+    def cancel_pick_offset(self) -> None:
+        self.picking_offset = False
+        self.status = "已取消拾取偏移"
+
+    def finish_pick_offset(self, cell: tuple) -> None:
+        if not self.picking_offset or self.dialog is None:
+            return
+        entry = self.dialog["entry"]
+        pos = entry["pos"]
+        self.push_undo()
+        entry["offset"] = [int(cell[0]) - int(pos[0]), int(cell[1]) - int(pos[1])]
+        self.picking_offset = False
+        self.dirty = True
+        self.status = f"偏移设为 {entry['offset'][0]}, {entry['offset'][1]}"
 
     def dialog_rows(self) -> list:
         if self.dialog is None:
@@ -650,7 +755,7 @@ class Editor:
                 ("一次触发", "是" if entry.get("once") else "否"),
             ]
         elif kind == KIND_BUTTON:
-            rows.append(("朝向", entry.get("face", "up")))
+            rows.append(("朝向", entry.get("face") or "（空）"))
         elif kind == KIND_ITEM:
             rows.append(("变重", "是" if entry.get("heavy") else "否"))
         elif kind == KIND_NOZZLE:
@@ -784,6 +889,33 @@ def startup_rects(surface: pygame.Surface) -> list:
     ]
 
 
+def draw_cell_marker(surface: pygame.Surface, rect: pygame.Rect, color: tuple) -> None:
+    """起点/终点用的标记：2px 方框 + 中心一个小方点。"""
+    pygame.draw.rect(surface, color, rect, 2)
+    center = rect.center
+    pygame.draw.rect(surface, color, pygame.Rect(center[0] - 2, center[1] - 2, 4, 4))
+
+
+def frustum_points(rect: pygame.Rect, face: str) -> list:
+    """按钮的棱台：窄端指向 face（up/right/down/left），和游戏里的画法一致。"""
+    inset = max(1.0, rect.width * 0.2)
+    base = [
+        (rect.left, rect.bottom),
+        (rect.right, rect.bottom),
+        (rect.right - inset, rect.top),
+        (rect.left + inset, rect.top),
+    ]
+    angle = math.radians(FACE_ROTATIONS.get(str(face), 0))
+    if not angle:
+        return base
+    center_x, center_y = rect.center
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+    return [
+        (center_x + dx * cos_a - dy * sin_a, center_y + dx * sin_a + dy * cos_a)
+        for dx, dy in ((x - center_x, y - center_y) for x, y in base)
+    ]
+
+
 def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None:
     level = editor.level
     tile = layout.tile
@@ -811,18 +943,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
     for entry in level.buttons:
-        rect = layout.entry_rect(entry)
-        inset = rect.width * 0.2
-        pygame.draw.polygon(
-            surface,
-            BUTTON_COLOR,
-            [
-                (rect.left, rect.bottom),
-                (rect.right, rect.bottom),
-                (rect.right - inset, rect.top),
-                (rect.left + inset, rect.top),
-            ],
-        )
+        pygame.draw.polygon(surface, BUTTON_COLOR, frustum_points(layout.entry_rect(entry), entry.get("face", "")))
 
     for entry in level.items:
         rect = layout.entry_rect(entry)
@@ -846,16 +967,24 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         base_y = layout.top + (ROWS + 1 - entry["pos"][1]) * tile
         up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
         apex_y = base_y - tile if up else base_y + tile
+        draw_nozzle_range(surface, layout, entry)
         pygame.draw.polygon(
             surface,
             NOZZLE_COLOR,
             [(center_x - tile / 2, base_y), (center_x + tile / 2, base_y), (center_x, apex_y)],
         )
+        draw_nozzle_power(surface, layout, entry)
 
-    if level.player:
-        pygame.draw.rect(surface, PLAYER_COLOR, layout.entry_rect(level.player).inflate(0, -2))
+    # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
+    start = player_position(level)
+    if start is not None:
+        draw_cell_marker(surface, layout.cell_rect(start[0], start[1], (1, 1)), PLAYER_COLOR)
     if level.destination:
-        pygame.draw.rect(surface, DESTINATION_COLOR, layout.entry_rect(level.destination))
+        draw_cell_marker(surface, layout.entry_rect(level.destination), DESTINATION_COLOR)
+
+    # 可移动方块：支点、目标点，以及两点之间的红色虚线（直线，不拐弯）
+    for entry in level.movable_blocks:
+        draw_pivot_guide(surface, layout, entry)
 
     # 拖动预览
     if editor.drag_start is not None and editor.drag_current is not None:
@@ -864,7 +993,12 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         preview.fill(PREVIEW)
         surface.blit(preview, layout.cell_rect(x, y, (w, h)).topleft)
 
-    if editor.creating:
+    if editor.picking_offset:
+        # 选目标位置时：光标所在格的中心画一个红点，和支点/目标点同一个红
+        if editor.hover is not None:
+            center = layout.cell_rect(editor.hover[0], editor.hover[1], (1, 1)).center
+            pygame.draw.circle(surface, PIVOT_COLOR, center, 4)
+    elif editor.creating:
         # 新建状态：光标所在格用「要放的那种对象」的颜色描边；拖动时改画整个预览范围
         color = _readable_color(TOOL_COLORS.get(editor.tool, HIGHLIGHT))
         if editor.hover is not None:
@@ -878,6 +1012,90 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         kind, entry = editor.hovered
         box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
         pygame.draw.rect(surface, HIGHLIGHT, layout.entry_rect(box), 2)
+
+
+def _dotted_line(
+    surface: pygame.Surface, start: tuple, end: tuple, color: tuple, dash: float = 4.0, gap: float = 4.0
+) -> None:
+    """两点之间画虚线，斜着也走直线。"""
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = math.hypot(dx, dy)
+    if length < 1:
+        return
+    ux, uy = dx / length, dy / length
+    position = 0.0
+    while position < length:
+        head = position
+        tail = min(position + dash, length)
+        pygame.draw.line(
+            surface,
+            color,
+            (start[0] + ux * head, start[1] + uy * head),
+            (start[0] + ux * tail, start[1] + uy * tail),
+        )
+        position += dash + gap
+
+
+def draw_pivot_guide(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
+    """可移动方块：pos 那一格的中心是支点，支点 + offset 是目标点，两点红色虚线相连。"""
+    pos = entry["pos"]
+    cell = layout.cell_rect(pos[0], pos[1], (1, 1))
+    pivot = (float(cell.centerx), float(cell.centery))
+    offset = entry.get("offset", [0, 0])
+    target = (pivot[0] + offset[0] * layout.tile, pivot[1] - offset[1] * layout.tile)
+    _dotted_line(surface, pivot, target, PIVOT_COLOR)
+    for point in (pivot, target):
+        pygame.draw.circle(surface, PIVOT_COLOR, (round(point[0]), round(point[1])), 3)
+
+
+def _arrow_head(surface: pygame.Surface, tip: tuple, direction: tuple, color: tuple, size: int = 7) -> None:
+    """单个箭头：尖端在 tip，direction 是由尾部指向尖端的单位向量。"""
+    dx, dy = direction
+    base_x = tip[0] - dx * size
+    base_y = tip[1] - dy * size
+    half = size * 0.5
+    pygame.draw.polygon(
+        surface,
+        color,
+        [
+            (tip[0], tip[1]),
+            (base_x - dy * half, base_y + dx * half),
+            (base_x + dy * half, base_y - dx * half),
+        ],
+    )
+
+
+def nozzle_range_rect(layout: Layout, entry: dict) -> pygame.Rect:
+    """风区（range）占的那一格宽、length 格高的矩形。"""
+    x, y = entry["pos"]
+    length = max(0, int(entry.get("range", 0)))
+    up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
+    bottom = y if up else y - length
+    return layout.cell_rect(x - 0.5, bottom, (1, max(1, length)))
+
+
+def draw_nozzle_range(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
+    """范围用虚线框标出来。"""
+    if int(entry.get("range", 0)) <= 0:
+        return
+    rect = nozzle_range_rect(layout, entry)
+    corners = [rect.topleft, rect.topright, rect.bottomright, rect.bottomleft]
+    for start, end in zip(corners, corners[1:] + corners[:1]):
+        _dotted_line(surface, start, end, RANGE_COLOR, dash=3.0, gap=3.0)
+
+
+def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
+    """力度用一条从 pos 指向目标的红色尺寸线，只在目标端有一个箭头。"""
+    power = int(entry.get("power", 0))
+    if power == 0:
+        return
+    center_x = layout.left + entry["pos"][0] * layout.tile
+    base_y = layout.top + (ROWS + 1 - entry["pos"][1]) * layout.tile
+    tip_y = base_y - power * layout.tile
+    pygame.draw.line(surface, PIVOT_COLOR, (center_x, base_y), (center_x, tip_y), 2)
+    direction = (0.0, -1.0 if power > 0 else 1.0)
+    _arrow_head(surface, (center_x, tip_y), direction, PIVOT_COLOR)
 
 
 def draw_ruler(surface: pygame.Surface, layout: Layout, font: pygame.font.Font) -> None:
@@ -1013,17 +1231,48 @@ def detail_panel_rect(surface: pygame.Surface) -> pygame.Rect:
     )
 
 
-def detail_row_rects(surface: pygame.Surface, editor: Editor) -> list:
-    """字段行；行高按面板高度收缩，字段多的对象也放得下。"""
+def detail_slots(surface: pygame.Surface, editor: Editor) -> list:
+    """面板从上到下的槽位：('name', None) / ('row', 字段下标) / ('pick', None)。
+
+    有名字的对象最上面是名称输入框；可移动方块的「纵向偏移」下面插一个
+    「选择目标位置」按钮。
+    """
     panel = detail_panel_rect(surface)
     count = len(editor.dialog_rows())
-    top = panel.top + 32
-    bottom = panel.bottom - 36
-    height = min(ROW_HEIGHT, max(18, (bottom - top) // max(1, count)))
+    kind = editor.dialog["kind"] if editor.dialog else None
+    slots = []
+    if kind in KIND_HAS_NAME:
+        slots.append(("name", None))
+    for index in range(count):
+        slots.append(("row", index))
+        if kind == KIND_MOVABLE and index == 5:
+            slots.append(("pick", None))
+    top = panel.top + 28
+    bottom = panel.bottom - 34
+    height = min(ROW_HEIGHT, max(16, (bottom - top) // max(1, len(slots))))
     return [
-        (pygame.Rect(panel.left + 10, top + index * height, panel.width - 20, height - 2), index)
-        for index in range(count)
+        (
+            pygame.Rect(panel.left + 10, top + position * height, panel.width - 20, height - 2),
+            slot_kind,
+            index,
+        )
+        for position, (slot_kind, index) in enumerate(slots)
     ]
+
+
+def detail_row_rects(surface: pygame.Surface, editor: Editor) -> list:
+    return [(rect, index) for rect, kind, index in detail_slots(surface, editor) if kind == "row"]
+
+
+def detail_slot_rect(surface: pygame.Surface, editor: Editor, wanted: str) -> pygame.Rect | None:
+    for rect, kind, _ in detail_slots(surface, editor):
+        if kind == wanted:
+            return rect
+    return None
+
+
+def detail_pick_rect(surface: pygame.Surface, editor: Editor) -> pygame.Rect | None:
+    return detail_slot_rect(surface, editor, "pick")
 
 
 def detail_button_rects(surface: pygame.Surface) -> tuple:
@@ -1057,6 +1306,34 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
         _draw_stepper(surface, left, -1)
         _draw_stepper(surface, right, 1)
 
+    pick_rect = detail_pick_rect(surface, editor)
+    if pick_rect is not None:
+        if editor.picking_offset:
+            pygame.draw.rect(surface, HIGHLIGHT, pick_rect)
+            color = (20, 20, 20)
+        else:
+            hovered = pick_rect.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (100, 100, 110) if hovered else BUTTON_BG, pick_rect)
+            pygame.draw.rect(surface, DIALOG_BORDER, pick_rect, 1)
+            color = TEXT
+        text = font.render("选择目标位置", True, color)
+        surface.blit(text, (pick_rect.left + 8, pick_rect.centery - text.get_height() // 2))
+
+    name_rect = detail_slot_rect(surface, editor, "name")
+    if name_rect is not None:
+        focused = editor.name_focused
+        pygame.draw.rect(surface, (62, 62, 72) if focused else (48, 48, 54), name_rect)
+        pygame.draw.rect(surface, HIGHLIGHT if focused else (86, 86, 94), name_rect, 1)
+        name = editor.dialog["entry"].get("name", "")
+        caret = "|" if focused else ""
+        text = font.render(f"名称: {name if name else '（空）'}{caret}", True, HIGHLIGHT if focused else TEXT)
+        clip = max(1, name_rect.width - 12)
+        surface.blit(
+            text,
+            (name_rect.left + 6, name_rect.centery - text.get_height() // 2),
+            (0, 0, min(text.get_width(), clip), text.get_height()),
+        )
+
     delete_rect, close_rect = detail_button_rects(surface)
     _draw_button(surface, font, delete_rect, "删除对象")
     _draw_button(surface, font, close_rect, "关闭")
@@ -1070,6 +1347,20 @@ def settings_geometry(surface: pygame.Surface) -> tuple:
     apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
     cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
     return panel, name_rect, jump_rect, apply_rect, cancel_rect
+
+
+def _draw_settings_row(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    rect: pygame.Rect,
+    label: str,
+    value,
+    selected: bool,
+) -> None:
+    pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
+    pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
+    text = font.render(f"{label}: {value}", True, HIGHLIGHT if selected else TEXT)
+    surface.blit(text, (rect.left + 6, rect.centery - text.get_height() // 2))
 
 
 def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
@@ -1094,13 +1385,10 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     )
 
     jump_selected = editor.settings_field == 1
-    pygame.draw.rect(surface, (62, 62, 72) if jump_selected else (48, 48, 54), jump_rect)
-    pygame.draw.rect(surface, HIGHLIGHT if jump_selected else (86, 86, 94), jump_rect, 1)
-    left, right = stepper_rects(jump_rect)
-    value = font.render(
-        f"初始跳高: {editor.settings['jump_height']}", True, HIGHLIGHT if jump_selected else TEXT
+    _draw_settings_row(
+        surface, font, jump_rect, "初始跳高", editor.settings["jump_height"], jump_selected
     )
-    surface.blit(value, (jump_rect.left + 6, jump_rect.centery - value.get_height() // 2))
+    left, right = stepper_rects(jump_rect)
     _draw_stepper(surface, left, -1)
     _draw_stepper(surface, right, 1)
 
@@ -1204,9 +1492,19 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
     if close_rect.collidepoint(position):
         editor.close_dialog()
         return
+    pick_rect = detail_pick_rect(surface, editor)
+    if pick_rect is not None and pick_rect.collidepoint(position):
+        editor.blur_name()
+        editor.begin_pick_offset()
+        return
+    name_rect = detail_slot_rect(surface, editor, "name")
+    if name_rect is not None and name_rect.collidepoint(position):
+        editor.focus_name()
+        return
     for rect, index in detail_row_rects(surface, editor):
         if not rect.collidepoint(position):
             continue
+        editor.blur_name()
         editor.dialog_field = index
         left, right = stepper_rects(rect)
         if left.collidepoint(position):
@@ -1241,7 +1539,7 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
 
 def main() -> None:
     pygame.init()
-    pygame.display.set_caption("level designer")
+    pygame.display.set_caption("level editor")
     screen = pygame.display.set_mode(DEFAULT_WINDOW, pygame.RESIZABLE)
     font = pygame.font.SysFont("microsoftyahei", 14)
     clock = pygame.time.Clock()
@@ -1296,9 +1594,9 @@ def main() -> None:
                     elif event.key == pygame.K_RETURN:
                         editor.close_settings(True)
                     elif event.key == pygame.K_UP:
-                        editor.settings_field = (editor.settings_field - 1) % 2
+                        editor.settings_field = (editor.settings_field - 1) % SETTINGS_FIELD_COUNT
                     elif event.key == pygame.K_DOWN:
-                        editor.settings_field = (editor.settings_field + 1) % 2
+                        editor.settings_field = (editor.settings_field + 1) % SETTINGS_FIELD_COUNT
                     elif event.key == pygame.K_LEFT:
                         editor.adjust_settings(-1)
                     elif event.key == pygame.K_RIGHT:
@@ -1350,6 +1648,12 @@ def main() -> None:
                     editor.pan_drag = (event.pos[0], event.pos[1], editor.pan_x, editor.pan_y)
                     continue
                 cell = layout.cell_at(event.pos)
+                if editor.picking_offset:
+                    if event.button == 1 and cell is not None:
+                        editor.finish_pick_offset(cell)
+                    elif event.button == 3:
+                        editor.cancel_pick_offset()
+                    continue
                 if event.button == 3:
                     if editor.creating:
                         if editor.drag_start is None:
@@ -1378,10 +1682,22 @@ def main() -> None:
                 elif ctrl and event.key == pygame.K_n:
                     editor.new_level()
                 elif event.key == pygame.K_ESCAPE:
-                    if editor.dialog is not None:
+                    if editor.picking_offset:
+                        editor.cancel_pick_offset()
+                    elif editor.name_focused:
+                        editor.blur_name()
+                    elif editor.dialog is not None:
                         editor.close_dialog()
                     elif editor.request_quit():
                         running = False
+                elif editor.name_focused:
+                    # 名称输入中：只吃 Enter / 退格 / 可打印字符，其余键都不触发其它操作
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        editor.blur_name()
+                    elif event.key == pygame.K_BACKSPACE:
+                        editor.erase_name_char()
+                    elif event.unicode and event.unicode.isprintable():
+                        editor.type_name(event.unicode)
                 elif event.key == pygame.K_DELETE:
                     if editor.dialog is not None:
                         editor.delete_entry(editor.dialog["kind"], editor.dialog["entry"])
