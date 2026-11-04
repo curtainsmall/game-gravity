@@ -5,6 +5,7 @@ import pygame
 from controller.controller_system import ControllerSystem
 from physics.physics_system import PhysicsSystem
 from renderer.render_system import RenderSystem
+from renderer.viewport import ViewMode
 from world.level import (
     LevelDefinition,
     build_blocks,
@@ -33,6 +34,7 @@ class Scene:
         self.objects: list = objects if objects is not None else []
         self.player = None
         self.input_state = None
+        self.view_mode: ViewMode = ViewMode.VERTICAL_EXPAND
 
         self.controller_system: ControllerSystem = ControllerSystem()
         self.physics_system: PhysicsSystem = PhysicsSystem()
@@ -73,6 +75,13 @@ class Scene:
     def handle_event(self, pygame_event: pygame.event.Event) -> None:
         """处理一个 pygame 事件。"""
 
+    def toggle_view_mode(self) -> None:
+        """纵向铺满与横向铺满之间切换。"""
+        if self.view_mode == ViewMode.VERTICAL_EXPAND:
+            self.view_mode = ViewMode.HORIZONTAL_EXPAND
+        else:
+            self.view_mode = ViewMode.VERTICAL_EXPAND
+
     def update(self, delta_seconds: float) -> None:
         """一步：控制来源（输入与机关）先决定运动 → 物理积分与解算。"""
         self.elapsed_seconds += delta_seconds
@@ -87,4 +96,4 @@ class Scene:
         if self.player is not None and self.player.body is not None:
             body = self.player.body
             focus_x = body.left + body.width / 2.0
-        self.render_system.update(self.objects, self.world, surface, focus_x)
+        self.render_system.update(self.objects, self.world, surface, focus_x, self.view_mode)

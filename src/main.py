@@ -1,9 +1,10 @@
-"""入口：窗口、时钟、固定步长主循环。"""
+"""入口：窗口、时钟、固定步长主循环、输入采集。"""
 
 import os
 
 import pygame
 
+from controller.input_source import InputState
 from scenes.scene import Scene
 
 # 待定：窗口尺寸随关卡比例与地面/天花板条带确定
@@ -22,6 +23,15 @@ def load_scene() -> Scene:
     return Scene()
 
 
+def read_move_axis() -> int:
+    pressed = pygame.key.get_pressed()
+    if pressed[pygame.K_a]:
+        return -1
+    if pressed[pygame.K_d]:
+        return 1
+    return 0
+
+
 def main() -> None:
     pygame.init()
     screen = pygame.display.set_mode(WINDOW_PIXEL_SIZE)
@@ -33,6 +43,8 @@ def main() -> None:
 
     is_running = True
     unconsumed_seconds = 0.0
+    jump_edge = False
+    flip_edge = False
 
     while is_running:
         elapsed_seconds = frame_clock.tick(RENDER_FRAME_RATE_LIMIT) / 1000.0
@@ -41,12 +53,27 @@ def main() -> None:
         for pygame_event in pygame.event.get():
             if pygame_event.type == pygame.QUIT:
                 is_running = False
-            else:
-                active_scene.handle_event(pygame_event)
+            elif pygame_event.type == pygame.KEYDOWN:
+                if pygame_event.key == pygame.K_TAB:
+                    active_scene.toggle_view_mode()
+                elif pygame_event.key == pygame.K_SPACE:
+                    jump_edge = True
+                elif pygame_event.key == pygame.K_r:
+                    flip_edge = True
+            active_scene.handle_event(pygame_event)
 
+        active_scene.input_state = InputState(read_move_axis(), jump_edge, flip_edge)
+
+        ran_a_step = False
         while unconsumed_seconds >= PHYSICS_STEP_SECONDS:
             active_scene.update(PHYSICS_STEP_SECONDS)
             unconsumed_seconds -= PHYSICS_STEP_SECONDS
+            ran_a_step = True
+
+        # 按键边沿只在真正跑过一步物理后清除，否则这一帧的输入会丢失
+        if ran_a_step:
+            jump_edge = False
+            flip_edge = False
 
         screen.fill(BACKGROUND_COLOR)
         active_scene.draw(screen)

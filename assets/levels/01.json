@@ -3,6 +3,9 @@
   "gravity": 60.0,
   "width": 120,
   "height": 8,
+  "player": {
+    "pos": [0, 0]
+  },
   "blocks": [
     {
       "pos": [2, 0],

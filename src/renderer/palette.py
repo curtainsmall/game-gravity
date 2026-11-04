@@ -6,7 +6,7 @@ BLACK = (0, 0, 0)
 BROWN = (139, 69, 19)
 PINK = (255, 105, 180)
 RED = (220, 20, 60)
-YELLOW = (255, 215, 0)
+ORANGE = (255, 140, 0)
 GREEN = (34, 139, 34)
 GREY = (180, 180, 180)
 
@@ -15,7 +15,7 @@ COLOR_BY_KIND: dict[GameObjectKind, tuple[int, int, int]] = {
     GameObjectKind.PLANK: BROWN,
     GameObjectKind.MOVABLE_BLOCK: PINK,
     GameObjectKind.ITEM: RED,
-    GameObjectKind.PLAYER: YELLOW,
+    GameObjectKind.PLAYER: ORANGE,
     GameObjectKind.DESTINATION: GREEN,
 }
 
