@@ -4,15 +4,54 @@ from controller.flip_rule import can_flip_gravity, flip_gravity
 
 
 class InputState:
-    def __init__(self, move_axis: int = 0, jump_pressed: bool = False, flip_pressed: bool = False) -> None:
-        self.move_axis: int = move_axis          # -1 左，0 停，+1 右
+    def __init__(
+        self, move_axis: int = 0, jump_pressed: bool = False, flip_pressed: bool = False
+    ) -> None:
+        self.move_axis: int = move_axis  # -1 左，0 停，+1 右
         self.jump_pressed: bool = jump_pressed
         self.flip_pressed: bool = flip_pressed
 
 
 class InputSource:
-    MOVE_SPEED = 8.0      # 方块/秒
-    JUMP_SPEED = 19.0     # 起跳速度，跳高由它与重力共同决定
+    """跳高在运行时用 [ 与 ] 切换，用于快速对比手感。"""
+
+    MOVE_SPEED = 8.0  # 方块/秒
+
+    JUMP_LADDER_INDEX_DEFAULT = 2
+
+    # (目标跳高格数, 起跳速度)，重力 60、60 步/秒下按离散积分反解
+    JUMP_LADDER: list[tuple[float, float]] = [
+        (1.0, 11.500),
+        (2.0, 16.059),
+        (3.0, 19.500),
+    ]
+    jump_speed_index = JUMP_LADDER_INDEX_DEFAULT
+
+    @classmethod
+    def jump_height(cls) -> float:
+        return cls.JUMP_LADDER[cls.jump_speed_index][0]
+
+    @classmethod
+    def jump_speed(cls) -> float:
+        return cls.JUMP_LADDER[cls.jump_speed_index][1]
+
+    @classmethod
+    def cycle_jump_speed(cls, step: int) -> tuple[float, float]:
+        """切换档位并返回 (跳高, 起跳速度)。"""
+        cls.jump_speed_index = max(
+            0, min(len(cls.JUMP_LADDER) - 1, cls.jump_speed_index + step)
+        )
+        return cls.jump_height(), cls.jump_speed()
+
+    @classmethod
+    def decrease_jump_speed(cls) -> None:
+        """变重：降一档，到底不再降。"""
+        cls.jump_speed_index = max(0, cls.jump_speed_index - 1)
+
+    @classmethod
+    def reset_jump_speed(cls) -> None:
+        """关卡重开时回到默认档位。"""
+        cls.jump_speed_index = cls.JUMP_LADDER_INDEX_DEFAULT
 
     def advance(self, game_object, delta_seconds: float, input_state) -> None:
         body = game_object.body
@@ -26,4 +65,4 @@ class InputSource:
 
         if input_state.jump_pressed and body.is_grounded:
             # 起跳方向与重力方向相反
-            body.velocity_y = self.JUMP_SPEED * body.gravity_direction_sign
+            body.velocity_y = InputSource.jump_speed() * body.gravity_direction_sign

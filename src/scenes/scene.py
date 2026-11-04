@@ -3,6 +3,7 @@
 import pygame
 
 from controller.controller_system import ControllerSystem
+from item.pickup_system import PickupSystem
 from physics.physics_system import PhysicsSystem
 from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
@@ -38,6 +39,7 @@ class Scene:
 
         self.controller_system: ControllerSystem = ControllerSystem()
         self.physics_system: PhysicsSystem = PhysicsSystem()
+        self.pickup_system: PickupSystem = PickupSystem()
         self.render_system: RenderSystem = RenderSystem()
 
         self.requested_next_scene: Scene | None = None
@@ -85,12 +87,13 @@ class Scene:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
     def update(self, delta_seconds: float) -> None:
-        """一步：控制来源（输入与机关）先决定运动 → 物理积分与解算。"""
+        """一步：控制来源 → 物理积分与解算 → 道具拾取。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.physics_system.update(self.objects, self.world, delta_seconds)
+        self.pickup_system.update(self.objects)
 
     def draw(self, surface: pygame.Surface) -> None:
         """每帧一次：绘制。镜头跟随玩家水平居中。"""

@@ -18,6 +18,7 @@ COLOR_BY_KIND: dict[GameObjectKind, tuple[int, int, int, int]] = {
     GameObjectKind.PLAYER: ORANGE,
     GameObjectKind.DESTINATION: GREEN,
     GameObjectKind.FAN: RED,
+    GameObjectKind.WALL: BLACK,
 }
 
 DEFAULT_COLOR = GREY

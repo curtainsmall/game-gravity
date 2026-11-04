@@ -4,7 +4,7 @@ import os
 
 import pygame
 
-from controller.input_source import InputState
+from controller.input_source import InputSource, InputState
 from scenes.scene import Scene
 
 # 待定：窗口尺寸随关卡比例与地面/天花板条带确定
@@ -63,11 +63,16 @@ def main() -> None:
                     flip_edge = True
                 elif pygame_event.key == pygame.K_r:
                     restart_requested = True
+                elif pygame_event.key in (pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET):
+                    step = -1 if pygame_event.key == pygame.K_LEFTBRACKET else 1
+                    height, speed = InputSource.cycle_jump_speed(step)
+                    print(f"jump height {height:.2f} blocks, speed {speed:.3f}")
             active_scene.handle_event(pygame_event)
 
         if restart_requested:
             view_mode = active_scene.view_mode
             active_scene.exit()
+            InputSource.reset_jump_speed()
             active_scene = load_scene()
             active_scene.view_mode = view_mode
             active_scene.enter()

@@ -4,13 +4,23 @@ import math
 
 
 class TriggerSource:
-    """沿固定偏移前进；任一触发者被按下就去目标，全部松开就回原位。"""
+    """沿固定偏移前进；任一触发者被按下就去目标，全部松开就回原位。
+
+    once 为真时只触发一次：只要被按下过，就锁在目标位置不再回落。
+    """
 
     SPEED = 4.0  # 方块/秒
 
-    def __init__(self, triggers=None, offset: tuple[float, float] = (0.0, 0.0)) -> None:
+    def __init__(
+        self,
+        triggers=None,
+        offset: tuple[float, float] = (0.0, 0.0),
+        once: bool = False,
+    ) -> None:
         self.triggers: list = list(triggers) if triggers else []
         self.offset: tuple[float, float] = (float(offset[0]), float(offset[1]))
+        self.once: bool = once
+        self.latched: bool = False            # once 模式下已触发过
         self.progress: float = 0.0            # 0 = 原点，1 = 走满
         self.origin: tuple[float, float] | None = None
 
@@ -19,9 +29,12 @@ class TriggerSource:
         if self.origin is None:
             self.origin = (body.left, body.bottom)
 
+        if self.once and self._is_triggered():
+            self.latched = True
+
         distance = math.hypot(*self.offset)
         step = self.SPEED * delta_seconds / distance if distance else 1.0
-        target = 1.0 if self._is_triggered() else 0.0
+        target = 1.0 if (self.latched or self._is_triggered()) else 0.0
         if self.progress < target:
             self.progress = min(target, self.progress + step)
         elif self.progress > target:

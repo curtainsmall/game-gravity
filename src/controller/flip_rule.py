@@ -4,14 +4,16 @@ import math
 
 # 允许翻转的脚边行区间，键为重力方向符号
 ALLOWED_FLIP_ROWS_BY_GRAVITY_DIRECTION: dict[int, tuple[int, int]] = {
-    1: (4, 7),    # 重力向下：脚边在 4–7 行，翻转为向上
-    -1: (0, 3),   # 重力向上：脚边在 0–3 行，翻转为向下
+    1: (3, 7),  # 重力向下：脚边在 3–7 行，翻转为向上
+    -1: (0, 5),  # 重力向上：脚边在 0–4 行，翻转为向下
 }
 
 
 def foot_edge_row(body) -> int:
     """脚边所在行：重力向下取下边，重力向上取上边。"""
-    edge_height = body.bottom if body.gravity_direction_sign > 0 else body.bottom + body.height
+    edge_height = (
+        body.bottom if body.gravity_direction_sign > 0 else body.bottom + body.height
+    )
     return math.floor(edge_height)
 
 

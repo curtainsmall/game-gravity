@@ -11,6 +11,7 @@ from controller.input_source import InputSource
 from controller.trigger_source import TriggerSource
 from core.game_object import GameObject, GameObjectKind
 from fan.fan import Fan
+from item.item import Item
 from physics.body import Body
 from renderer.palette import color_for_kind
 from renderer.render_spec import PlaceholderShape, RenderSpec
@@ -19,6 +20,7 @@ from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
 LevelDefinition = dict[str, object]
 
 DEFAULT_SIZE = (1.0, 1.0)
+PLAYER_SIZE = (0.8, 1.0)   # 玩家比一格窄，过缝与贴墙时更宽容
 
 
 def load_level_file(path: str) -> LevelDefinition:
@@ -95,13 +97,18 @@ def build_boundaries(world: World) -> list[GameObject]:
     return [
         _make({"pos": [0.0, -1.0], "size": [span, 1.0]}, GameObjectKind.GROUND, is_static=True),
         _make({"pos": [0.0, height], "size": [span, 1.0]}, GameObjectKind.CEILING, is_static=True),
+        _make({"pos": [-1.0, -1.0], "size": [1.0, height + 2.0]}, GameObjectKind.WALL, is_static=True),
+        _make({"pos": [span, -1.0], "size": [1.0, height + 2.0]}, GameObjectKind.WALL, is_static=True),
     ]
 
 
 def build_player(level_definition: LevelDefinition) -> list[GameObject]:
+    """玩家比一格窄，关卡可用 size 覆盖。"""
     entry = level_definition.get("player")
     if entry is None:
         return []
+    entry = dict(entry)
+    entry.setdefault("size", list(PLAYER_SIZE))
     return [_make(entry, GameObjectKind.PLAYER, controller=Controller(source=InputSource()))]
 
 
@@ -147,10 +154,12 @@ def build_fans(level_definition: LevelDefinition) -> list[GameObject]:
 
 
 def build_items(level_definition: LevelDefinition) -> list[GameObject]:
-    return [
-        _make(entry, GameObjectKind.ITEM, is_static=True, is_sensor=True)
-        for entry in level_definition.get("items", [])
-    ]
+    items = []
+    for entry in level_definition.get("items", []):
+        game_object = _make(entry, GameObjectKind.ITEM, is_static=True, is_sensor=True)
+        game_object.item = Item(heavy=bool(entry.get("heavy", False)))
+        items.append(game_object)
+    return items
 
 
 def build_buttons(level_definition: LevelDefinition) -> list[GameObject]:
@@ -168,7 +177,11 @@ def build_movable_blocks(level_definition: LevelDefinition, triggers_by_name: di
             for name in entry.get("sources", [])
             if name in triggers_by_name
         ]
-        source = TriggerSource(triggers=triggers, offset=entry.get("offset", [0, 0]))
+        source = TriggerSource(
+            triggers=triggers,
+            offset=entry.get("offset", [0, 0]),
+            once=bool(entry.get("once", False)),
+        )
         movable_blocks.append(
             _make(
                 entry,

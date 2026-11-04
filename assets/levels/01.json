@@ -236,8 +236,9 @@
       "name": "g1",
       "pos": [51, 4],
       "size": [1, 4],
-      "offset": [0, -4],
-      "sources": ["b1"]
+      "offset": [0, -3],
+      "sources": ["b1"],
+      "once": true
     }
   ],
   "buttons": [
@@ -251,6 +252,13 @@
     {
       "pos": [6, 0],
       "power": 6
+    }
+  ],
+  "items": [
+    {
+      "name": "i1",
+      "pos": [26, 6],
+      "heavy": true
     }
   ]
 }
