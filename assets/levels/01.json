@@ -1,11 +1,8 @@
 {
   "name": "01",
-  "jump_height": 4,
   "width": 120,
   "height": 8,
-  "player": {
-    "pos": [0, 0]
-  },
+  "jump_height": 4,
   "blocks": [
     {
       "pos": [2, 0],
@@ -239,6 +236,14 @@
       "offset": [0, -3],
       "sources": ["b1"],
       "once": true
+    },
+    {
+      "name": "g2",
+      "pos": [60, 4],
+      "size": [1, 2],
+      "offset": [0, -4],
+      "sources": ["b2"],
+      "once": true
     }
   ],
   "buttons": [
@@ -246,6 +251,18 @@
       "name": "b1",
       "pos": [52, 0],
       "face": "left"
+    },
+    {
+      "name": "b2",
+      "pos": [58, 0],
+      "face": "up"
+    }
+  ],
+  "items": [
+    {
+      "name": "i1",
+      "pos": [26, 6],
+      "heavy": true
     }
   ],
   "nozzles": [
@@ -255,11 +272,10 @@
       "range": 5
     }
   ],
-  "items": [
-    {
-      "name": "i1",
-      "pos": [26, 6],
-      "heavy": true
-    }
-  ]
+  "player": {
+    "pos": [0, 0]
+  },
+  "destination": {
+    "pos": [117, 3]
+  }
 }
