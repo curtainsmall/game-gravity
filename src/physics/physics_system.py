@@ -1,7 +1,7 @@
 """PhysicsSystem：先积分、再解算，最后采样传感器并施加风力。"""
 
 from core.game_object import GameObject
-from fan.fan import launch_speed
+from fan.fan import Fan
 from physics.body import Body
 from world.world import World
 
@@ -23,12 +23,11 @@ class PhysicsSystem:
 
             if game_object.controller is not None and body.is_grounded:
                 game_object.controller.passes_through_planks = False
-                game_object.controller.fan_boost_used = False
 
-        self._sample_sensors(objects, gravity, delta_seconds)
+        self._sample_sensors(objects)
 
-    def _sample_sensors(self, objects: list[GameObject], gravity: float, delta_seconds: float) -> None:
-        """解算之后采样：传感器是否与运动物体重叠，风扇在进入时施加初速度。"""
+    def _sample_sensors(self, objects: list[GameObject]) -> None:
+        """解算之后采样：传感器是否与运动物体重叠，风区持续给予推力。"""
         movers = [
             (other, other.body)
             for other in objects
@@ -40,29 +39,20 @@ class PhysicsSystem:
                 continue
 
             overlapping = [(other, mover_body) for other, mover_body in movers if self._overlaps(body, mover_body)]
-            entered = game_object.interaction_state == 0 and bool(overlapping)
-            if entered and game_object.fan is not None:
+            if game_object.fan is not None:
                 for mover_object, _ in overlapping:
-                    self._apply_fan(game_object, mover_object, gravity, delta_seconds)
+                    self._apply_wind(game_object, mover_object)
             game_object.interaction_state = 1 if overlapping else 0
 
-    def _apply_fan(self, fan_object: GameObject, mover_object: GameObject, gravity: float, delta_seconds: float) -> None:
-        """进入风区时给一次初速度，使其抛物线正好到达风区远端；一次滞空只给一次。"""
+    def _apply_wind(self, fan_object: GameObject, mover_object: GameObject) -> None:
+        """只要还在风区内且没到远端，就把纵向速度顶到风的最小推速。"""
         fan = fan_object.fan
         body = mover_object.body
-        controller = mover_object.controller
-        if controller is not None and controller.fan_boost_used:
-            return
         target_y = fan.target_y
         if fan.power > 0 and body.bottom < target_y:
-            body.velocity_y = launch_speed(target_y - body.bottom, gravity, delta_seconds)
+            body.velocity_y = max(body.velocity_y, Fan.WIND_SPEED)
         elif fan.power < 0 and body.bottom > target_y:
-            body.velocity_y = -launch_speed(body.bottom - target_y, gravity, delta_seconds)
-        else:
-            return
-        body.is_grounded = False
-        if controller is not None:
-            controller.fan_boost_used = True
+            body.velocity_y = min(body.velocity_y, -Fan.WIND_SPEED)
 
     def _solids_for(self, mover: GameObject, objects: list[GameObject]) -> list[Body]:
         solids: list[Body] = []
