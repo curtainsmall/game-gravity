@@ -1,6 +1,6 @@
 """关卡编辑器的启动入口与主循环。
 
-运行：uv run python tools/level-editor/main.py
+运行：uv run python level-editor/main.py
 """
 
 import pygame
