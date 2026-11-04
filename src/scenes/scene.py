@@ -1,15 +1,25 @@
-"""Scene：流程单元，也是唯一的调度者。"""
+"""Scene：流程单元，持有对象与世界，按固定顺序驱动系统。"""
 
-from world.solve import solve_collisions
+from controller.controller_system import ControllerSystem
+from mover.mover_system import MoverSystem
+from physics.physics_system import PhysicsSystem
+from renderer.render_system import RenderSystem
 from world.world import World
 
 
 class Scene:
-    def __init__(self, shared_context=None, level_world: World | None = None, player=None):
-        self.shared_context = shared_context              # 输入、资源、视图、音频的访问点
-        self.level_world = level_world                    # 关卡场景持有，其余场景为空
-        self.player = player
-        self.requested_next_scene = None                  # 流程出口
+    def __init__(self, world: World | None = None, shared_context=None):
+        self.world = world
+        self.shared_context = shared_context
+        self.objects: list = []
+        self.input_state = None
+
+        self.mover_system = MoverSystem()
+        self.controller_system = ControllerSystem()
+        self.physics_system = PhysicsSystem()
+        self.render_system = RenderSystem()
+
+        self.requested_next_scene = None
         self.elapsed_seconds = 0.0
 
     def enter(self):
@@ -22,21 +32,14 @@ class Scene:
         """处理一个 pygame 事件。"""
 
     def update(self, delta_seconds: float):
-        """一帧：机关 → 玩家 → 解算 → 采样 → 收尾。"""
+        """一步：机关先就位 → 控制器读输入 → 物理积分与解算。"""
         self.elapsed_seconds += delta_seconds
-
-        world = self.level_world
-        if world is None:
+        if self.world is None:
             return
+        self.mover_system.update(self.objects, delta_seconds)
+        self.controller_system.update(self.objects, self.input_state, delta_seconds)
+        self.physics_system.update(self.objects, self.world, delta_seconds)
 
-        for movable_block in world.moving_blocks:      # 机关先于玩家
-            movable_block.advance(delta_seconds)
-
-        self.player.advance(delta_seconds, world)
-
-        solve_collisions(self.player, world)           # 解算先于采样
-
-        for entity in world.interactive_objects:
-            entity.sample_overlap(self.player)
-
-        self.player.settle()
+    def draw(self, surface):
+        """每帧一次：绘制。与 update 分开，因为一步可能在一帧内执行多次。"""
+        self.render_system.update(self.objects, surface)
