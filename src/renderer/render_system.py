@@ -30,4 +30,14 @@ class RenderSystem:
             if body is None or render is None:
                 continue
             rect = self.viewport.to_screen_rect(body, world)
-            pygame.draw.rect(surface, render.placeholder_color, rect)
+            self._fill(surface, rect, render.placeholder_color)
+
+    @staticmethod
+    def _fill(surface: pygame.Surface, rect: pygame.Rect, color: tuple[int, int, int, int]) -> None:
+        """alpha 小于 255 时走混合路径，否则直接画不透明矩形。"""
+        if len(color) == 4 and color[3] < 255:
+            layer = pygame.Surface(rect.size, pygame.SRCALPHA)
+            layer.fill(color)
+            surface.blit(layer, rect.topleft)
+        else:
+            pygame.draw.rect(surface, tuple(color[:3]), rect)
