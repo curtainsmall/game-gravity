@@ -16,6 +16,11 @@ class GameObjectKind(StrEnum):
     GROUND = "ground"
     CEILING = "ceiling"
     PLAYER = "player"
+    FAN = "fan"
+    ITEM = "item"
+    MOVABLE_BLOCK = "movable_block"
+    BUTTON = "button"
+    DESTINATION = "destination"
 
 
 class GameObject:

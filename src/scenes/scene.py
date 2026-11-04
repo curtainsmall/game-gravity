@@ -5,7 +5,19 @@ import pygame
 from controller.controller_system import ControllerSystem
 from physics.physics_system import PhysicsSystem
 from renderer.render_system import RenderSystem
-from world.level import LevelDefinition, build_blocks, build_boundaries, build_world, load_level_file
+from world.level import (
+    LevelDefinition,
+    build_blocks,
+    build_boundaries,
+    build_buttons,
+    build_destination,
+    build_fans,
+    build_items,
+    build_movable_blocks,
+    build_player,
+    build_world,
+    load_level_file,
+)
 from world.world import World
 
 
@@ -30,9 +42,18 @@ class Scene:
 
     @classmethod
     def from_level(cls, level_definition: LevelDefinition) -> "Scene":
-        """由关卡数据建场景：方块与边界都是静态 GameObject。"""
+        """由关卡数据建场景：方块、机关与物件都成为 GameObject。"""
         world = build_world(level_definition)
-        objects = build_blocks(level_definition) + build_boundaries(world)
+        objects = (
+            build_blocks(level_definition)
+            + build_movable_blocks(level_definition)
+            + build_items(level_definition)
+            + build_buttons(level_definition)
+            + build_fans(level_definition)
+            + build_destination(level_definition)
+            + build_player(level_definition)
+            + build_boundaries(world)
+        )
         return cls(world=world, objects=objects)
 
     @classmethod
