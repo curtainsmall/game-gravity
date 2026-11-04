@@ -10,6 +10,7 @@ from controller.controller import Controller
 from controller.input_source import InputSource
 from core.game_object import GameObject, GameObjectKind
 from physics.body import Body
+from renderer.palette import color_for_kind
 from renderer.render_spec import RenderSpec
 from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
 
@@ -66,6 +67,7 @@ def _make(
         controller=controller,
         render=RenderSpec(
             placeholder_size_in_blocks=(width, height),
+            placeholder_color=color_for_kind(kind),
             placeholder_label_text=str(kind),
         ),
     )

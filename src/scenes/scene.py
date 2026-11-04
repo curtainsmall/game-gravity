@@ -31,6 +31,7 @@ class Scene:
         self.world: World | None = world
         self.shared_context = shared_context
         self.objects: list = objects if objects is not None else []
+        self.player = None
         self.input_state = None
 
         self.controller_system: ControllerSystem = ControllerSystem()
@@ -44,6 +45,7 @@ class Scene:
     def from_level(cls, level_definition: LevelDefinition) -> "Scene":
         """由关卡数据建场景：方块、机关与物件都成为 GameObject。"""
         world = build_world(level_definition)
+        players = build_player(level_definition)
         objects = (
             build_blocks(level_definition)
             + build_movable_blocks(level_definition)
@@ -51,10 +53,12 @@ class Scene:
             + build_buttons(level_definition)
             + build_fans(level_definition)
             + build_destination(level_definition)
-            + build_player(level_definition)
+            + players
             + build_boundaries(world)
         )
-        return cls(world=world, objects=objects)
+        scene = cls(world=world, objects=objects)
+        scene.player = players[0] if players else None
+        return scene
 
     @classmethod
     def from_level_file(cls, path: str) -> "Scene":
@@ -78,5 +82,9 @@ class Scene:
         self.physics_system.update(self.objects, self.world, delta_seconds)
 
     def draw(self, surface: pygame.Surface) -> None:
-        """每帧一次：绘制。与 update 分开，因为一步可能在一帧内执行多次。"""
-        self.render_system.update(self.objects, surface)
+        """每帧一次：绘制。镜头跟随玩家水平居中。"""
+        focus_x = None
+        if self.player is not None and self.player.body is not None:
+            body = self.player.body
+            focus_x = body.left + body.width / 2.0
+        self.render_system.update(self.objects, self.world, surface, focus_x)
