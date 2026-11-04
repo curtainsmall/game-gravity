@@ -1,30 +1,35 @@
 """Scene：流程单元，持有对象与世界，按固定顺序驱动系统。"""
 
+import pygame
+
 from controller.controller_system import ControllerSystem
-from mover.mover_system import MoverSystem
 from physics.physics_system import PhysicsSystem
 from renderer.render_system import RenderSystem
-from world.level import build_blocks, build_boundaries, build_world, load_level_file
+from world.level import LevelDefinition, build_blocks, build_boundaries, build_world, load_level_file
 from world.world import World
 
 
 class Scene:
-    def __init__(self, world: World | None = None, objects: list | None = None, shared_context=None):
-        self.world = world
+    def __init__(
+        self,
+        world: World | None = None,
+        objects: list | None = None,
+        shared_context=None,
+    ) -> None:
+        self.world: World | None = world
         self.shared_context = shared_context
         self.objects: list = objects if objects is not None else []
         self.input_state = None
 
-        self.mover_system = MoverSystem()
-        self.controller_system = ControllerSystem()
-        self.physics_system = PhysicsSystem()
-        self.render_system = RenderSystem()
+        self.controller_system: ControllerSystem = ControllerSystem()
+        self.physics_system: PhysicsSystem = PhysicsSystem()
+        self.render_system: RenderSystem = RenderSystem()
 
-        self.requested_next_scene = None
-        self.elapsed_seconds = 0.0
+        self.requested_next_scene: Scene | None = None
+        self.elapsed_seconds: float = 0.0
 
     @classmethod
-    def from_level(cls, level_definition: dict) -> "Scene":
+    def from_level(cls, level_definition: LevelDefinition) -> "Scene":
         """由关卡数据建场景：方块与边界都是静态 GameObject。"""
         world = build_world(level_definition)
         objects = build_blocks(level_definition) + build_boundaries(world)
@@ -34,24 +39,23 @@ class Scene:
     def from_level_file(cls, path: str) -> "Scene":
         return cls.from_level(load_level_file(path))
 
-    def enter(self):
+    def enter(self) -> None:
         """进入场景。"""
 
-    def exit(self):
+    def exit(self) -> None:
         """离开场景。"""
 
-    def handle_event(self, pygame_event):
+    def handle_event(self, pygame_event: pygame.event.Event) -> None:
         """处理一个 pygame 事件。"""
 
-    def update(self, delta_seconds: float):
-        """一步：机关先就位 → 控制器读输入 → 物理积分与解算。"""
+    def update(self, delta_seconds: float) -> None:
+        """一步：控制来源（输入与机关）先决定运动 → 物理积分与解算。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
-        self.mover_system.update(self.objects, delta_seconds)
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.physics_system.update(self.objects, self.world, delta_seconds)
 
-    def draw(self, surface):
+    def draw(self, surface: pygame.Surface) -> None:
         """每帧一次：绘制。与 update 分开，因为一步可能在一帧内执行多次。"""
         self.render_system.update(self.objects, surface)

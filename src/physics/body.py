@@ -16,17 +16,19 @@ class Body:
         is_grounded: bool = False,
         is_sensor: bool = False,
         is_static: bool = False,
-    ):
-        self.left = left
-        self.bottom = bottom
-        self.width = width
-        self.height = height
-        self.velocity_x = velocity_x
-        self.velocity_y = velocity_y
-        self.gravity_direction_sign = gravity_direction_sign  # +1 向下，-1 向上
-        self.is_grounded = is_grounded
-        self.is_sensor = is_sensor                            # 参与重叠检测，不参与解算
-        self.is_static = is_static                            # 参与碰撞，不被积分
+        is_passable_during_flip: bool = False,
+    ) -> None:
+        self.left: float = left
+        self.bottom: float = bottom
+        self.width: float = width
+        self.height: float = height
+        self.velocity_x: float = velocity_x
+        self.velocity_y: float = velocity_y
+        self.gravity_direction_sign: int = gravity_direction_sign  # +1 向下，-1 向上
+        self.is_grounded: bool = is_grounded
+        self.is_sensor: bool = is_sensor                            # 参与重叠检测，不参与解算
+        self.is_static: bool = is_static                            # 参与碰撞，不被积分
+        self.is_passable_during_flip: bool = is_passable_during_flip  # 翻转穿透期间不挡路
 
     @property
     def top(self) -> float:

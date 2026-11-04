@@ -10,7 +10,7 @@ class World:
         gravity_acceleration_magnitude: float = 0.0,
         width_in_blocks: int = WIDTH_IN_BLOCKS,
         height_in_blocks: int = HEIGHT_IN_BLOCKS,
-    ):
-        self.gravity_acceleration_magnitude = gravity_acceleration_magnitude  # 整关一个值，按阶段改写
-        self.width_in_blocks = width_in_blocks
-        self.height_in_blocks = height_in_blocks
+    ) -> None:
+        self.gravity_acceleration_magnitude: float = gravity_acceleration_magnitude  # 整关一个值
+        self.width_in_blocks: int = width_in_blocks
+        self.height_in_blocks: int = height_in_blocks
