@@ -3,7 +3,7 @@
 from enum import StrEnum
 
 from controller.controller import Controller
-from fan.fan import Fan
+from nozzle.nozzle import Nozzle
 from item.item import Item
 from physics.body import Body
 from renderer.render_spec import RenderSpec
@@ -19,7 +19,7 @@ class GameObjectKind(StrEnum):
     CEILING = "ceiling"
     WALL = "wall"
     PLAYER = "player"
-    FAN = "fan"
+    NOZZLE = "nozzle"
     ITEM = "item"
     MOVABLE_BLOCK = "movable_block"
     BUTTON = "button"
@@ -33,7 +33,7 @@ class GameObject:
         body: Body | None = None,
         controller: Controller | None = None,
         render: RenderSpec | None = None,
-        fan: Fan | None = None,
+        nozzle: Nozzle | None = None,
         item: Item | None = None,
         interaction_state: int = 0,
         name: str = "",
@@ -43,14 +43,14 @@ class GameObject:
         self.body: Body | None = body                     # 物理部件
         self.controller: Controller | None = controller   # 运动来源
         self.render: RenderSpec | None = render           # 显示部件
-        self.fan: Fan | None = fan                        # 风区参数
+        self.nozzle: Nozzle | None = nozzle                        # 风区参数
         self.item: Item | None = item                     # 道具参数
         self.interaction_state: int = interaction_state   # 交互状态，由系统写入
 
     def describe(self) -> str:
         parts = [
             name
-            for name in ("body", "controller", "render", "fan", "item")
+            for name in ("body", "controller", "render", "nozzle", "item")
             if getattr(self, name) is not None
         ]
         label = self.name or str(self.kind)

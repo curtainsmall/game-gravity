@@ -17,7 +17,8 @@ COLOR_BY_KIND: dict[GameObjectKind, tuple[int, int, int, int]] = {
     GameObjectKind.ITEM: RED,
     GameObjectKind.PLAYER: ORANGE,
     GameObjectKind.DESTINATION: GREEN,
-    GameObjectKind.FAN: RED,
+    GameObjectKind.NOZZLE: RED,
+    GameObjectKind.BUTTON: RED,
     GameObjectKind.WALL: BLACK,
 }
 

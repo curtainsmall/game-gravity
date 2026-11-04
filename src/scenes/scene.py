@@ -13,7 +13,7 @@ from world.level import (
     build_boundaries,
     build_buttons,
     build_destination,
-    build_fans,
+    build_nozzles,
     build_items,
     build_movable_blocks,
     build_player,
@@ -57,7 +57,7 @@ class Scene:
             + build_movable_blocks(level_definition, triggers_by_name)
             + build_items(level_definition)
             + buttons
-            + build_fans(level_definition)
+            + build_nozzles(level_definition)
             + build_destination(level_definition)
             + players
             + build_boundaries(world)

@@ -1,7 +1,7 @@
 """PhysicsSystem：先积分、再解算，最后采样传感器并施加风力。"""
 
 from core.game_object import GameObject
-from fan.fan import launch_speed
+from nozzle.nozzle import launch_speed
 from physics.body import Body
 from world.world import World
 
@@ -39,25 +39,25 @@ class PhysicsSystem:
                 continue
 
             overlapping = [(other, mover_body) for other, mover_body in movers if self._overlaps(body, mover_body)]
-            if game_object.fan is not None:
+            if game_object.nozzle is not None:
                 for mover_object, _ in overlapping:
-                    self._apply_wind(game_object, mover_object, gravity, delta_seconds)
+                    self._apply_nozzle(game_object, mover_object, gravity, delta_seconds)
             game_object.interaction_state = 1 if overlapping else 0
 
-    def _apply_wind(
+    def _apply_nozzle(
         self,
-        fan_object: GameObject,
+        nozzle_object: GameObject,
         mover_object: GameObject,
         gravity: float,
         delta_seconds: float,
     ) -> None:
         """在风区内把速度设成「从当前位置正好飞到目标」的值。"""
-        fan = fan_object.fan
+        nozzle = nozzle_object.nozzle
         body = mover_object.body
-        target_y = fan.target_y
-        if fan.power > 0 and body.bottom < target_y:
+        target_y = nozzle.target_y
+        if nozzle.power > 0 and body.bottom < target_y:
             body.velocity_y = launch_speed(target_y - body.bottom, gravity, delta_seconds)
-        elif fan.power < 0 and body.bottom > target_y:
+        elif nozzle.power < 0 and body.bottom > target_y:
             body.velocity_y = -launch_speed(body.bottom - target_y, gravity, delta_seconds)
 
     def _solids_for(self, mover: GameObject, objects: list[GameObject]) -> list[Body]:

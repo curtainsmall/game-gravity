@@ -248,7 +248,7 @@
       "face": "left"
     }
   ],
-  "fans": [
+  "nozzles": [
     {
       "pos": [6, 0],
       "power": 7,
