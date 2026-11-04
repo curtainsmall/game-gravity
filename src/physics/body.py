@@ -15,6 +15,7 @@ class Body:
         gravity_direction_sign: int = 1,
         is_grounded: bool = False,
         is_sensor: bool = False,
+        is_static: bool = False,
     ):
         self.left = left
         self.bottom = bottom
@@ -25,6 +26,7 @@ class Body:
         self.gravity_direction_sign = gravity_direction_sign  # +1 向下，-1 向上
         self.is_grounded = is_grounded
         self.is_sensor = is_sensor                            # 参与重叠检测，不参与解算
+        self.is_static = is_static                            # 参与碰撞，不被积分
 
     @property
     def top(self) -> float:

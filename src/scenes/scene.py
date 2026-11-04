@@ -4,14 +4,15 @@ from controller.controller_system import ControllerSystem
 from mover.mover_system import MoverSystem
 from physics.physics_system import PhysicsSystem
 from renderer.render_system import RenderSystem
+from world.level import build_blocks, build_boundaries, build_world, load_level_file
 from world.world import World
 
 
 class Scene:
-    def __init__(self, world: World | None = None, shared_context=None):
+    def __init__(self, world: World | None = None, objects: list | None = None, shared_context=None):
         self.world = world
         self.shared_context = shared_context
-        self.objects: list = []
+        self.objects: list = objects if objects is not None else []
         self.input_state = None
 
         self.mover_system = MoverSystem()
@@ -21,6 +22,17 @@ class Scene:
 
         self.requested_next_scene = None
         self.elapsed_seconds = 0.0
+
+    @classmethod
+    def from_level(cls, level_definition: dict) -> "Scene":
+        """由关卡数据建场景：方块与边界都是静态 GameObject。"""
+        world = build_world(level_definition)
+        objects = build_blocks(level_definition) + build_boundaries(world)
+        return cls(world=world, objects=objects)
+
+    @classmethod
+    def from_level_file(cls, path: str) -> "Scene":
+        return cls.from_level(load_level_file(path))
 
     def enter(self):
         """进入场景。"""

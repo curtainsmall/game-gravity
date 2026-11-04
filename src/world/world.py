@@ -1,22 +1,16 @@
-"""World：关卡世界。纯数据，由场景持有。"""
+"""World：关卡世界。纯数据。"""
 
-GRID_WIDTH_IN_BLOCKS = 120
-GRID_HEIGHT_IN_BLOCKS = 8
-EMPTY_BLOCK_ID = 0
-
-
-def empty_static_block_grid() -> list[list[int]]:
-    """静态方块网格。EMPTY_BLOCK_ID 表示空位。"""
-    return [[EMPTY_BLOCK_ID] * GRID_WIDTH_IN_BLOCKS for _ in range(GRID_HEIGHT_IN_BLOCKS)]
+WIDTH_IN_BLOCKS = 120
+HEIGHT_IN_BLOCKS = 8
 
 
 class World:
     def __init__(
         self,
-        static_block_grid: list[list[int]] | None = None,
-        boundary_bodies: list | None = None,
         gravity_acceleration_magnitude: float = 0.0,
+        width_in_blocks: int = WIDTH_IN_BLOCKS,
+        height_in_blocks: int = HEIGHT_IN_BLOCKS,
     ):
-        self.static_block_grid = static_block_grid if static_block_grid is not None else empty_static_block_grid()
-        self.boundary_bodies = boundary_bodies if boundary_bodies is not None else []   # 地面与天花板
-        self.gravity_acceleration_magnitude = gravity_acceleration_magnitude            # 由关卡数据提供
+        self.gravity_acceleration_magnitude = gravity_acceleration_magnitude  # 整关一个值，按阶段改写
+        self.width_in_blocks = width_in_blocks
+        self.height_in_blocks = height_in_blocks

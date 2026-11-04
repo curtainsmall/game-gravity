@@ -5,7 +5,7 @@ class PhysicsSystem:
     def update(self, objects, world, delta_seconds: float) -> None:
         for game_object in objects:
             body = game_object.body
-            if body is None or body.is_sensor:
+            if body is None or body.is_sensor or body.is_static:
                 continue
             self._integrate(body, world.gravity_acceleration_magnitude, delta_seconds)
             self._resolve(game_object, world)
@@ -17,8 +17,8 @@ class PhysicsSystem:
         body.bottom += body.velocity_y * delta_seconds
 
     def _resolve(self, game_object, world) -> None:
-        """约束：解除与网格、边界、机关的重合，写 is_grounded 与穿透 flag。"""
+        """约束：解除与其他 body 的重合，写 is_grounded 与穿透 flag。"""
         body = game_object.body
-        # 解算占位：与静态网格、地面与天花板、可移动方块求交并推出
+        # 解算占位：与静态 body、可移动方块求交并推出
         if game_object.controller is not None and body.is_grounded:
             game_object.controller.passes_through_planks = False
