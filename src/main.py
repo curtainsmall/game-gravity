@@ -50,6 +50,7 @@ def main() -> None:
         elapsed_seconds = frame_clock.tick(RENDER_FRAME_RATE_LIMIT) / 1000.0
         unconsumed_seconds += min(elapsed_seconds, MAX_ELAPSED_SECONDS_PER_FRAME)
 
+        restart_requested = False
         for pygame_event in pygame.event.get():
             if pygame_event.type == pygame.QUIT:
                 is_running = False
@@ -58,9 +59,21 @@ def main() -> None:
                     active_scene.toggle_view_mode()
                 elif pygame_event.key == pygame.K_SPACE:
                     jump_edge = True
-                elif pygame_event.key == pygame.K_r:
+                elif pygame_event.key == pygame.K_e:
                     flip_edge = True
+                elif pygame_event.key == pygame.K_r:
+                    restart_requested = True
             active_scene.handle_event(pygame_event)
+
+        if restart_requested:
+            view_mode = active_scene.view_mode
+            active_scene.exit()
+            active_scene = load_scene()
+            active_scene.view_mode = view_mode
+            active_scene.enter()
+            jump_edge = False
+            flip_edge = False
+            unconsumed_seconds = 0.0
 
         active_scene.input_state = InputState(read_move_axis(), jump_edge, flip_edge)
 

@@ -230,5 +230,27 @@
     {
       "pos": [72, 3]
     }
+  ],
+  "movable_blocks": [
+    {
+      "name": "g1",
+      "pos": [51, 4],
+      "size": [1, 4],
+      "offset": [0, -4],
+      "sources": ["b1"]
+    }
+  ],
+  "buttons": [
+    {
+      "name": "b1",
+      "pos": [52, 0],
+      "face": "left"
+    }
+  ],
+  "fans": [
+    {
+      "pos": [6, 0],
+      "power": 6
+    }
   ]
 }

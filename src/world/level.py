@@ -1,17 +1,19 @@
 """关卡数据：schema 用设计者的词汇，程序里只有 GameObject。
 
 每个条目都是 {"pos": [x, y], "size": [w, h]}，size 缺省为 1×1。
-各对象的内容仍在设计，这里只读取位置与尺寸。
+按钮与可移动方块用 name 互相引用。
 """
 
 import json
 
 from controller.controller import Controller
 from controller.input_source import InputSource
+from controller.trigger_source import TriggerSource
 from core.game_object import GameObject, GameObjectKind
+from fan.fan import Fan
 from physics.body import Body
 from renderer.palette import color_for_kind
-from renderer.render_spec import RenderSpec
+from renderer.render_spec import PlaceholderShape, RenderSpec
 from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
 
 LevelDefinition = dict[str, object]
@@ -55,6 +57,7 @@ def _make(
     width, height = _read_size(entry)
     return GameObject(
         kind=kind,
+        name=str(entry.get("name", "")),
         body=Body(
             left=x,
             bottom=y,
@@ -110,10 +113,37 @@ def build_destination(level_definition: LevelDefinition) -> list[GameObject]:
 
 
 def build_fans(level_definition: LevelDefinition) -> list[GameObject]:
-    return [
-        _make(entry, GameObjectKind.FAN, is_static=True, is_sensor=True)
-        for entry in level_definition.get("fans", [])
-    ]
+    """风扇的 pos 是三角形底边中点：风区为以它为中心的 1 格宽、长 |power| 格的矩形。"""
+    fans = []
+    for entry in level_definition.get("fans", []):
+        power = int(entry.get("power", 0))
+        x, y = _read_position(entry)
+        length = abs(power)
+        bottom = y if power >= 0 else y - length
+        fans.append(
+            GameObject(
+                kind=GameObjectKind.FAN,
+                name=str(entry.get("name", "")),
+                body=Body(
+                    left=x - 0.5,          # 底边中点落在 x 上，风区横跨 x±0.5
+                    bottom=float(bottom),
+                    width=1.0,
+                    height=float(length),
+                    is_static=True,
+                    is_sensor=True,
+                ),
+                render=RenderSpec(
+                    placeholder_shape=PlaceholderShape.TRIANGLE,
+                    placeholder_size_in_blocks=(1.0, 1.0),
+                    placeholder_color=color_for_kind(GameObjectKind.FAN),
+                    placeholder_label_text=str(GameObjectKind.FAN),
+                    placeholder_direction=1 if power >= 0 else -1,
+                    placeholder_has_axis=True,
+                ),
+                fan=Fan(power=power, origin_y=y),
+            )
+        )
+    return fans
 
 
 def build_items(level_definition: LevelDefinition) -> list[GameObject]:
@@ -130,8 +160,21 @@ def build_buttons(level_definition: LevelDefinition) -> list[GameObject]:
     ]
 
 
-def build_movable_blocks(level_definition: LevelDefinition) -> list[GameObject]:
-    return [
-        _make(entry, GameObjectKind.MOVABLE_BLOCK, is_static=True)
-        for entry in level_definition.get("movable_blocks", [])
-    ]
+def build_movable_blocks(level_definition: LevelDefinition, triggers_by_name: dict) -> list[GameObject]:
+    movable_blocks = []
+    for entry in level_definition.get("movable_blocks", []):
+        triggers = [
+            triggers_by_name[name]
+            for name in entry.get("sources", [])
+            if name in triggers_by_name
+        ]
+        source = TriggerSource(triggers=triggers, offset=entry.get("offset", [0, 0]))
+        movable_blocks.append(
+            _make(
+                entry,
+                GameObjectKind.MOVABLE_BLOCK,
+                is_static=True,
+                controller=Controller(source=source),
+            )
+        )
+    return movable_blocks

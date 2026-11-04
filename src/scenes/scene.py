@@ -48,11 +48,13 @@ class Scene:
         """由关卡数据建场景：方块、机关与物件都成为 GameObject。"""
         world = build_world(level_definition)
         players = build_player(level_definition)
+        buttons = build_buttons(level_definition)
+        triggers_by_name = {button.name: button for button in buttons if button.name}
         objects = (
             build_blocks(level_definition)
-            + build_movable_blocks(level_definition)
+            + build_movable_blocks(level_definition, triggers_by_name)
             + build_items(level_definition)
-            + build_buttons(level_definition)
+            + buttons
             + build_fans(level_definition)
             + build_destination(level_definition)
             + players
