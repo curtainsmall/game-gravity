@@ -20,6 +20,7 @@ ENV/
 # ---- 构建 / 打包 ----
 build/
 dist/
+bin/
 develop-eggs/
 sdist/
 wheels/

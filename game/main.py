@@ -1,6 +1,7 @@
 """入口：窗口、时钟、固定步长主循环、输入采集。"""
 
-import os
+import sys
+from pathlib import Path
 
 import pygame
 
@@ -10,16 +11,23 @@ from scenes.scene import Scene
 # 待定：窗口尺寸随关卡比例与地面/天花板条带确定
 WINDOW_PIXEL_SIZE = (960, 540)
 BACKGROUND_COLOR = (235, 235, 235)
-LEVEL_PATH = "assets/levels/01.json"
 RENDER_FRAME_RATE_LIMIT = 120
 PHYSICS_STEP_SECONDS = 1.0 / 60.0
 MAX_ELAPSED_SECONDS_PER_FRAME = 0.25
 
+# 打包成 exe 后，资源放在 exe 旁边；直接跑源码时放在仓库根目录
+BASE_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent
+)
+LEVEL_PATH = BASE_DIR / "assets" / "levels" / "01.json"
+
 
 def load_scene() -> Scene:
     """有第一个关卡就用它，没有就用空场景。"""
-    if os.path.exists(LEVEL_PATH):
-        return Scene.from_level_file(LEVEL_PATH)
+    if LEVEL_PATH.exists():
+        return Scene.from_level_file(str(LEVEL_PATH))
     return Scene()
 
 

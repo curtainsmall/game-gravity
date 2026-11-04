@@ -1,6 +1,7 @@
 """常量：尺寸、配色、对象种类、工具栏项。"""
 
 import os
+import sys
 
 # ---- 画布与窗口 ----
 COLS = 120
@@ -119,7 +120,12 @@ KIND_TITLES = {
 }
 
 # ---- 路径 ----
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 打包成 exe 后，关卡放在 exe 旁边的 assets/ 里；直接跑源码时在仓库根目录
+if getattr(sys, "frozen", False):
+    ROOT = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 LEVELS_DIR = os.path.join(ROOT, "assets", "levels")
 FILE_FILTERS = [("关卡 JSON", "*.json"), ("所有文件", "*.*")]
 
