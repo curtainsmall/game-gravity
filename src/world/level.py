@@ -32,8 +32,8 @@ def load_level_file(path: str) -> LevelDefinition:
 
 
 def build_world(level_definition: LevelDefinition) -> World:
+    """重力不出现在关卡数据里，用全局常量。"""
     return World(
-        gravity_acceleration_magnitude=float(level_definition.get("gravity", 0.0)),
         width_in_blocks=int(level_definition.get("width", WIDTH_IN_BLOCKS)),
         height_in_blocks=int(level_definition.get("height", HEIGHT_IN_BLOCKS)),
     )
@@ -42,6 +42,11 @@ def build_world(level_definition: LevelDefinition) -> World:
 def _read_position(entry: dict) -> tuple[float, float]:
     x, y = entry["pos"]
     return float(x), float(y)
+
+
+def jump_height_of(level_definition: LevelDefinition) -> int:
+    """关卡指定的初始跳高，缺省用跳速表默认档。"""
+    return int(level_definition.get("jump_height", InputSource.JUMP_LADDER[InputSource.JUMP_LADDER_INDEX_DEFAULT][0]))
 
 
 def _read_size(entry: dict) -> tuple[float, float]:

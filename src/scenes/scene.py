@@ -3,6 +3,7 @@
 import pygame
 
 from controller.controller_system import ControllerSystem
+from controller.input_source import InputSource
 from item.pickup_system import PickupSystem
 from physics.physics_system import PhysicsSystem
 from renderer.render_system import RenderSystem
@@ -18,6 +19,7 @@ from world.level import (
     build_movable_blocks,
     build_player,
     build_world,
+    jump_height_of,
     load_level_file,
 )
 from world.world import World
@@ -49,6 +51,7 @@ class Scene:
     def from_level(cls, level_definition: LevelDefinition) -> "Scene":
         """由关卡数据建场景：方块、机关与物件都成为 GameObject。"""
         world = build_world(level_definition)
+        InputSource.set_jump_height(jump_height_of(level_definition))
         players = build_player(level_definition)
         buttons = build_buttons(level_definition)
         triggers_by_name = {button.name: button for button in buttons if button.name}

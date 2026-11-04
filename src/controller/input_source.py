@@ -44,9 +44,15 @@ class InputSource:
         cls.jump_speed_index = max(0, cls.jump_speed_index - 1)
 
     @classmethod
-    def reset_jump_speed(cls) -> None:
-        """关卡重开时回到默认档位。"""
-        cls.jump_speed_index = cls.JUMP_LADDER_INDEX_DEFAULT
+    def set_jump_height(cls, height: int) -> None:
+        """按关卡给定的跳高设定初始档位，找不到就取最接近的一档。"""
+        heights = [h for h, _ in cls.JUMP_LADDER]
+        if height in heights:
+            cls.jump_speed_index = heights.index(height)
+        else:
+            cls.jump_speed_index = min(
+                range(len(heights)), key=lambda i: abs(heights[i] - height)
+            )
 
     def advance(self, game_object, delta_seconds: float, input_state) -> None:
         body = game_object.body

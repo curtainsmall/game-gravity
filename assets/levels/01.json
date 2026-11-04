@@ -1,6 +1,6 @@
 {
   "name": "01",
-  "gravity": 60.0,
+  "jump_height": 4,
   "width": 120,
   "height": 8,
   "player": {
