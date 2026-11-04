@@ -5,27 +5,41 @@
 编辑模型
   关卡数据里的方块与木板都是矩形（pos + size），编辑器同样按整体处理：
   光标停在某格时，会高亮它所属的整个矩形；修改、删除都作用于整个矩形。
-  在空格上按住左键拖动可以画出一个新矩形，松开即按拖动范围生成。
   按钮、道具、玩家、终点是整格对象，单击放置。
+  没有常驻的「当前工具」：右键弹出新建菜单，选一种对象就进入新建状态，
+  在新建状态里左键画矩形 / 单击放置，右键退出。
 
   喷口不是格子而是「点」：pos 记的是三角形底边中点，三角朝 power 的方向
   占一格。它按自己的位置画、按画出来的三角命中，不吸附到格心，所以手写
   的坐标（比如 01.json 里的 [6, 0]）也能原样显示和选中。
 
+  画布底部有一条刻度，每 10 格一个刻度和编号（0、10、…、120），跟着网格
+  一起缩放和平移。
+
 操作
-  工具栏     新建 / 打开 / 保存 / 撤销 / 工具下拉 / 关卡设置（都可点击）
-  左键拖动   在空白处拖出新矩形（原地单击就是 1×1）
+  工具栏     新建 / 打开 / 保存 / 撤销 / 关卡设置（都可点击）
+  右键       在画布上弹出新建菜单，选一种对象进入新建状态
+  左键拖动   新建状态里在空白处拖出新矩形（原地单击就是 1×1）
              光标下已经有对象时不会新建，只在状态栏提示
-  右键       打开光标下对象的详细设置
+  右键(新建中) 退出新建状态；拖到一半时按右键不退出
+  左键(编辑中) 在右侧详细面板里编辑光标下的对象
   Delete     删除光标下的整个对象
   滚轮       缩放（以光标为锚）
   中键拖动   平移
   Ctrl-Z/S/O/N  撤销 / 保存 / 打开 / 新建
   Esc        关闭弹窗或退出
 
-弹窗都可以用鼠标操作：工具下拉列表点击选择；详细设置里点行选中字段、
-点左右小箭头改数值、点「删除对象」「关闭」；关卡设置里点字段选中、
-点小箭头改跳高、点「退格」删名称末字、点「应用」「取消」；点面板外关闭。
+详细设置是右侧的常驻面板，不是浮窗：面板打开时画布会收窄给它让位，
+所以不会压在关卡上；面板开着的时候画布照常可以画、可以左键换对象。
+面板里点一行选中字段、点左右小箭头改数值、点「删除对象」「关闭」，
+Esc 也能关。
+
+关卡设置是浮层：点字段选中、点小箭头改跳高、点「应用」「取消」，
+点面板外取消。
+
+关窗口或按 Esc 退出时，如果关卡还有未保存的改动（标题带 *），会先弹一个
+确认框：点「退出不保存」或按 Enter 才真的退出，点「取消」、Esc 或面板外
+继续编辑。
 
 保存不会自动写盘：没有文件时会弹出系统对话框让你选择位置。
 """
@@ -42,7 +56,7 @@ ROWS = 8
 HEADER = 88
 FOOTER = 30
 MARGIN = 12
-DEFAULT_WINDOW = (1240, 360)
+DEFAULT_WINDOW = (1280, 720)
 MIN_WINDOW = (620, 260)
 
 ZOOM_STEP = 1.1
@@ -81,6 +95,17 @@ TOOL_SPECS = {
     TOOL_DEST: ("终点", "single"),
 }
 TOOL_ORDER = [TOOL_BLOCK, TOOL_PLANK, TOOL_MOVABLE, TOOL_BUTTON, TOOL_ITEM, TOOL_NOZZLE, TOOL_PLAYER, TOOL_DEST]
+# 新建时预览框用的颜色：和画布里这种对象本身的颜色一致
+TOOL_COLORS = {
+    TOOL_BLOCK: BLOCK_COLOR,
+    TOOL_PLANK: PLANK_COLOR,
+    TOOL_MOVABLE: MOVABLE_COLOR,
+    TOOL_BUTTON: BUTTON_COLOR,
+    TOOL_ITEM: ITEM_COLOR,
+    TOOL_NOZZLE: NOZZLE_COLOR,
+    TOOL_PLAYER: PLAYER_COLOR,
+    TOOL_DEST: DESTINATION_COLOR,
+}
 
 NOZZLE_DEFAULT_POWER = 7
 NOZZLE_DEFAULT_RANGE = 5
@@ -115,13 +140,15 @@ TOOLBAR_ITEMS = [
     ("打开", "open", 56),
     ("保存", "save", 56),
     ("撤销", "undo", 56),
-    ("工具", "tools", 132),
     ("关卡设置", "settings", 88),
 ]
 TOOLBAR_HEIGHT = 24
 ROW_HEIGHT = 22
 BUTTON_HEIGHT = 22
-COLUMN_GAP = 14
+DETAIL_PANEL_WIDTH = 250
+CREATE_MENU_WIDTH = 150
+RULER_HEIGHT = 24
+RULER_STEP = 10
 
 
 def _display_path(path: str | None) -> str:
@@ -196,6 +223,13 @@ def nozzle_box(entry: dict) -> dict:
     return {"pos": [x - 0.5, y if up else y - 1], "size": [1, 1]}
 
 
+def _readable_color(color: tuple) -> tuple:
+    """方块本身就是近黑色，直接拿来描边会看不见，所以太暗的颜色提亮后用。"""
+    if sum(color) >= 150:
+        return color
+    return tuple(min(255, channel + 110) for channel in color)
+
+
 def _number(value) -> str:
     return f"{value:g}" if isinstance(value, float) else str(value)
 
@@ -207,17 +241,21 @@ class Layout:
         zoom: float | None = None,
         pan_x: float = 0.0,
         pan_y: float = 0.0,
+        reserved_right: int = 0,
     ) -> None:
         width, height = window_size
         self.window = (width, height)
-        self.usable_width = max(1, width - 2 * MARGIN)
+        self.usable_width = max(1, width - 2 * MARGIN - reserved_right)
         self.usable_height = max(1, height - HEADER - FOOTER)
-        self.min_tile = min(self.usable_width / COLS, self.usable_height / (ROWS + 2))
+        # 底部留一条刻度，所以可用高度要先扣掉它
+        self.min_tile = min(
+            self.usable_width / COLS, max(1.0, self.usable_height - RULER_HEIGHT) / (ROWS + 2)
+        )
         self.max_tile = max(ZOOM_MAX_TILE, self.min_tile)
         self.tile = self.min_tile if zoom is None else min(max(zoom, self.min_tile), self.max_tile)
         self.zoom = zoom
         self.width = self.tile * COLS
-        self.height = self.tile * (ROWS + 2)
+        self.height = self.tile * (ROWS + 2) + RULER_HEIGHT
         self.max_pan_x = max(0.0, self.width - self.usable_width)
         self.max_pan_y = max(0.0, self.height - self.usable_height)
         self.pan_x = min(max(0.0, pan_x), self.max_pan_x)
@@ -324,8 +362,11 @@ class Editor:
         self.dialog: dict | None = None
         self.dialog_field = 0
         self.menu_open = False
+        self.menu_origin = (MARGIN, HEADER)
+        self.creating = False
         self.settings: dict | None = None
         self.settings_field = 0
+        self.confirm_quit = False
         self.startup = True
         self.status = "新建关卡或打开一个已有关卡"
 
@@ -380,13 +421,13 @@ class Editor:
     # ---- 创建 / 删除 -----------------------------------------------
     def begin_drag(self, cell: tuple) -> None:
         if self.tool != TOOL_NOZZLE and self.object_at(cell) is not None:
-            self.status = "这一格已有对象；右键可修改，Delete 可删除"
+            self.status = "这一格已有对象；换个空位画"
             return
         self.drag_start = cell
         self.drag_current = cell
 
     def press_canvas(self, position: tuple, layout: Layout) -> None:
-        """画布上的左键按下：光标下已有对象就只提示、不新建。
+        """新建状态里的左键按下：光标下已有对象就只提示、不新建。
 
         喷口是点、不占格，所以喷口工具允许压在别的对象上放；其余工具遇到
         任何已有对象（包括喷口）都不新建，免得一次单击把该改的对象盖掉。
@@ -395,7 +436,7 @@ class Editor:
         if self.hovered is not None:
             kind = self.hovered[0]
             if self.tool != TOOL_NOZZLE or kind == KIND_NOZZLE:
-                self.status = f"这里是{KIND_TITLES.get(kind, '对象')}；右键可修改，Delete 可删除"
+                self.status = f"这里是{KIND_TITLES.get(kind, '对象')}；换个空位画，右键退出新建"
                 return
         cell = layout.cell_at(position)
         if cell is not None:
@@ -552,6 +593,31 @@ class Editor:
         self.dirty = False
         self.status = f"已保存 {_display_path(path)}"
 
+    # ---- 新建状态 ---------------------------------------------------
+    def open_create_menu(self, position: tuple) -> None:
+        """右键弹出新建菜单，光标位置就是菜单的左上角。"""
+        self.menu_open = True
+        self.menu_origin = (position[0], position[1])
+
+    def start_creating(self, tool: int) -> None:
+        self.tool = tool
+        self.creating = True
+        self.menu_open = False
+        action = "左键拖出矩形" if TOOL_SPECS[tool][1] == "rect" else "左键单击放置"
+        self.status = f"新建：{TOOL_SPECS[tool][0]}（{action}，右键退出）"
+
+    def stop_creating(self) -> None:
+        self.creating = False
+        self.status = "已退出新建；左键设置对象，右键新建"
+
+    # ---- 退出确认 ---------------------------------------------------
+    def request_quit(self) -> bool:
+        """真能退出就返回 True；有未保存的改动就先弹确认。"""
+        if self.dirty:
+            self.confirm_quit = True
+            return False
+        return True
+
     # ---- 详细设置 ---------------------------------------------------
     def open_dialog(self) -> None:
         if self.hovered is None:
@@ -698,14 +764,15 @@ def toolbar_rects() -> list:
     return rects
 
 
-def menu_rects() -> list:
-    rects = []
-    button = next(rect for rect, _, action in toolbar_rects() if action == "tools")
-    x, y = button.left, button.bottom + 2
-    for tool in TOOL_ORDER:
-        rects.append((pygame.Rect(x, y, button.width, 22), tool))
-        y += 22
-    return rects
+def create_menu_rects(origin: tuple, window_size: tuple) -> list:
+    """右键弹出的新建菜单：以光标为左上角，越界时往里收。"""
+    height = len(TOOL_ORDER) * ROW_HEIGHT
+    left = max(MARGIN, min(origin[0], window_size[0] - MARGIN - CREATE_MENU_WIDTH))
+    top = max(HEADER, min(origin[1], window_size[1] - FOOTER - height))
+    return [
+        (pygame.Rect(left, top + index * ROW_HEIGHT, CREATE_MENU_WIDTH, ROW_HEIGHT), tool)
+        for index, tool in enumerate(TOOL_ORDER)
+    ]
 
 
 def startup_rects(surface: pygame.Surface) -> list:
@@ -797,11 +864,41 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         preview.fill(PREVIEW)
         surface.blit(preview, layout.cell_rect(x, y, (w, h)).topleft)
 
-    # 高亮整个对象
-    if editor.hovered is not None and not editor.startup:
+    if editor.creating:
+        # 新建状态：光标所在格用「要放的那种对象」的颜色描边；拖动时改画整个预览范围
+        color = _readable_color(TOOL_COLORS.get(editor.tool, HIGHLIGHT))
+        if editor.hover is not None:
+            left, bottom = editor.hover
+            pygame.draw.rect(surface, color, layout.cell_rect(left, bottom, (1, 1)), 2)
+        if editor.drag_start is not None and editor.drag_current is not None:
+            x, y, w, h = normalize_drag(editor.drag_start, editor.drag_current)
+            pygame.draw.rect(surface, color, layout.cell_rect(x, y, (w, h)), 2)
+    elif editor.hovered is not None and not editor.startup:
+        # 编辑状态：高亮光标下的整个对象
         kind, entry = editor.hovered
         box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
         pygame.draw.rect(surface, HIGHLIGHT, layout.entry_rect(box), 2)
+
+
+def draw_ruler(surface: pygame.Surface, layout: Layout, font: pygame.font.Font) -> None:
+    """画布底部的刻度：每 10 格一个刻度和编号，跟着网格一起移动。"""
+    top = layout.top + (ROWS + 2) * layout.tile
+    left = layout.left
+    pygame.draw.line(surface, DIALOG_BORDER, (left, top), (left + layout.width, top))
+    for block in range(0, COLS + 1, RULER_STEP):
+        x = left + block * layout.tile
+        if x < -layout.tile or x > surface.get_width() + layout.tile:
+            continue
+        pygame.draw.line(surface, DIM_TEXT, (x, top), (x, top + 5))
+        text = font.render(str(block), True, DIM_TEXT)
+        if block == 0:
+            text_x = x + 2
+        elif block == COLS:
+            text_x = x - text.get_width() - 2
+        else:
+            text_x = x - text.get_width() / 2
+        text_x = max(0.0, min(text_x, surface.get_width() - text.get_width()))
+        surface.blit(text, (text_x, top + 6))
 
 
 def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: pygame.font.Font) -> None:
@@ -813,40 +910,34 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
     )
     surface.blit(font.render(head, True, TEXT), (MARGIN, 8))
 
-    tool_name = TOOL_SPECS[editor.tool][0]
-    hint = (
-        f"左键拖出新矩形  右键 设置  Delete 删除  滚轮缩放  中键平移  "
-        "Ctrl-Z/S/O/N 撤销/保存/打开/新建"
-    )
+    if editor.creating:
+        mode = font.render(
+            f"新建中：{TOOL_SPECS[editor.tool][0]}   左键画，右键退出", True, HIGHLIGHT
+        )
+        surface.blit(mode, (surface.get_width() - MARGIN - mode.get_width(), 8))
+        hint = "左键拖出矩形 / 单击放置   右键 退出新建   滚轮缩放   中键平移"
+    else:
+        hint = (
+            "右键 新建对象   左键 设置   Delete 删除   滚轮缩放   中键平移   "
+            "Ctrl-Z/S/O/N 撤销/保存/打开/新建"
+        )
     surface.blit(font.render(hint, True, DIM_TEXT), (MARGIN, 30))
 
     for rect, label, action in toolbar_rects():
         pygame.draw.rect(surface, BUTTON_BG, rect)
         pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
-        text_label = f"工具: {tool_name}" if action == "tools" else label
-        text = font.render(text_label, True, TEXT)
+        text = font.render(label, True, TEXT)
         surface.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
-        if action == "tools":
-            ax = rect.right - 12
-            ay = rect.centery - 2
-            pygame.draw.polygon(surface, TEXT, [(ax, ay), (ax + 8, ay), (ax + 4, ay + 5)])
 
 
-def draw_menu(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+def draw_create_menu(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
     mouse = pygame.mouse.get_pos()
-    for rect, tool in menu_rects():
-        active = tool == editor.tool
-        hovered = rect.collidepoint(mouse)
-        if active:
-            fill = HIGHLIGHT
-        elif hovered:
-            fill = (100, 100, 110)
-        else:
-            fill = BUTTON_BG
-        pygame.draw.rect(surface, fill, rect)
-        pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
-        color = (20, 20, 20) if active else TEXT
-        surface.blit(font.render(TOOL_SPECS[tool][0], True, color), (rect.left + 8, rect.top + 3))
+    rects = create_menu_rects(editor.menu_origin, surface.get_size())
+    for rect, tool in rects:
+        pygame.draw.rect(surface, (100, 100, 110) if rect.collidepoint(mouse) else BUTTON_BG, rect)
+        surface.blit(font.render(TOOL_SPECS[tool][0], True, TEXT), (rect.left + 10, rect.top + 2))
+    border = rects[0][0].unionall([rect for rect, _ in rects])
+    pygame.draw.rect(surface, DIALOG_BORDER, border, 1)
 
 
 def place_panel(surface: pygame.Surface, panel: pygame.Rect) -> pygame.Rect:
@@ -907,49 +998,50 @@ def stepper_rects(cell: pygame.Rect) -> tuple:
     return left, right
 
 
-def dialog_geometry(surface: pygame.Surface, editor: Editor) -> tuple:
-    """绘制与点击共用同一套几何：面板、字段格、两个按钮。"""
+def detail_panel_width(surface: pygame.Surface) -> int:
+    return min(DETAIL_PANEL_WIDTH, max(180, surface.get_width() // 3))
+
+
+def detail_panel_rect(surface: pygame.Surface) -> pygame.Rect:
+    """右侧常驻的详细设置面板，和画布之间留一道 MARGIN 的缝。"""
+    width = detail_panel_width(surface)
+    return pygame.Rect(
+        surface.get_width() - MARGIN - width,
+        HEADER,
+        width,
+        surface.get_height() - HEADER - FOOTER,
+    )
+
+
+def detail_row_rects(surface: pygame.Surface, editor: Editor) -> list:
+    """字段行；行高按面板高度收缩，字段多的对象也放得下。"""
+    panel = detail_panel_rect(surface)
     count = len(editor.dialog_rows())
-    columns = 1 if count <= 6 else 2
-    per_column = count if columns == 1 else max(1, math.ceil(count / 2))
-    width = 380 if columns == 1 else 486
-    height = 34 + per_column * ROW_HEIGHT + 8 + BUTTON_HEIGHT + 6
-    panel = place_panel(surface, pygame.Rect(0, 0, width, height))
-
-    inner = panel.width - 24
-    column_width = (inner - (columns - 1) * COLUMN_GAP) // columns
-    cells = []
-    for index in range(count):
-        column = index // per_column if per_column else 0
-        row = index % per_column if per_column else 0
-        cells.append(
-            (
-                pygame.Rect(
-                    panel.left + 12 + column * (column_width + COLUMN_GAP),
-                    panel.top + 34 + row * ROW_HEIGHT,
-                    column_width,
-                    ROW_HEIGHT - 2,
-                ),
-                index,
-            )
-        )
-
-    button_y = panel.bottom - BUTTON_HEIGHT - 6
-    delete_rect = pygame.Rect(panel.left + 12, button_y, 96, BUTTON_HEIGHT)
-    close_rect = pygame.Rect(panel.right - 12 - 76, button_y, 76, BUTTON_HEIGHT)
-    return panel, cells, delete_rect, close_rect
+    top = panel.top + 32
+    bottom = panel.bottom - 36
+    height = min(ROW_HEIGHT, max(18, (bottom - top) // max(1, count)))
+    return [
+        (pygame.Rect(panel.left + 10, top + index * height, panel.width - 20, height - 2), index)
+        for index in range(count)
+    ]
 
 
-def draw_dialog(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    panel, cells, delete_rect, close_rect = dialog_geometry(surface, editor)
-    draw_panel(surface, panel)
+def detail_button_rects(surface: pygame.Surface) -> tuple:
+    panel = detail_panel_rect(surface)
+    y = panel.bottom - 32
+    delete_rect = pygame.Rect(panel.left + 10, y, min(110, panel.width - 86), ROW_HEIGHT)
+    close_rect = pygame.Rect(panel.right - 10 - 66, y, 66, ROW_HEIGHT)
+    return delete_rect, close_rect
 
-    surface.blit(font.render(editor.dialog_title(), True, TEXT), (panel.left + 12, panel.top + 8))
-    hint = font.render("点击面板外关闭", True, DIM_TEXT)
-    surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
+
+def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    panel = detail_panel_rect(surface)
+    pygame.draw.rect(surface, DIALOG_BG, panel)
+    pygame.draw.rect(surface, DIALOG_BORDER, panel, 1)
+    surface.blit(font.render(editor.dialog_title(), True, TEXT), (panel.left + 10, panel.top + 8))
 
     rows = editor.dialog_rows()
-    for rect, index in cells:
+    for rect, index in detail_row_rects(surface, editor):
         label, value = rows[index]
         selected = index == editor.dialog_field
         pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
@@ -965,6 +1057,7 @@ def draw_dialog(surface: pygame.Surface, editor: Editor, font: pygame.font.Font)
         _draw_stepper(surface, left, -1)
         _draw_stepper(surface, right, 1)
 
+    delete_rect, close_rect = detail_button_rects(surface)
     _draw_button(surface, font, delete_rect, "删除对象")
     _draw_button(surface, font, close_rect, "关闭")
 
@@ -972,16 +1065,15 @@ def draw_dialog(surface: pygame.Surface, editor: Editor, font: pygame.font.Font)
 def settings_geometry(surface: pygame.Surface) -> tuple:
     panel = place_panel(surface, pygame.Rect(0, 0, 440, 172))
     name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
-    erase_rect = pygame.Rect(name_rect.right - 60, name_rect.top + 1, 58, name_rect.height - 2)
     jump_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
     button_y = panel.bottom - BUTTON_HEIGHT - 8
     apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
     cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
-    return panel, name_rect, erase_rect, jump_rect, apply_rect, cancel_rect
+    return panel, name_rect, jump_rect, apply_rect, cancel_rect
 
 
 def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    panel, name_rect, erase_rect, jump_rect, apply_rect, cancel_rect = settings_geometry(surface)
+    panel, name_rect, jump_rect, apply_rect, cancel_rect = settings_geometry(surface)
     draw_panel(surface, panel)
 
     surface.blit(font.render("关卡设置", True, TEXT), (panel.left + 12, panel.top + 8))
@@ -994,13 +1086,12 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     pygame.draw.rect(surface, HIGHLIGHT if name_selected else (86, 86, 94), name_rect, 1)
     caret = "|" if name_selected else ""
     text = font.render(f"名称: {name if name else '（空）'}{caret}", True, HIGHLIGHT if name_selected else TEXT)
-    clip = max(1, erase_rect.left - name_rect.left - 10)
+    clip = max(1, name_rect.width - 12)
     surface.blit(
         text,
         (name_rect.left + 6, name_rect.centery - text.get_height() // 2),
         (0, 0, min(text.get_width(), clip), text.get_height()),
     )
-    _draw_button(surface, font, erase_rect, "退格")
 
     jump_selected = editor.settings_field == 1
     pygame.draw.rect(surface, (62, 62, 72) if jump_selected else (48, 48, 54), jump_rect)
@@ -1014,6 +1105,32 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     _draw_stepper(surface, right, 1)
 
     _draw_button(surface, font, apply_rect, "应用")
+    _draw_button(surface, font, cancel_rect, "取消")
+
+
+def quit_geometry(surface: pygame.Surface) -> tuple:
+    panel = place_panel(surface, pygame.Rect(0, 0, 430, 152))
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    quit_rect = pygame.Rect(panel.right - 12 - 120, button_y, 120, BUTTON_HEIGHT)
+    cancel_rect = pygame.Rect(quit_rect.left - 10 - 76, button_y, 76, BUTTON_HEIGHT)
+    return panel, quit_rect, cancel_rect
+
+
+def draw_quit_confirm(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    panel, quit_rect, cancel_rect = quit_geometry(surface)
+    draw_panel(surface, panel)
+
+    surface.blit(font.render("关卡还没保存", True, HIGHLIGHT), (panel.left + 14, panel.top + 12))
+    surface.blit(
+        font.render(_display_path(editor.path), True, DIM_TEXT), (panel.left + 14, panel.top + 40)
+    )
+    surface.blit(
+        font.render("有未保存的修改，确定要退出吗？", True, TEXT), (panel.left + 14, panel.top + 62)
+    )
+    hint = font.render("Enter 退出    Esc 取消", True, DIM_TEXT)
+    surface.blit(hint, (panel.left + 14, panel.top + 88))
+
+    _draw_button(surface, font, quit_rect, "退出不保存")
     _draw_button(surface, font, cancel_rect, "取消")
 
 
@@ -1035,17 +1152,20 @@ def draw_startup(surface: pygame.Surface, font: pygame.font.Font) -> None:
 def draw(surface: pygame.Surface, editor: Editor, font: pygame.font.Font, layout: Layout) -> None:
     surface.fill(BACKGROUND)
     draw_canvas(surface, editor, layout)
+    draw_ruler(surface, layout, font)
     draw_header(surface, editor, layout, font)
     surface.blit(font.render(editor.status, True, STATUS_TEXT), (MARGIN, surface.get_height() - FOOTER + 6))
 
     if editor.menu_open:
-        draw_menu(surface, editor, font)
+        draw_create_menu(surface, editor, font)
     if editor.dialog is not None:
-        draw_dialog(surface, editor, font)
+        draw_detail_panel(surface, editor, font)
     if editor.settings is not None:
         draw_settings(surface, editor, font)
     if editor.startup:
         draw_startup(surface, font)
+    if editor.confirm_quit:
+        draw_quit_confirm(surface, editor, font)
 
 
 def handle_toolbar(editor: Editor, position: tuple) -> str | None:
@@ -1060,31 +1180,23 @@ def handle_toolbar(editor: Editor, position: tuple) -> str | None:
             editor.save()
         elif action == "undo":
             editor.undo()
-        elif action == "tools":
-            editor.menu_open = not editor.menu_open
         elif action == "settings":
             editor.open_settings()
         return action
     return None
 
 
-def tools_button_hit(position: tuple) -> bool:
-    return any(
-        rect.collidepoint(position) for rect, _, action in toolbar_rects() if action == "tools"
-    )
-
-
-def handle_menu(editor: Editor, position: tuple) -> bool:
-    for rect, tool in menu_rects():
+def handle_create_menu(editor: Editor, position: tuple, window_size: tuple) -> bool:
+    for rect, tool in create_menu_rects(editor.menu_origin, window_size):
         if rect.collidepoint(position):
-            editor.tool = tool
-            editor.menu_open = False
+            editor.start_creating(tool)
             return True
     return False
 
 
-def handle_dialog_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
-    panel, cells, delete_rect, close_rect = dialog_geometry(surface, editor)
+def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
+    """只处理落在面板里的点击；画布那边的点击照常走编辑流程。"""
+    delete_rect, close_rect = detail_button_rects(surface)
     if delete_rect.collidepoint(position):
         kind, entry = editor.dialog["kind"], editor.dialog["entry"]
         editor.delete_entry(kind, entry)
@@ -1092,7 +1204,7 @@ def handle_dialog_click(surface: pygame.Surface, editor: Editor, position: tuple
     if close_rect.collidepoint(position):
         editor.close_dialog()
         return
-    for rect, index in cells:
+    for rect, index in detail_row_rects(surface, editor):
         if not rect.collidepoint(position):
             continue
         editor.dialog_field = index
@@ -1102,21 +1214,15 @@ def handle_dialog_click(surface: pygame.Surface, editor: Editor, position: tuple
         elif right.collidepoint(position):
             editor.adjust_dialog(1)
         return
-    if not panel.collidepoint(position):
-        editor.close_dialog()
 
 
 def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
-    panel, name_rect, erase_rect, jump_rect, apply_rect, cancel_rect = settings_geometry(surface)
+    panel, name_rect, jump_rect, apply_rect, cancel_rect = settings_geometry(surface)
     if apply_rect.collidepoint(position):
         editor.close_settings(True)
         return
     if cancel_rect.collidepoint(position):
         editor.close_settings(False)
-        return
-    if erase_rect.collidepoint(position):
-        editor.settings_field = 0
-        editor.erase_settings_char()
         return
     if name_rect.collidepoint(position):
         editor.settings_field = 0
@@ -1143,21 +1249,37 @@ def main() -> None:
 
     running = True
     while running:
-        layout = Layout(screen.get_size(), editor.zoom, editor.pan_x, editor.pan_y)
+        reserved_right = 0 if editor.dialog is None else detail_panel_width(screen) + MARGIN
+        layout = Layout(screen.get_size(), editor.zoom, editor.pan_x, editor.pan_y, reserved_right)
         editor.pan_x, editor.pan_y = layout.pan_x, layout.pan_y
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                if editor.request_quit():
+                    running = False
             elif event.type == pygame.VIDEORESIZE:
                 size = (max(MIN_WINDOW[0], event.w), max(MIN_WINDOW[1], event.h))
                 screen = pygame.display.set_mode(size, pygame.RESIZABLE)
-                layout = Layout(size, editor.zoom, editor.pan_x, editor.pan_y)
+                reserved_right = 0 if editor.dialog is None else detail_panel_width(screen) + MARGIN
+                layout = Layout(size, editor.zoom, editor.pan_x, editor.pan_y, reserved_right)
                 editor.pan_x, editor.pan_y = layout.pan_x, layout.pan_y
+            elif editor.confirm_quit:
+                if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_n):
+                        editor.confirm_quit = False
+                    elif event.key in (pygame.K_RETURN, pygame.K_y):
+                        running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    panel, quit_rect, cancel_rect = quit_geometry(screen)
+                    if quit_rect.collidepoint(event.pos):
+                        running = False
+                    elif cancel_rect.collidepoint(event.pos) or not panel.collidepoint(event.pos):
+                        editor.confirm_quit = False
             elif editor.startup:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        running = False
+                        if editor.request_quit():
+                            running = False
                     elif event.key in (pygame.K_RETURN, pygame.K_n):
                         editor.new_level()
                     elif event.key == pygame.K_o:
@@ -1187,31 +1309,14 @@ def main() -> None:
                         editor.type_settings(event.unicode)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
-            elif editor.dialog is not None:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        editor.close_dialog()
-                    elif event.key == pygame.K_DELETE:
-                        kind, entry = editor.dialog["kind"], editor.dialog["entry"]
-                        editor.delete_entry(kind, entry)
-                    elif event.key == pygame.K_UP:
-                        editor.move_dialog_field(-1)
-                    elif event.key == pygame.K_DOWN:
-                        editor.move_dialog_field(1)
-                    elif event.key == pygame.K_LEFT:
-                        editor.adjust_dialog(-1)
-                    elif event.key == pygame.K_RIGHT:
-                        editor.adjust_dialog(1)
-                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    handle_dialog_click(screen, editor, event.pos)
             elif editor.menu_open:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     editor.menu_open = False
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
-                    if event.button == 1 and handle_menu(editor, event.pos):
+                    if event.button == 1 and handle_create_menu(editor, event.pos, screen.get_size()):
                         continue
                     editor.menu_open = False
-                    if event.button == 1 and not tools_button_hit(event.pos):
+                    if event.button == 1:
                         handle_toolbar(editor, event.pos)
             elif event.type == pygame.MOUSEMOTION:
                 cell = layout.cell_at(event.pos)
@@ -1235,15 +1340,26 @@ def main() -> None:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button in (4, 5):
                     continue
+                if editor.dialog is not None and detail_panel_rect(screen).collidepoint(event.pos):
+                    if event.button == 1:
+                        handle_detail_click(screen, editor, event.pos)
+                    continue
                 if event.button == 1 and handle_toolbar(editor, event.pos):
                     continue
                 if event.button == 2:
                     editor.pan_drag = (event.pos[0], event.pos[1], editor.pan_x, editor.pan_y)
                     continue
                 cell = layout.cell_at(event.pos)
-                if event.button == 1 and cell is not None:
-                    editor.press_canvas(event.pos, layout)
-                elif event.button == 3:
+                if event.button == 3:
+                    if editor.creating:
+                        if editor.drag_start is None:
+                            editor.stop_creating()
+                    elif event.pos[1] >= HEADER:
+                        editor.open_create_menu(event.pos)
+                elif event.button == 1 and editor.creating:
+                    if cell is not None:
+                        editor.press_canvas(event.pos, layout)
+                elif event.button == 1:
                     editor.update_hover(event.pos, layout)
                     editor.open_dialog()
             elif event.type == pygame.MOUSEBUTTONUP:
@@ -1262,10 +1378,24 @@ def main() -> None:
                 elif ctrl and event.key == pygame.K_n:
                     editor.new_level()
                 elif event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_DELETE and editor.hovered is not None:
-                    kind, entry = editor.hovered
-                    editor.delete_entry(kind, entry)
+                    if editor.dialog is not None:
+                        editor.close_dialog()
+                    elif editor.request_quit():
+                        running = False
+                elif event.key == pygame.K_DELETE:
+                    if editor.dialog is not None:
+                        editor.delete_entry(editor.dialog["kind"], editor.dialog["entry"])
+                    elif editor.hovered is not None:
+                        kind, entry = editor.hovered
+                        editor.delete_entry(kind, entry)
+                elif editor.dialog is not None and event.key == pygame.K_UP:
+                    editor.move_dialog_field(-1)
+                elif editor.dialog is not None and event.key == pygame.K_DOWN:
+                    editor.move_dialog_field(1)
+                elif editor.dialog is not None and event.key == pygame.K_LEFT:
+                    editor.adjust_dialog(-1)
+                elif editor.dialog is not None and event.key == pygame.K_RIGHT:
+                    editor.adjust_dialog(1)
 
         draw(screen, editor, font, layout)
         pygame.display.flip()
