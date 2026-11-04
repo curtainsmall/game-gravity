@@ -13,35 +13,30 @@ class InputState:
 
 
 class InputSource:
-    """跳高在运行时用 [ 与 ] 切换，用于快速对比手感。"""
-
     MOVE_SPEED = 8.0  # 方块/秒
 
-    JUMP_LADDER_INDEX_DEFAULT = 2
+    JUMP_LADDER_INDEX_DEFAULT = 4  # 默认 4 格
 
     # (目标跳高格数, 起跳速度)，重力 60、60 步/秒下按离散积分反解
-    JUMP_LADDER: list[tuple[float, float]] = [
-        (1.0, 11.500),
-        (2.0, 16.059),
-        (3.0, 19.500),
+    JUMP_LADDER: list[tuple[int, float]] = [
+        (0, 0.000),  # 跳不起来
+        (1, 11.500),
+        (2, 16.059),
+        (3, 19.500),
+        (4, 22.435),
+        (5, 25.038),
+        (6, 27.357),
+        (7, 29.500),
     ]
     jump_speed_index = JUMP_LADDER_INDEX_DEFAULT
 
     @classmethod
-    def jump_height(cls) -> float:
+    def jump_height(cls) -> int:
         return cls.JUMP_LADDER[cls.jump_speed_index][0]
 
     @classmethod
     def jump_speed(cls) -> float:
         return cls.JUMP_LADDER[cls.jump_speed_index][1]
-
-    @classmethod
-    def cycle_jump_speed(cls, step: int) -> tuple[float, float]:
-        """切换档位并返回 (跳高, 起跳速度)。"""
-        cls.jump_speed_index = max(
-            0, min(len(cls.JUMP_LADDER) - 1, cls.jump_speed_index + step)
-        )
-        return cls.jump_height(), cls.jump_speed()
 
     @classmethod
     def decrease_jump_speed(cls) -> None:

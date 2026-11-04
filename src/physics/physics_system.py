@@ -1,7 +1,7 @@
 """PhysicsSystem：先积分、再解算，最后采样传感器并施加风力。"""
 
 from core.game_object import GameObject
-from fan.fan import Fan
+from fan.fan import launch_speed
 from physics.body import Body
 from world.world import World
 
@@ -24,10 +24,10 @@ class PhysicsSystem:
             if game_object.controller is not None and body.is_grounded:
                 game_object.controller.passes_through_planks = False
 
-        self._sample_sensors(objects)
+        self._sample_sensors(objects, gravity, delta_seconds)
 
-    def _sample_sensors(self, objects: list[GameObject]) -> None:
-        """解算之后采样：传感器是否与运动物体重叠，风区持续给予推力。"""
+    def _sample_sensors(self, objects: list[GameObject], gravity: float, delta_seconds: float) -> None:
+        """解算之后采样：传感器是否与运动物体重叠，风区给出飞向目标的初速度。"""
         movers = [
             (other, other.body)
             for other in objects
@@ -41,18 +41,24 @@ class PhysicsSystem:
             overlapping = [(other, mover_body) for other, mover_body in movers if self._overlaps(body, mover_body)]
             if game_object.fan is not None:
                 for mover_object, _ in overlapping:
-                    self._apply_wind(game_object, mover_object)
+                    self._apply_wind(game_object, mover_object, gravity, delta_seconds)
             game_object.interaction_state = 1 if overlapping else 0
 
-    def _apply_wind(self, fan_object: GameObject, mover_object: GameObject) -> None:
-        """只要还在风区内且没到远端，就把纵向速度顶到风的最小推速。"""
+    def _apply_wind(
+        self,
+        fan_object: GameObject,
+        mover_object: GameObject,
+        gravity: float,
+        delta_seconds: float,
+    ) -> None:
+        """在风区内把速度设成「从当前位置正好飞到目标」的值。"""
         fan = fan_object.fan
         body = mover_object.body
         target_y = fan.target_y
         if fan.power > 0 and body.bottom < target_y:
-            body.velocity_y = max(body.velocity_y, Fan.WIND_SPEED)
+            body.velocity_y = launch_speed(target_y - body.bottom, gravity, delta_seconds)
         elif fan.power < 0 and body.bottom > target_y:
-            body.velocity_y = min(body.velocity_y, -Fan.WIND_SPEED)
+            body.velocity_y = -launch_speed(body.bottom - target_y, gravity, delta_seconds)
 
     def _solids_for(self, mover: GameObject, objects: list[GameObject]) -> list[Body]:
         solids: list[Body] = []

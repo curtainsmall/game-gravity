@@ -21,6 +21,8 @@ LevelDefinition = dict[str, object]
 
 DEFAULT_SIZE = (1.0, 1.0)
 PLAYER_SIZE = (0.8, 1.0)   # 玩家比一格窄，过缝与贴墙时更宽容
+FAN_DEFAULT_RANGE = 5      # 风扇没写 range 时的风区长度
+FAN_DEFAULT_POWER = 7      # 风扇没写 power 时的目标偏移
 
 
 def load_level_file(path: str) -> LevelDefinition:
@@ -120,12 +122,12 @@ def build_destination(level_definition: LevelDefinition) -> list[GameObject]:
 
 
 def build_fans(level_definition: LevelDefinition) -> list[GameObject]:
-    """风扇的 pos 是三角形底边中点：风区为以它为中心的 1 格宽、长 |power| 格的矩形。"""
+    """风扇的 pos 是三角形底边中点；range 是风区长度，power 是目标偏移。"""
     fans = []
     for entry in level_definition.get("fans", []):
-        power = int(entry.get("power", 0))
+        power = int(entry.get("power", FAN_DEFAULT_POWER))
+        length = int(entry.get("range", FAN_DEFAULT_RANGE))
         x, y = _read_position(entry)
-        length = abs(power)
         bottom = y if power >= 0 else y - length
         fans.append(
             GameObject(
@@ -147,7 +149,7 @@ def build_fans(level_definition: LevelDefinition) -> list[GameObject]:
                     placeholder_direction=1 if power >= 0 else -1,
                     placeholder_has_axis=True,
                 ),
-                fan=Fan(power=power, origin_y=y),
+                fan=Fan(power=power, length=length, origin_y=y),
             )
         )
     return fans

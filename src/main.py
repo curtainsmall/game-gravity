@@ -63,10 +63,6 @@ def main() -> None:
                     flip_edge = True
                 elif pygame_event.key == pygame.K_r:
                     restart_requested = True
-                elif pygame_event.key in (pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET):
-                    step = -1 if pygame_event.key == pygame.K_LEFTBRACKET else 1
-                    height, speed = InputSource.cycle_jump_speed(step)
-                    print(f"jump height {height:.2f} blocks, speed {speed:.3f}")
             active_scene.handle_event(pygame_event)
 
         if restart_requested:

@@ -251,7 +251,8 @@
   "fans": [
     {
       "pos": [6, 0],
-      "power": 6
+      "power": 7,
+      "range": 5
     }
   ],
   "items": [
