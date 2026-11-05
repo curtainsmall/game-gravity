@@ -1,11 +1,11 @@
-"""关卡数据：schema 用设计者的词汇，程序里只有 GameObject。
+"""关卡数据：里面用设计者的词汇，程序里只有 GameObject。
 
 每个条目都是 {"pos": [x, y], "size": [w, h]}，size 缺省为 1×1。
 按钮与可移动方块用 name 互相引用。
 
 一个关卡是一个文件夹，文件夹名就是关卡名：
-    <关卡名>/schema.json       关卡数据
-    <关卡名>/background.png    背景图（schema 里不写 background 时默认用它）
+    <关卡名>/scene.json        关卡数据
+    <关卡名>/background.png    背景图（scene.json 里不写 background 时默认用它）
 background 如果写了，路径相对关卡文件夹；图片按可玩区的高度等比缩放后横向重复，
 ground/ceiling 那两行不在它的覆盖范围里。
 """
@@ -49,7 +49,7 @@ def build_world(level_definition: LevelDefinition, base_dir: str | Path | None =
 
 
 def resolve_background(value, base_dir: str | Path | None) -> str | None:
-    """背景图：相对关卡文件夹解析；schema 没写就退回文件夹里的 background.png。"""
+    """背景图：相对关卡文件夹解析；scene.json 没写就退回文件夹里的 background.png。"""
     base = Path(base_dir) if base_dir is not None else None
     candidates: list[Path] = []
     if value:

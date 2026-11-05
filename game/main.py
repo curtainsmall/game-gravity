@@ -21,16 +21,16 @@ BASE_DIR = (
     if getattr(sys, "frozen", False)
     else Path(__file__).resolve().parent.parent
 )
-# 一个关卡是一个文件夹：文件夹名就是关卡名，里面 schema.json 是关卡数据，
-# background.png 是背景图（schema 里不写 background 时就用它）
+# 一个关卡是一个文件夹：文件夹名就是关卡名，里面 scene.json 是关卡数据，
+# background.png 是背景图（scene.json 里不写 background 时就用它）
 LEVEL_DIR = BASE_DIR / "assets" / "levels" / "01"
-LEVEL_SCHEMA = LEVEL_DIR / "schema.json"
+LEVEL_SCENE = LEVEL_DIR / "scene.json"
 
 
 def load_scene() -> Scene:
     """有第一个关卡就用它，没有就用空场景。"""
-    if LEVEL_SCHEMA.exists():
-        return Scene.from_level_file(str(LEVEL_SCHEMA))
+    if LEVEL_SCENE.exists():
+        return Scene.from_level_file(str(LEVEL_SCENE))
     return Scene()
 
 

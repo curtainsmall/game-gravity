@@ -26,7 +26,7 @@ from core.constants import (
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
     LEVEL_BACKGROUND_NAME,
-    LEVEL_SCHEMA_NAME,
+    LEVEL_SCENE_NAME,
     LEVEL_WIDTH_MAX,
     LEVEL_WIDTH_MIN,
     MARGIN,
@@ -279,10 +279,10 @@ class Editor:
         self.load(folder)
 
     def load(self, folder: str) -> None:
-        """打开一个关卡文件夹：数据在里面的 schema.json。"""
-        schema_path = os.path.join(folder, LEVEL_SCHEMA_NAME)
+        """打开一个关卡文件夹：数据在里面的 scene.json。"""
+        scene_path = os.path.join(folder, LEVEL_SCENE_NAME)
         try:
-            with open(schema_path, encoding="utf-8") as file:
+            with open(scene_path, encoding="utf-8") as file:
                 definition = json.load(file)
         except (OSError, json.JSONDecodeError) as error:
             self.status = f"打开失败：{error}"
@@ -301,7 +301,7 @@ class Editor:
         self.status = f"已打开 {display_path(folder)}"
 
     def save(self) -> None:
-        """保存到关卡文件夹：schema.json 放数据，背景图复制成 background.png。"""
+        """保存到关卡文件夹：scene.json 放数据，背景图复制成 background.png。"""
         folder = self.path
         if folder is None:
             folder = ask_level_folder("选择关卡文件夹（文件夹名就是关卡名）")
@@ -315,7 +315,7 @@ class Editor:
             os.makedirs(folder, exist_ok=True)
             self.store_background(folder)
             with open(
-                os.path.join(folder, LEVEL_SCHEMA_NAME), "w", encoding="utf-8", newline="\n"
+                os.path.join(folder, LEVEL_SCENE_NAME), "w", encoding="utf-8", newline="\n"
             ) as file:
                 file.write(dump_level(self.level.to_definition()))
         except OSError as error:

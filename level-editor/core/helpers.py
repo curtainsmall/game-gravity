@@ -64,7 +64,7 @@ def level_base_dir(level_path: str | None) -> str:
 
 
 def resolve_background(value: str, level_path: str | None) -> str | None:
-    """background 解析成绝对路径；schema 没写就退回文件夹里的 background.png。"""
+    """background 解析成绝对路径；scene.json 没写就退回文件夹里的 background.png。"""
     base = level_base_dir(level_path)
     candidates = []
     if value:

@@ -138,7 +138,7 @@ else:
 
 LEVELS_DIR = os.path.join(ROOT, "assets", "levels")
 # 一个关卡 = 一个文件夹，文件夹名就是关卡名
-LEVEL_SCHEMA_NAME = "schema.json"          # 关卡数据
+LEVEL_SCENE_NAME = "scene.json"            # 关卡数据
 LEVEL_BACKGROUND_NAME = "background.png"   # 背景图进来后固定叫这个名字
 BACKGROUND_FILTERS = [("图片", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
 
