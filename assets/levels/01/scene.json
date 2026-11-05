@@ -3,6 +3,7 @@
   "width": 240,
   "height": 16,
   "jump_height": 8,
+  "move_speed": 8.0,
   "blocks": [
     {
       "pos": [2, 0],
@@ -267,19 +268,12 @@
   ],
   "nozzles": [
     {
-      "pos": [6, 0],
+      "pos": [6.0, 0],
       "power": 7,
       "range": 5
     }
   ],
-  "textures": [
-    {
-      "pos": [0.51, 1.51],
-      "size": [80.0, 16.0],
-      "image": "textures/tex1.png",
-      "smooth": false
-    }
-  ],
+  "textures": [],
   "player": {
     "pos": [0, 0]
   },
