@@ -11,7 +11,7 @@ RENDER_FRAME_RATE_LIMIT = 120
 def main() -> None:
     pygame.init()
     screen = pygame.display.set_mode(WINDOW_PIXEL_SIZE)
-    pygame.display.set_caption("game-gravity")
+    pygame.display.set_caption("重力")
 
     frame_clock = pygame.time.Clock()
     app = App(screen)

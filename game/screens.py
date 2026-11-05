@@ -6,16 +6,16 @@ import ui
 from levels import level_preview
 
 CREDITS = [
-    ("Program", "curtainsmall"),
-    ("Level Design", "curtainsmall"),
-    ("Made with", "pygame-ce"),
+    ("程序", "curtainsmall"),
+    ("关卡设计", "curtainsmall"),
+    ("引擎", "pygame-ce"),
 ]
 
 
 def draw_title(surface: pygame.Surface, app) -> None:
     surface.fill(ui.BACKGROUND)
     width, height = surface.get_size()
-    ui.draw_text(surface, "GRAVITY", 64, center=(width // 2, int(height * 0.22)))
+    ui.draw_text(surface, "重力", 64, center=(width // 2, int(height * 0.22)))
     if not app.levels:
         ui.draw_text(
             surface,
@@ -25,9 +25,9 @@ def draw_title(surface: pygame.Surface, app) -> None:
             color=ui.DIM_TEXT,
         )
     rects = ui.title_rects(surface)
-    ui.draw_button(surface, rects["start"], "Start")
-    ui.draw_button(surface, rects["levels"], "Select Levels")
-    ui.draw_button(surface, rects["quit"], "Quit")
+    ui.draw_button(surface, rects["start"], "开始游戏")
+    ui.draw_button(surface, rects["levels"], "选择关卡")
+    ui.draw_button(surface, rects["quit"], "退出")
 
     gear = rects["settings"]
     pygame.draw.rect(surface, ui.BUTTON, gear)
@@ -38,8 +38,8 @@ def draw_title(surface: pygame.Surface, app) -> None:
 def draw_level_select(surface: pygame.Surface, app) -> None:
     surface.fill(ui.BACKGROUND)
     width, _ = surface.get_size()
-    ui.draw_text(surface, "Select Level", 34, center=(width // 2, 44))
-    ui.draw_button(surface, ui.back_rect(surface), "Back", 18)
+    ui.draw_text(surface, "选择关卡", 34, center=(width // 2, 44))
+    ui.draw_button(surface, ui.back_rect(surface), "返回", 18)
 
     area = ui.level_view_area(surface)
     if not app.levels:
@@ -75,7 +75,7 @@ def draw_level_select(surface: pygame.Surface, app) -> None:
 def draw_ending(surface: pygame.Surface, app) -> None:
     surface.fill(ui.BACKGROUND)
     width, height = surface.get_size()
-    ui.draw_text(surface, "Thanks for Playing", 46, center=(width // 2, int(height * 0.16)))
+    ui.draw_text(surface, "感谢游玩", 46, center=(width // 2, int(height * 0.16)))
     ui.draw_text(
         surface, "全部关卡已通过", 20, center=(width // 2, int(height * 0.25)), color=ui.DIM_TEXT
     )
@@ -85,26 +85,26 @@ def draw_ending(surface: pygame.Surface, app) -> None:
         ui.draw_text(surface, name, 18, center=(width // 2 + 90, y))
 
     rects = ui.ending_rects(surface)
-    ui.draw_button(surface, rects["title"], "Back to Title")
-    ui.draw_button(surface, rects["quit"], "Quit")
+    ui.draw_button(surface, rects["title"], "返回标题")
+    ui.draw_button(surface, rects["quit"], "退出")
 
 
 def draw_pause(surface: pygame.Surface) -> None:
     ui.draw_shade(surface)
     rects = ui.pause_rects(surface)
     ui.draw_panel(surface, rects["panel"])
-    ui.draw_text(surface, "Paused", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
-    ui.draw_button(surface, rects["resume"], "Back to Game")
-    ui.draw_button(surface, rects["restart"], "Restart Level")
-    ui.draw_button(surface, rects["settings"], "Settings")
-    ui.draw_button(surface, rects["title"], "Quit to Title")
+    ui.draw_text(surface, "已暂停", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
+    ui.draw_button(surface, rects["resume"], "继续游戏")
+    ui.draw_button(surface, rects["restart"], "重新开始")
+    ui.draw_button(surface, rects["settings"], "设置")
+    ui.draw_button(surface, rects["title"], "返回标题")
 
 
 def draw_settings(surface: pygame.Surface) -> None:
     ui.draw_shade(surface)
     rects = ui.settings_rects(surface)
     ui.draw_panel(surface, rects["panel"])
-    ui.draw_text(surface, "Settings", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
+    ui.draw_text(surface, "设置", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
     ui.draw_text(
         surface,
         "（暂无设置项）",
@@ -112,4 +112,4 @@ def draw_settings(surface: pygame.Surface) -> None:
         center=(rects["panel"].centerx, rects["panel"].top + 108),
         color=ui.DIM_TEXT,
     )
-    ui.draw_button(surface, rects["back"], "Back")
+    ui.draw_button(surface, rects["back"], "返回")
