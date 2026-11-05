@@ -15,6 +15,9 @@
   --hidden-import   编辑器里 tkinter 是函数内 import，显式声明一份
   --exclude-module  游戏用不到 tkinter，明确排除，包更小
   --clean           每次清掉缓存重新分析，避免残留的旧分析结果
+  --windowed        GUI 子系统，双击 exe 不弹 cmd 黑窗；代价是 stdout/stderr
+                    没有去处，程序崩了看不到 traceback。要排查就把 TARGETS 里
+                    对应条目的 windowed 改成 False，重打一次拿控制台版本
 
 构建前先跑一次 uv sync，保证 .venv 和 pyproject.toml / uv.lock 一致；
 用 uv run 启动时这步其实已经做过了，直接 python build.py 时它才是必要的。
@@ -36,6 +39,7 @@ TARGETS = [
         "paths": [ROOT / "game"],
         "hidden_imports": [],
         "excluded_modules": ["tkinter"],
+        "windowed": True,   # 不给控制台：双击不弹黑窗
     },
     {
         "name": "level-editor",
@@ -43,6 +47,7 @@ TARGETS = [
         "paths": [ROOT / "level-editor"],
         "hidden_imports": ["tkinter", "tkinter.filedialog"],
         "excluded_modules": [],
+        "windowed": True,
     },
 ]
 
@@ -59,6 +64,8 @@ def sync_environment() -> None:
 
 def build(target: dict) -> None:
     name = target["name"]
+    # windowed 走 GUI 子系统，双击运行时不会先弹一个 cmd 控制台窗口
+    subsystem_flag = "--windowed" if target["windowed"] else "--console"
     # 用当前解释器跑 -m PyInstaller，不依赖 pyinstaller 是否在 PATH 上，
     # 也保证分析和打包用的是项目 .venv 里那一份依赖（pygame-ce 在里面）。
     command = [
@@ -68,7 +75,7 @@ def build(target: dict) -> None:
         "--noconfirm",
         "--clean",
         "--onefile",
-        "--console",
+        subsystem_flag,
         "--name",
         name,
         "--distpath",
