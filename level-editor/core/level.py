@@ -6,6 +6,7 @@ import json
 from core.constants import (
     COLS,
     JUMP_HEIGHT_DEFAULT,
+    JUMP_HEIGHT_MIN,
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
     LEVEL_WIDTH_MAX,
@@ -90,7 +91,12 @@ class Level:
         level.name = str(definition.get("name", ""))
         level.width = clamp_int(definition.get("width"), LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
         level.height = clamp_int(definition.get("height"), LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
-        level.jump_height = int(definition.get("jump_height", JUMP_HEIGHT_DEFAULT))
+        level.jump_height = clamp_int(
+            definition.get("jump_height"),
+            JUMP_HEIGHT_MIN,
+            max(JUMP_HEIGHT_MIN, level.height - 1),   # 跳高不超过关卡高度 - 1
+            JUMP_HEIGHT_DEFAULT,
+        )
         level.background = str(definition.get("background", "") or "")
         level.player = copy.deepcopy(definition.get("player"))
         level.destination = copy.deepcopy(definition.get("destination"))

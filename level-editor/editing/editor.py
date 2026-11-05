@@ -11,7 +11,6 @@ from core.constants import (
     FOOTER,
     HEADER,
     JUMP_HEIGHT_DEFAULT,
-    JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
     KIND_BLOCK,
     KIND_BUTTON,
@@ -77,6 +76,7 @@ class Editor:
         self.pan_y = 0.0
         self.hover: tuple | None = None
         self.hovered = None
+        self.hovered_handle = None              # 光标下的贴图角：(entry, corner)
         self.drag_start: tuple | None = None
         self.drag_current: tuple | None = None
         self.pan_drag: tuple | None = None
@@ -141,6 +141,17 @@ class Editor:
                 return entry
         return None
 
+    def texture_handle_at(self, position: tuple, layout: Layout):
+        """光标是不是压在某个贴图的角上：返回 (entry, corner)，后加的先命中。
+
+        贴图一般盖在方块上，角也就落在方块上，所以这个判定要排在格子对象之前。
+        """
+        for entry in reversed(self.level.textures):
+            corner = self.texture_corner_at(layout, entry, position)
+            if corner is not None:
+                return entry, corner
+        return None
+
     def update_hover(self, position: tuple, layout: Layout) -> None:
         """挑出光标下的对象。
 
@@ -149,6 +160,14 @@ class Editor:
         """
         self.hover = layout.cell_at(position)
         self.hovered = None
+        self.hovered_handle = None
+        in_work_area = (
+            HEADER <= position[1] < layout.window[1] - FOOTER
+            and 0 <= position[0] < layout.window[0]
+        )
+        if in_work_area:
+            # 角把手优先：不然盖在方块上的贴图永远抓不到
+            self.hovered_handle = self.texture_handle_at(position, layout)
         inside_canvas = (
             layout.left <= position[0] < layout.left + layout.width
             and layout.top <= position[1] < layout.top + layout.height
@@ -159,13 +178,7 @@ class Editor:
                 self.hovered = (KIND_NOZZLE, nozzle)
             elif self.hover is not None:
                 self.hovered = self.object_at(self.hover)
-        if self.hovered is not None:
-            return
-        in_work_area = (
-            HEADER <= position[1] < layout.window[1] - FOOTER
-            and 0 <= position[0] < layout.window[0]
-        )
-        if not in_work_area:
+        if self.hovered is not None or not in_work_area:
             return
         # 贴图是背景皮，排在最后选：格子里的对象优先
         texture = self.texture_at(layout.world_point(position))
@@ -453,14 +466,20 @@ class Editor:
         return None
 
     def begin_texture_grab(self, position: tuple, layout: Layout) -> bool:
-        """左键落在贴图上就准备拖：四角是缩放，其余区域是移动。"""
-        if self.hovered is None or self.hovered[0] != KIND_TEXTURE:
+        """左键按下：先看是不是压在某张贴图的角上（缩放），再看是不是在贴图上（移动）。"""
+        hit = self.hovered_handle
+        if hit is None:
+            hit = self.texture_handle_at(position, layout)
+        if hit is not None:
+            entry, corner = hit
+        elif self.hovered is not None and self.hovered[0] == KIND_TEXTURE:
+            entry, corner = self.hovered[1], None
+        else:
             return False
-        entry = self.hovered[1]
         self.push_undo()                   # 先记下拖动前的状态，没动过就弹掉
         self.texture_grab = {
             "entry": entry,
-            "corner": self.texture_corner_at(layout, entry, position),
+            "corner": corner,
             "start": layout.world_point(position),
             "pos": list(entry["pos"]),
             "size": list(entry.get("size", [1.0, 1.0])),
@@ -502,16 +521,23 @@ class Editor:
         ]
 
     def end_texture_grab(self) -> bool:
-        """松开鼠标：拖过就算一步编辑；没动过返回 False，让调用方去开详情面板。"""
+        """松开鼠标：拖过就算一步编辑；只是点了一下就选中那张贴图。"""
         grab = self.texture_grab
         self.texture_grab = None
         if grab is None:
             return False
+        entry = grab["entry"]
         if not grab["moved"]:
             if self.undo_stack:
-                self.undo_stack.pop()      # 只是点了一下，把刚压进去的撤销弹掉
-            return False
-        entry = grab["entry"]
+                self.undo_stack.pop()      # 没动过，把刚压进去的撤销弹掉
+            # 点角也是点这张贴图，别去选底下的方块
+            self.dialog = {"kind": KIND_TEXTURE, "entry": entry}
+            self.dialog_field = 0
+            self.picking_offset = False
+            self.name_focused = False
+            self.number_buffer = None
+            self.status = f"已选中{KIND_TITLES[KIND_TEXTURE]}"
+            return True
         self.status = (
             f"贴图 ({entry['pos'][0]}, {entry['pos'][1]}) "
             f"{entry['size'][0]}×{entry['size'][1]}"
@@ -821,7 +847,10 @@ class Editor:
                 self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS
             )
             self.level.jump_height = clamp_int(
-                self.settings["jump_height"], JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
+                self.settings["jump_height"],
+                JUMP_HEIGHT_MIN,
+                self._jump_height_limit(self.level.height),
+                JUMP_HEIGHT_DEFAULT,
             )
             self.level.background = self.settings["background"]
             self.dirty = True
@@ -868,12 +897,18 @@ class Editor:
         elif field == 2:
             self._step_size("height", delta, LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
         elif field == 3:
-            current = clamp_int(
-                self.settings["jump_height"], JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
+            # 跳高上限跟着设置里的高度走：不能高过关卡高度 - 1
+            height = clamp_int(
+                self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, self.level.height
             )
-            self.settings["jump_height"] = str(
-                max(JUMP_HEIGHT_MIN, min(JUMP_HEIGHT_MAX, current + delta))
-            )
+            limit = self._jump_height_limit(height)
+            current = clamp_int(self.settings["jump_height"], JUMP_HEIGHT_MIN, limit, JUMP_HEIGHT_DEFAULT)
+            self.settings["jump_height"] = str(max(JUMP_HEIGHT_MIN, min(limit, current + delta)))
+
+    @staticmethod
+    def _jump_height_limit(level_height: int) -> int:
+        """初始跳高最多跳到关卡高度 - 1，别一蹦就穿过天花板。"""
+        return max(JUMP_HEIGHT_MIN, level_height - 1)
 
     def _step_size(self, key: str, delta: int, low: int, high: int, fallback: int) -> None:
         """宽高在编辑期间是字符串：先夹回合法区间再加，空字符串按默认值算。"""

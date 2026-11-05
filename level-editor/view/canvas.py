@@ -164,15 +164,38 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
             x, y, w, h = normalize_drag(editor.drag_start, editor.drag_current)
             pygame.draw.rect(surface, color, layout.cell_rect(x, y, (w, h)), 2)
     elif not editor.startup:
-        # 选中的对象一直亮着，直到选了别的或者点空地取消
-        selected = editor.dialog
-        if selected is not None:
+        # 选中的对象一直亮着，直到选了别的或者点空地取消；正在拖的贴图也算选中
+        active = None
+        if editor.texture_grab is not None:
+            active = (KIND_TEXTURE, editor.texture_grab["entry"])
+        elif editor.dialog is not None:
+            active = (editor.dialog["kind"], editor.dialog["entry"])
+        active_corner = editor.texture_grab["corner"] if editor.texture_grab else None
+        if active is not None:
             draw_object_outline(
-                surface, layout, selected["kind"], selected["entry"], HIGHLIGHT, 2, handles=True
+                surface,
+                layout,
+                active[0],
+                active[1],
+                HIGHLIGHT,
+                2,
+                handles=active[0] == KIND_TEXTURE,
+                active_corner=active_corner,
+            )
+        # 光标压在某张贴图的角上：把那四角也画出来，并高亮要拉的那个
+        handle = editor.hovered_handle
+        if handle is not None and (active is None or handle[0] is not active[1]):
+            entry, corner = handle
+            draw_object_outline(
+                surface, layout, KIND_TEXTURE, entry, DIM_TEXT, 1, handles=True, active_corner=corner
             )
         # 光标下的另一个对象只是淡描边，避免和选中项抢视线
         hovered = editor.hovered
-        if hovered is not None and (selected is None or hovered[1] is not selected["entry"]):
+        if (
+            hovered is not None
+            and (active is None or hovered[1] is not active[1])
+            and (handle is None or hovered[1] is not handle[0])
+        ):
             draw_object_outline(surface, layout, hovered[0], hovered[1], DIM_TEXT, 1)
 
 
@@ -184,16 +207,23 @@ def draw_object_outline(
     color: tuple,
     width: int = 2,
     handles: bool = False,
+    active_corner: str | None = None,
 ) -> None:
     """给一个对象画描边；贴图可以顺便画出四角的缩放把手。"""
     if kind == KIND_TEXTURE:
         rect = texture_rect(layout, entry)
         pygame.draw.rect(surface, color, rect, width)
         if handles:
-            for point in (rect.bottomleft, rect.bottomright, rect.topleft, rect.topright):
-                pygame.draw.rect(
-                    surface, HANDLE_COLOR, pygame.Rect(point[0] - 4, point[1] - 4, 8, 8)
-                )
+            for name, point in (
+                ("bl", rect.bottomleft),
+                ("br", rect.bottomright),
+                ("tl", rect.topleft),
+                ("tr", rect.topright),
+            ):
+                size = 14 if name == active_corner else 9
+                box = pygame.Rect(0, 0, size, size)
+                box.center = point
+                pygame.draw.rect(surface, HIGHLIGHT if name == active_corner else HANDLE_COLOR, box)
         return
     box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
     pygame.draw.rect(surface, color, layout.entry_rect(box), width)

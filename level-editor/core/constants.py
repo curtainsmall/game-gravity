@@ -49,7 +49,7 @@ BUTTON_BG = (70, 70, 78)
 PREVIEW = (255, 230, 120, 90)
 TEXTURE_COLOR = (150, 150, 170)
 HANDLE_COLOR = (255, 255, 255)
-TEXTURE_HANDLE_PIXELS = 10     # 贴图四角的缩放热区半径（像素）
+TEXTURE_HANDLE_PIXELS = 14     # 贴图四角的缩放热区半径（像素）
 VIEW_MENU_WIDTH = 170          # 视图设置菜单宽度
 
 # ---- 新建菜单里的对象种类 ----
@@ -106,7 +106,7 @@ TOOL_COLORS = {
 NOZZLE_DEFAULT_POWER = 7
 NOZZLE_DEFAULT_RANGE = 5
 JUMP_HEIGHT_DEFAULT = 4
-JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX = 0, 7
+JUMP_HEIGHT_MIN = 0   # 上限不是常数：最多到「关卡高度 - 1」，见 Editor._jump_height_limit
 
 # 关卡设置里的字段数：名称、宽度、高度、初始跳高、背景
 SETTINGS_FIELD_COUNT = 5
