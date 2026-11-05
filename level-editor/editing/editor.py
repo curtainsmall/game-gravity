@@ -389,9 +389,7 @@ class Editor:
         """保存到关卡文件夹：scene.json 放数据，背景与贴图复制进文件夹。"""
         folder = self.path
         if folder is None:
-            folder = ask_level_folder(
-                "选一个空文件夹存进它，或者选上一级、按关卡名新建一个"
-            )
+            folder = ask_level_folder("保存到")
             if not folder:
                 self.status = "保存已取消"
                 return
