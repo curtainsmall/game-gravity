@@ -1,8 +1,8 @@
 {
   "name": "01",
-  "width": 120,
-  "height": 8,
-  "jump_height": 3,
+  "width": 240,
+  "height": 16,
+  "jump_height": 8,
   "blocks": [
     {
       "pos": [2, 0],
@@ -270,6 +270,14 @@
       "pos": [6, 0],
       "power": 7,
       "range": 5
+    }
+  ],
+  "textures": [
+    {
+      "pos": [0.51, 1.51],
+      "size": [80.0, 16.0],
+      "image": "textures/tex1.png",
+      "smooth": false
     }
   ],
   "player": {
