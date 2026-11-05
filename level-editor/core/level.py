@@ -108,11 +108,3 @@ class Level:
         level.nozzles = copy.deepcopy(list(definition.get("nozzles", [])))
         level.textures = copy.deepcopy(list(definition.get("textures", [])))
         return level
-
-
-def player_position(level: Level) -> tuple:
-    """起点坐标；没有起点时返回 None。"""
-    if level.player is None:
-        return None
-    pos = level.player.get("pos", [0, 0])
-    return int(pos[0]), int(pos[1])

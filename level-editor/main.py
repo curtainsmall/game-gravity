@@ -132,17 +132,17 @@ def run() -> None:
                     if event.button == 1:
                         handle_toolbar(editor, event.pos)
             elif event.type == pygame.MOUSEMOTION:
-                if editor.texture_grab is not None:
-                    editor.update_texture_grab(event.pos, layout)
+                editor.snapping = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
+                if editor.object_grab is not None:
+                    editor.update_object_grab(event.pos, layout)
                     continue
-                cell = layout.cell_at(event.pos)
                 editor.update_hover(event.pos, layout)
                 if editor.pan_drag is not None:
                     start_x, start_y, start_pan_x, start_pan_y = editor.pan_drag
                     editor.pan_x = start_pan_x - (event.pos[0] - start_x)
                     editor.pan_y = start_pan_y - (event.pos[1] - start_y)
-                elif editor.drag_start is not None and cell is not None:
-                    editor.drag_current = cell
+                elif editor.drag_start is not None:
+                    editor.drag_to(event.pos, layout)
             elif event.type == pygame.MOUSEWHEEL:
                 if event.y:
                     factor = ZOOM_STEP if event.y > 0 else 1.0 / ZOOM_STEP
@@ -165,10 +165,10 @@ def run() -> None:
                 if event.button == 2:
                     editor.pan_drag = (event.pos[0], event.pos[1], editor.pan_x, editor.pan_y)
                     continue
-                cell = layout.cell_at(event.pos)
+                editor.snapping = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
                 if editor.picking_offset:
-                    if event.button == 1 and cell is not None:
-                        editor.finish_pick_offset(cell)
+                    if event.button == 1:
+                        editor.finish_pick_offset(layout.world_point(event.pos))
                     elif event.button == 3:
                         editor.cancel_pick_offset()
                     continue
@@ -179,18 +179,17 @@ def run() -> None:
                     elif event.pos[1] >= HEADER:
                         editor.open_create_menu(event.pos)
                 elif event.button == 1 and editor.creating:
-                    if cell is not None:
-                        editor.press_canvas(event.pos, layout)
+                    editor.press_canvas(event.pos, layout)
                 elif event.button == 1:
                     editor.update_hover(event.pos, layout)
-                    # 贴图上按下就是拖：移动或缩放；没拖成的话松手时再开面板
-                    if not editor.begin_texture_grab(event.pos, layout):
+                    # 对象上按下就是拖：移动或缩放；没拖成的话松手时再开面板
+                    if not editor.begin_object_grab(event.pos, layout):
                         editor.open_dialog()
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 2:
                     editor.pan_drag = None
-                elif event.button == 1 and editor.texture_grab is not None:
-                    if not editor.end_texture_grab():
+                elif event.button == 1 and editor.object_grab is not None:
+                    if not editor.end_object_grab():
                         editor.open_dialog()
                 elif event.button == 1 and editor.drag_start is not None:
                     editor.finish_drag()

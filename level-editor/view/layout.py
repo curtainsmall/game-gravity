@@ -1,4 +1,11 @@
-"""Layout：屏幕坐标与关卡格子互换，带缩放和平移。"""
+"""Layout：屏幕坐标与关卡世界坐标互换，带缩放和平移。
+
+世界坐标：x 向右、y 向上，单位是格（可以是小数）。关卡可玩区是 y ∈ [0, rows]，
+上面还有天花板那一行、下面是地面那一行，所以一条带子共 rows + 2 行。
+
+所有对象都按浮点自由矩形摆放：画和命中一律走 world_rect / world_point；
+网格只是画出来的参考线，按住 Shift 时才用 snap_point / snap_rect 对齐。
+"""
 
 import pygame
 
@@ -52,34 +59,12 @@ class Layout:
         self.left = MARGIN - self.pan_x
         self.top = HEADER - self.pan_y + max(0.0, (self.usable_height - self.height) / 2.0)
 
-    def cell_at(self, position: tuple) -> tuple | None:
-        x, y = position
-        if not (0 <= x < self.window[0] and HEADER <= y < self.window[1] - FOOTER):
-            return None
-        if not (self.left <= x < self.left + self.width and self.top <= y < self.top + self.height):
-            return None
-        col = int((x - self.left) // self.tile)
-        screen_row = int((y - self.top) // self.tile)
-        level_y = self.rows - screen_row
-        if not (0 <= col < self.cols) or not (0 <= level_y < self.rows):
-            return None
-        return col, level_y
-
-    def level_point(self, position: tuple) -> tuple:
-        """屏幕坐标 → 关卡连续坐标（喷口这类「点」对象用它定位）。"""
-        return (
-            (position[0] - self.left) / self.tile,
-            self.rows + 1 - (position[1] - self.top) / self.tile,
-        )
-
+    # ---- 世界坐标（所有对象都用这个） -------------------------------
     def world_rect(self, x: float, y: float, width: float, height: float) -> pygame.Rect:
-        """自由矩形（左下角 + 宽高，单位格，可小数）→ 屏幕矩形。
-
-        贴图这类不吸格子的对象用它；别套 cell_rect，那里的 (size - 1) 是给整数格留的补偿。
-        """
+        """世界矩形（左下角 + 宽高，单位格，可小数）→ 屏幕矩形。"""
         return pygame.Rect(
             round(self.left + x * self.tile),
-            round(self.top + (self.rows - (y + height)) * self.tile),
+            round(self.top + (self.rows + 1 - (y + height)) * self.tile),
             max(1, round(width * self.tile)),
             max(1, round(height * self.tile)),
         )
@@ -88,18 +73,20 @@ class Layout:
         """屏幕坐标 → 世界连续坐标（左下角为原点，y 向上，单位格）。"""
         return (
             (position[0] - self.left) / self.tile,
-            self.rows - (position[1] - self.top) / self.tile,
-        )
-
-    def cell_rect(self, x: float, y: float, size: tuple = (1, 1)) -> pygame.Rect:
-        left = self.left + (x - 0.5 if size[0] < 1 else x) * self.tile
-        top = self.top + (self.rows - y - (size[1] - 1)) * self.tile
-        return pygame.Rect(
-            round(left),
-            round(top),
-            max(1, round(size[0] * self.tile)),
-            max(1, round(size[1] * self.tile)),
+            self.rows + 1 - (position[1] - self.top) / self.tile,
         )
 
     def entry_rect(self, entry: dict) -> pygame.Rect:
-        return self.cell_rect(entry["pos"][0], entry["pos"][1], tuple(entry.get("size", [1, 1])))
+        size = entry.get("size", [1.0, 1.0])
+        return self.world_rect(entry["pos"][0], entry["pos"][1], size[0], size[1])
+
+    # ---- 网格吸附 ---------------------------------------------------
+    def snap_rect(self, x: float, y: float, width: float, height: float) -> tuple:
+        """把一个浮点矩形对到整格：左下与右上各自取整。"""
+        left, right = round(x), round(x + width)
+        bottom, top = round(y), round(y + height)
+        return float(left), float(bottom), float(max(1, right - left)), float(max(1, top - bottom))
+
+    def snap_point(self, x: float, y: float) -> tuple:
+        """把一个点对到整格线上。"""
+        return float(round(x)), float(round(y))

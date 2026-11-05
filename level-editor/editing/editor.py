@@ -9,6 +9,7 @@ from core.constants import (
     BACKGROUND_MAX_LENGTH,
     COLS,
     FOOTER,
+    HANDLE_PIXELS,
     HEADER,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MIN,
@@ -29,12 +30,11 @@ from core.constants import (
     LEVEL_WIDTH_MAX,
     LEVEL_WIDTH_MIN,
     MARGIN,
+    MIN_SIZE,
     NAME_MAX_LENGTH,
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_RANGE,
     ROWS,
-    TEXTURE_HANDLE_PIXELS,
-    TEXTURE_MIN_SIZE,
     TOOL_BLOCK,
     TOOL_BUTTON,
     TOOL_DEST,
@@ -50,15 +50,16 @@ from core.helpers import (
     display_path,
     entry_contains,
     level_base_dir,
-    normalize_drag,
+    normalize_rect,
     nozzle_box,
     number_text,
     relative_level_path,
     resolve_level_path,
+    round_rect,
 )
 from core.level import Level, dump_level
 from editing.files import ask_image_path, ask_level_folder
-from view.texture import image_size, texture_rect
+from view.texture import image_size
 
 if TYPE_CHECKING:
     from view.layout import Layout
@@ -74,9 +75,8 @@ class Editor:
         self.zoom: float | None = None
         self.pan_x = 0.0
         self.pan_y = 0.0
-        self.hover: tuple | None = None
         self.hovered = None
-        self.hovered_handle = None              # 光标下的贴图角：(entry, corner)
+        self.hovered_handle = None              # 光标下的角把手：(kind, entry, corner)
         self.drag_start: tuple | None = None
         self.drag_current: tuple | None = None
         self.pan_drag: tuple | None = None
@@ -85,7 +85,8 @@ class Editor:
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer: str | None = None   # 正在键盘输入的数字字段，None 表示没在输入
-        self.texture_grab: dict | None = None   # 正在用鼠标拖贴图：移动或缩放
+        self.object_grab: dict | None = None    # 正在用鼠标拖对象：移动或缩放
+        self.snapping = False                   # 按住 Shift：吸附到整格
         self.view_menu_open = False
         # 视图设置：只影响编辑器自己的显示，从不写进关卡数据、不落盘
         self.view_settings: dict = {"background": True}
@@ -99,32 +100,45 @@ class Editor:
         self.status = "新建关卡或打开一个已有关卡"
 
     # ---- 查询 -------------------------------------------------------
-    def object_at(self, cell: tuple):
-        for entry in self.level.blocks:
-            if entry_contains(entry, cell):
-                return KIND_BLOCK, entry
-        for entry in self.level.planks:
-            if entry_contains(entry, cell):
-                return KIND_PLANK, entry
-        for entry in self.level.movable_blocks:
-            if entry_contains(entry, cell):
-                return KIND_MOVABLE, entry
-        for entry in self.level.buttons:
-            if entry_contains(entry, cell):
-                return KIND_BUTTON, entry
-        for entry in self.level.items:
-            if entry_contains(entry, cell):
-                return KIND_ITEM, entry
-        if self.level.player and entry_contains(self.level.player, cell):
+    def all_entries(self) -> list:
+        """所有有矩形的对象，按绘制顺序：(kind, entry)。"""
+        pairs = []
+        for entries, kind in (
+            (self.level.blocks, KIND_BLOCK),
+            (self.level.planks, KIND_PLANK),
+            (self.level.movable_blocks, KIND_MOVABLE),
+            (self.level.buttons, KIND_BUTTON),
+            (self.level.items, KIND_ITEM),
+        ):
+            pairs += [(kind, entry) for entry in entries]
+        if self.level.player is not None:
+            pairs.append((KIND_PLAYER, self.level.player))
+        if self.level.destination is not None:
+            pairs.append((KIND_DESTINATION, self.level.destination))
+        return pairs
+
+    def object_at(self, point: tuple):
+        """世界坐标点下的对象：小的机关排在大的方块之前，后加的先命中。"""
+        for entries, kind in (
+            (self.level.buttons, KIND_BUTTON),
+            (self.level.items, KIND_ITEM),
+            (self.level.movable_blocks, KIND_MOVABLE),
+            (self.level.blocks, KIND_BLOCK),
+            (self.level.planks, KIND_PLANK),
+        ):
+            for entry in reversed(entries):
+                if entry_contains(entry, point):
+                    return kind, entry
+        if self.level.player is not None and entry_contains(self.level.player, point):
             return KIND_PLAYER, self.level.player
-        if self.level.destination and entry_contains(self.level.destination, cell):
+        if self.level.destination is not None and entry_contains(self.level.destination, point):
             return KIND_DESTINATION, self.level.destination
         return None
 
     def nozzle_at(self, point: tuple):
-        """喷口是一个点：命中按它画出来的那个 1×1 三角判定，不按格子。"""
+        """喷口是一个点：命中按它画出来的那个 1×1 三角判定（世界坐标）。"""
         x, y = point
-        for entry in self.level.nozzles:
+        for entry in reversed(self.level.nozzles):
             box = nozzle_box(entry)
             left, bottom = box["pos"]
             if left <= x <= left + 1 and bottom <= y <= bottom + 1:
@@ -133,82 +147,95 @@ class Editor:
 
     def texture_at(self, point: tuple):
         """贴图是自由矩形：按世界坐标判定。后加的盖住先加的，所以倒序找。"""
-        x, y = point
         for entry in reversed(self.level.textures):
-            left, bottom = entry["pos"]
-            width, height = entry.get("size", [1.0, 1.0])
-            if left <= x <= left + width and bottom <= y <= bottom + height:
+            if entry_contains(entry, point):
                 return entry
         return None
 
-    def texture_handle_at(self, position: tuple, layout: Layout):
-        """光标是不是压在某个贴图的角上：返回 (entry, corner)，后加的先命中。
+    def corner_at(self, layout: Layout, entry: dict, position: tuple):
+        """光标离对象哪个角够近：返回角名，都不够近返回 None。"""
+        rect = layout.entry_rect(entry)
+        for name, point in (
+            ("bl", rect.bottomleft),
+            ("br", rect.bottomright),
+            ("tl", rect.topleft),
+            ("tr", rect.topright),
+        ):
+            if (
+                abs(position[0] - point[0]) <= HANDLE_PIXELS
+                and abs(position[1] - point[1]) <= HANDLE_PIXELS
+            ):
+                return name
+        return None
 
-        贴图一般盖在方块上，角也就落在方块上，所以这个判定要排在格子对象之前。
+    def object_handle_at(self, position: tuple, layout: Layout):
+        """光标压在哪个角把手上：选中项优先，然后贴图，然后其它对象。
+
+        贴图排在其它对象之前，是因为贴图通常盖在方块上，角也落在方块上，
+        不这样排就永远抓不到贴图的角。
         """
-        for entry in reversed(self.level.textures):
-            corner = self.texture_corner_at(layout, entry, position)
+        candidates = []
+        if self.dialog is not None:
+            candidates.append((self.dialog["kind"], self.dialog["entry"]))
+        candidates += [(KIND_TEXTURE, entry) for entry in reversed(self.level.textures)]
+        candidates += [(kind, entry) for kind, entry in reversed(self.all_entries())]
+        for kind, entry in candidates:
+            corner = self.corner_at(layout, entry, position)
             if corner is not None:
-                return entry, corner
+                return kind, entry, corner
         return None
 
     def update_hover(self, position: tuple, layout: Layout) -> None:
         """挑出光标下的对象。
 
-        格子里的对象和喷口只在画布矩形内选；贴图是自由矩形，可能飘到关卡外面，
-        所以整个可点区域（信息栏与状态栏之间）都参与贴图命中。
+        所有对象都是浮点自由矩形，按世界坐标命中；贴图是背景皮，排在最后选。
         """
-        self.hover = layout.cell_at(position)
         self.hovered = None
         self.hovered_handle = None
         in_work_area = (
             HEADER <= position[1] < layout.window[1] - FOOTER
             and 0 <= position[0] < layout.window[0]
         )
-        if in_work_area:
-            # 角把手优先：不然盖在方块上的贴图永远抓不到
-            self.hovered_handle = self.texture_handle_at(position, layout)
-        inside_canvas = (
-            layout.left <= position[0] < layout.left + layout.width
-            and layout.top <= position[1] < layout.top + layout.height
-        )
-        if inside_canvas:
-            nozzle = self.nozzle_at(layout.level_point(position))
-            if nozzle is not None:
-                self.hovered = (KIND_NOZZLE, nozzle)
-            elif self.hover is not None:
-                self.hovered = self.object_at(self.hover)
-        if self.hovered is not None or not in_work_area:
+        if not in_work_area:
             return
-        # 贴图是背景皮，排在最后选：格子里的对象优先
-        texture = self.texture_at(layout.world_point(position))
+        point = layout.world_point(position)
+        # 角把手优先：不然压在方块上的贴图（或选中的方块）永远抓不到
+        self.hovered_handle = self.object_handle_at(position, layout)
+        nozzle = self.nozzle_at(point)
+        if nozzle is not None:
+            self.hovered = (KIND_NOZZLE, nozzle)
+            return
+        hit = self.object_at(point)
+        if hit is not None:
+            self.hovered = hit
+            return
+        texture = self.texture_at(point)
         if texture is not None:
             self.hovered = (KIND_TEXTURE, texture)
 
     # ---- 创建 / 删除 -----------------------------------------------
-    def begin_drag(self, cell: tuple) -> None:
-        if self.tool != TOOL_NOZZLE and self.object_at(cell) is not None:
-            self.status = "这一格已有对象；换个空位画"
-            return
-        self.drag_start = cell
-        self.drag_current = cell
+    def begin_drag(self, point: tuple) -> None:
+        """从世界坐标点开始拖一个新矩形；不吸格子，只有按住 Shift 才对齐。"""
+        self.drag_start = point
+        self.drag_current = point
 
     def press_canvas(self, position: tuple, layout: Layout) -> None:
-        """新建状态里的左键按下：光标下已有对象就只提示、不新建。
+        """新建状态里的左键按下：矩形工具开始拖，单点工具就地放下。"""
+        point = layout.world_point(position)
+        if self.snapping:
+            point = layout.snap_point(*point)
+        if TOOL_SPECS[self.tool][1] == "rect":
+            self.begin_drag(point)
+        else:
+            self.place_single(point)
 
-        喷口是点、不占格，所以喷口工具允许压在别的对象上放；贴图是背景皮，
-        本来就该压在方块上，所以也不算"占位"。其余工具遇到已有对象都不新建，
-        免得一次单击把该改的对象盖掉。
-        """
-        self.update_hover(position, layout)
-        if self.hovered is not None and self.hovered[0] != KIND_TEXTURE:
-            kind = self.hovered[0]
-            if self.tool != TOOL_NOZZLE or kind == KIND_NOZZLE:
-                self.status = f"这里是{KIND_TITLES.get(kind, '对象')}；换个空位画，右键退出新建"
-                return
-        cell = layout.cell_at(position)
-        if cell is not None:
-            self.begin_drag(cell)
+    def drag_to(self, position: tuple, layout: Layout) -> None:
+        if self.drag_start is None:
+            return
+        point = layout.world_point(position)
+        if self.snapping:
+            point = layout.snap_point(*point)
+        self.drag_current = point
 
     def finish_drag(self) -> None:
         if self.drag_start is None:
@@ -217,54 +244,46 @@ class Editor:
         current = self.drag_current or start
         self.drag_start = None
         self.drag_current = None
-        kind = TOOL_SPECS[self.tool][1]
-        if kind == "rect":
-            x, y, w, h = normalize_drag(start, current)
-            self.push_undo()
-            if self.tool == TOOL_BLOCK:
-                self.level.blocks.append({"pos": [x, y], "size": [w, h]})
-            elif self.tool == TOOL_PLANK:
-                self.level.planks.append({"pos": [x, y], "size": [w, h]})
-            else:
-                self.level.movable_blocks.append(
-                    {
-                        "name": "",
-                        "pos": [x, y],
-                        "size": [w, h],
-                        "offset": [0, 0],
-                        "sources": [],
-                    }
-                )
-            self.dirty = True
-            self.status = f"新增{TOOL_SPECS[self.tool][0]} ({x},{y}) {w}×{h}"
+        x, y, w, h = round_rect(normalize_rect(start, current, MIN_SIZE))
+        self.push_undo()
+        if self.tool == TOOL_BLOCK:
+            self.level.blocks.append({"pos": [x, y], "size": [w, h]})
+        elif self.tool == TOOL_PLANK:
+            self.level.planks.append({"pos": [x, y], "size": [w, h]})
         else:
-            self.place_single(start)
+            self.level.movable_blocks.append(
+                {
+                    "name": "",
+                    "pos": [x, y],
+                    "size": [w, h],
+                    "offset": [0, 0],
+                    "sources": [],
+                }
+            )
+        self.dirty = True
+        self.status = f"新增{TOOL_SPECS[self.tool][0]} ({x}, {y}) {w}×{h}"
 
-    def place_single(self, cell: tuple) -> None:
-        if self.tool != TOOL_NOZZLE and self.object_at(cell) is not None:
-            return
-        col, row = cell
+    def place_single(self, point: tuple) -> None:
+        """按钮/道具/喷口/起点/终点：就地放下一个 1×1 的对象。"""
+        x, y = point
+        size = [1.0, 1.0]
         level = self.level
-        if self.tool == TOOL_NOZZLE:
-            point = [col + 0.5, row]
-            if any(entry["pos"] == point for entry in level.nozzles):
-                self.status = "这一格已经有喷口"
-                return
         self.push_undo()
         self.dirty = True
         # 新对象的数值/布尔/字符串一律给中性默认值，具体参数再在面板里调
         if self.tool == TOOL_BUTTON:
-            level.buttons.append({"name": "", "pos": [col, row], "face": ""})
+            level.buttons.append({"name": "", "pos": [x, y], "size": list(size), "face": ""})
         elif self.tool == TOOL_ITEM:
-            level.items.append({"name": "", "pos": [col, row], "heavy": False})
+            level.items.append({"name": "", "pos": [x, y], "size": list(size), "heavy": False})
         elif self.tool == TOOL_NOZZLE:
-            level.nozzles.append({"pos": [col + 0.5, row], "power": 0, "range": 0})
+            level.nozzles.append({"pos": [x, y], "power": 0, "range": 0})
         elif self.tool == TOOL_PLAYER:
             # 起点只有一份：再放一次就是把它挪过去
-            level.player = {"pos": [col, row]}
+            level.player = {"pos": [x, y], "size": list(size)}
         elif self.tool == TOOL_DEST:
             # 终点也只有一份
-            level.destination = {"pos": [col, row]}
+            level.destination = {"pos": [x, y], "size": list(size)}
+        self.status = f"新增{TOOL_SPECS[self.tool][0]} ({x}, {y})"
 
     def delete_entry(self, kind: str, entry: dict) -> None:
         self.push_undo()
@@ -431,8 +450,8 @@ class Editor:
             self.status = f"图片读不出来：{os.path.basename(path)}"
             return
         tile = max(1.0, layout.game_tile)
-        width = max(TEXTURE_MIN_SIZE, round(pixels[0] / tile, 2))
-        height = max(TEXTURE_MIN_SIZE, round(pixels[1] / tile, 2))
+        width = max(MIN_SIZE, round(pixels[0] / tile, 2))
+        height = max(MIN_SIZE, round(pixels[1] / tile, 2))
         at = layout.world_point(self.menu_origin)
         image = relative_level_path(path, self.path)
         self.push_undo()
@@ -448,36 +467,22 @@ class Editor:
         )
         self.status = f"已导入贴图 {os.path.basename(path)}（{width}×{height} 格）"
 
-    # ---- 贴图的鼠标拖动 / 缩放 -------------------------------------
-    def texture_corner_at(self, layout: Layout, entry: dict, position: tuple) -> str | None:
-        """位置离哪个角够近：够近就缩放那个角，否则整体移动。"""
-        rect = texture_rect(layout, entry)
-        for name, point in (
-            ("bl", rect.bottomleft),
-            ("br", rect.bottomright),
-            ("tl", rect.topleft),
-            ("tr", rect.topright),
-        ):
-            if (
-                abs(position[0] - point[0]) <= TEXTURE_HANDLE_PIXELS
-                and abs(position[1] - point[1]) <= TEXTURE_HANDLE_PIXELS
-            ):
-                return name
-        return None
-
-    def begin_texture_grab(self, position: tuple, layout: Layout) -> bool:
-        """左键按下：先看是不是压在某张贴图的角上（缩放），再看是不是在贴图上（移动）。"""
+    # ---- 鼠标拖动 / 缩放（所有对象） --------------------------------
+    def begin_object_grab(self, position: tuple, layout: Layout) -> bool:
+        """左键按下：先看是不是压在某个角把手上（缩放），再看是不是落在对象里（移动）。"""
         hit = self.hovered_handle
         if hit is None:
-            hit = self.texture_handle_at(position, layout)
+            hit = self.object_handle_at(position, layout)
         if hit is not None:
-            entry, corner = hit
-        elif self.hovered is not None and self.hovered[0] == KIND_TEXTURE:
-            entry, corner = self.hovered[1], None
+            kind, entry, corner = hit
+        elif self.hovered is not None:
+            kind, entry = self.hovered
+            corner = None                  # 喷口没有矩形，只能整体挪
         else:
             return False
         self.push_undo()                   # 先记下拖动前的状态，没动过就弹掉
-        self.texture_grab = {
+        self.object_grab = {
+            "kind": kind,
             "entry": entry,
             "corner": corner,
             "start": layout.world_point(position),
@@ -487,8 +492,8 @@ class Editor:
         }
         return True
 
-    def update_texture_grab(self, position: tuple, layout: Layout) -> None:
-        grab = self.texture_grab
+    def update_object_grab(self, position: tuple, layout: Layout) -> None:
+        grab = self.object_grab
         if grab is None:
             return
         point = layout.world_point(position)
@@ -502,8 +507,10 @@ class Editor:
         x, y = grab["pos"]
         width, height = grab["size"]
         corner = grab["corner"]
-        if corner is None:
+        if corner is None or "size" not in entry:
             entry["pos"] = [round(x + dx, 2), round(y + dy, 2)]
+            if self.snapping:
+                entry["pos"] = [round(value) for value in entry["pos"]]
             return
         left, right, bottom, top = x, x + width, y, y + height
         if "l" in corner:
@@ -514,35 +521,41 @@ class Editor:
             bottom = point[1]
         if "t" in corner:
             top = point[1]
+        if self.snapping:
+            left, right, bottom, top = round(left), round(right), round(bottom), round(top)
         entry["pos"] = [round(min(left, right), 2), round(min(bottom, top), 2)]
         entry["size"] = [
-            max(TEXTURE_MIN_SIZE, round(abs(right - left), 2)),
-            max(TEXTURE_MIN_SIZE, round(abs(top - bottom), 2)),
+            max(MIN_SIZE, round(abs(right - left), 2)),
+            max(MIN_SIZE, round(abs(top - bottom), 2)),
         ]
 
-    def end_texture_grab(self) -> bool:
-        """松开鼠标：拖过就算一步编辑；只是点了一下就选中那张贴图。"""
-        grab = self.texture_grab
-        self.texture_grab = None
+    def end_object_grab(self) -> bool:
+        """松开鼠标：拖过就算一步编辑；只是点了一下就选中那个对象。"""
+        grab = self.object_grab
+        self.object_grab = None
         if grab is None:
             return False
+        kind = grab["kind"]
         entry = grab["entry"]
         if not grab["moved"]:
             if self.undo_stack:
                 self.undo_stack.pop()      # 没动过，把刚压进去的撤销弹掉
-            # 点角也是点这张贴图，别去选底下的方块
-            self.dialog = {"kind": KIND_TEXTURE, "entry": entry}
-            self.dialog_field = 0
-            self.picking_offset = False
-            self.name_focused = False
-            self.number_buffer = None
-            self.status = f"已选中{KIND_TITLES[KIND_TEXTURE]}"
+            self.select(kind, entry)       # 点角也是点这个对象，别去选下面的
             return True
-        self.status = (
-            f"贴图 ({entry['pos'][0]}, {entry['pos'][1]}) "
-            f"{entry['size'][0]}×{entry['size'][1]}"
-        )
+        size = entry.get("size")
+        text = f"{KIND_TITLES.get(kind, '对象')} ({entry['pos'][0]}, {entry['pos'][1]})"
+        if size:
+            text += f" {size[0]}×{size[1]}"
+        self.status = text
         return True
+
+    def select(self, kind: str, entry: dict) -> None:
+        self.dialog = {"kind": kind, "entry": entry}
+        self.dialog_field = 0
+        self.picking_offset = False
+        self.name_focused = False
+        self.number_buffer = None
+        self.status = f"已选中{KIND_TITLES.get(kind, '对象')}"
 
     def stop_creating(self) -> None:
         self.creating = False
@@ -622,13 +635,14 @@ class Editor:
         self.picking_offset = False
         self.status = "已取消拾取偏移"
 
-    def finish_pick_offset(self, cell: tuple) -> None:
+    def finish_pick_offset(self, point: tuple) -> None:
         if not self.picking_offset or self.dialog is None:
             return
         entry = self.dialog["entry"]
         pos = entry["pos"]
         self.push_undo()
-        entry["offset"] = [int(cell[0]) - int(pos[0]), int(cell[1]) - int(pos[1])]
+        # 偏移按整格记，取点到对象左下角的差
+        entry["offset"] = [int(round(point[0] - pos[0])), int(round(point[1] - pos[1]))]
         self.picking_offset = False
         self.dirty = True
         self.status = f"偏移设为 {entry['offset'][0]}, {entry['offset'][1]}"
@@ -640,8 +654,8 @@ class Editor:
         entry = self.dialog["entry"]
         pos = entry["pos"]
         rows = [("位置 x", number_text(pos[0])), ("位置 y", number_text(pos[1]))]
-        if kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE, KIND_TEXTURE):
-            size = entry.get("size", [1, 1])
+        if kind != KIND_NOZZLE:
+            size = entry.get("size", [1.0, 1.0])
             rows += [("宽度", number_text(size[0])), ("高度", number_text(size[1]))]
         if kind == KIND_MOVABLE:
             offset = entry.get("offset", [0, -3])
@@ -727,8 +741,8 @@ class Editor:
             return entry["pos"][0]
         if field == 1:
             return entry["pos"][1]
-        if kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE, KIND_TEXTURE) and field in (2, 3):
-            return entry.get("size", [1, 1])[field - 2]
+        if kind != KIND_NOZZLE and field in (2, 3):
+            return entry.get("size", [1.0, 1.0])[field - 2]
         if kind == KIND_MOVABLE and field in (4, 5):
             return entry.get("offset", [0, -3])[field - 4]
         if kind == KIND_NOZZLE and field == 2:
@@ -738,34 +752,17 @@ class Editor:
         return None
 
     def set_dialog_number(self, field: int, value: float) -> None:
-        """把一个数字字段设成 value；越界一律夹到该字段自己的范围里。"""
+        """把一个数字字段设成 value：位置和尺寸都是浮点，不再夹到网格。"""
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
         pos = entry["pos"]
-        if kind == KIND_TEXTURE:
-            # 贴图不吸格子：位置和尺寸都保留两位小数
-            if field in (0, 1):
-                pos[field] = round(value, 2)
-            elif field in (2, 3):
-                size = list(entry.get("size", [1.0, 1.0]))
-                size[field - 2] = max(TEXTURE_MIN_SIZE, round(value, 2))
-                entry["size"] = size
-            return
         if field == 0:
-            if kind == KIND_NOZZLE:
-                # 喷口是点：底边中点始终落在半格上
-                pos[0] = round(max(0.5, min(self.level.width - 0.5, value)), 1)
-            else:
-                pos[0] = int(max(0, min(self.level.width - 1, round(value))))
+            pos[0] = round(value, 2)
         elif field == 1:
-            pos[1] = int(max(0, min(self.level.height - 1, round(value))))
-        elif kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE) and field in (2, 3):
-            axis = field - 2
-            size = list(entry.get("size", [1, 1]))
-            limit = (
-                self.level.width - int(pos[0]) if axis == 0 else self.level.height - int(pos[1])
-            )
-            size[axis] = int(max(1, min(limit, round(value))))
+            pos[1] = round(value, 2)
+        elif kind != KIND_NOZZLE and field in (2, 3):
+            size = list(entry.get("size", [1.0, 1.0]))
+            size[field - 2] = max(MIN_SIZE, round(value, 2))
             entry["size"] = size
         elif kind == KIND_MOVABLE and field in (4, 5):
             index = field - 4

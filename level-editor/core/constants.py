@@ -49,7 +49,6 @@ BUTTON_BG = (70, 70, 78)
 PREVIEW = (255, 230, 120, 90)
 TEXTURE_COLOR = (150, 150, 170)
 HANDLE_COLOR = (255, 255, 255)
-TEXTURE_HANDLE_PIXELS = 14     # 贴图四角的缩放热区半径（像素）
 VIEW_MENU_WIDTH = 170          # 视图设置菜单宽度
 
 # ---- 新建菜单里的对象种类 ----
@@ -122,7 +121,8 @@ KIND_NOZZLE = "nozzle"
 KIND_PLAYER = "player"
 KIND_DESTINATION = "destination"
 KIND_TEXTURE = "texture"
-TEXTURE_MIN_SIZE = 0.05   # 贴图最小宽高（格），防止拖成一条看不见的线
+MIN_SIZE = 0.05   # 对象最小宽高（格），防止拖成一条看不见的线
+HANDLE_PIXELS = 14  # 对象四角的缩放热区半径（像素）
 
 # 关卡数据里带 name 字段、会被别的对象引用的种类
 KIND_HAS_NAME = (KIND_MOVABLE, KIND_BUTTON, KIND_ITEM)

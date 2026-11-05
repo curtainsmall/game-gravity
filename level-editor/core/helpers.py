@@ -10,26 +10,32 @@ from core.constants import (
 )
 
 
-def entry_contains(entry: dict, cell: tuple) -> bool:
+def entry_contains(entry: dict, point: tuple) -> bool:
+    """世界坐标点是否落在对象矩形里（对象都是浮点自由矩形）。"""
     x, y = entry["pos"]
-    w, h = entry.get("size", [1, 1])
-    return x <= cell[0] < x + w and y <= cell[1] < y + h
+    w, h = entry.get("size", [1.0, 1.0])
+    return x <= point[0] <= x + w and y <= point[1] <= y + h
 
 
-def normalize_drag(a: tuple, b: tuple) -> tuple:
+def normalize_rect(a: tuple, b: tuple, minimum: float) -> tuple:
+    """两点 → (x, y, w, h)，宽高不小于 minimum。"""
     x0, x1 = sorted((a[0], b[0]))
     y0, y1 = sorted((a[1], b[1]))
-    return x0, y0, x1 - x0 + 1, y1 - y0 + 1
+    return x0, y0, max(minimum, x1 - x0), max(minimum, y1 - y0)
+
+
+def round_rect(rect: tuple, digits: int = 2) -> tuple:
+    return tuple(round(value, digits) for value in rect)
 
 
 def nozzle_box(entry: dict) -> dict:
-    """喷口是点（底边中点）；它画出来的 1×1 三角落在哪一格。
+    """喷口是点（底边中点）：画出来的 1×1 三角所在的世界矩形。
 
     向上的喷口坐在 y 之上，向下的挂在 y 之下，和游戏里风区的朝向一致。
     """
     x, y = entry["pos"]
     up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
-    return {"pos": [x - 0.5, y if up else y - 1], "size": [1, 1]}
+    return {"pos": [x - 0.5, y if up else y - 1], "size": [1.0, 1.0]}
 
 
 def display_path(path: str | None) -> str:

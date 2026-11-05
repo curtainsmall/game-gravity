@@ -18,7 +18,7 @@ from core.constants import (
     HIGHLIGHT,
     ITEM_COLOR,
     KIND_NOZZLE,
-    KIND_TEXTURE,
+    MIN_SIZE,
     MOVABLE_COLOR,
     NOZZLE_COLOR,
     NOZZLE_DEFAULT_POWER,
@@ -31,8 +31,7 @@ from core.constants import (
     RULER_STEP,
     TOOL_COLORS,
 )
-from core.helpers import nozzle_box, normalize_drag, readable_color
-from core.level import player_position
+from core.helpers import normalize_rect, nozzle_box, readable_color
 from view.background import draw_background
 from view.layout import Layout
 from view.texture import draw_textures, texture_rect
@@ -132,9 +131,8 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         draw_nozzle_power(surface, layout, entry)
 
     # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
-    start = player_position(level)
-    if start is not None:
-        draw_cell_marker(surface, layout.cell_rect(start[0], start[1], (1, 1)), PLAYER_COLOR)
+    if level.player is not None:
+        draw_cell_marker(surface, layout.entry_rect(level.player), PLAYER_COLOR)
     if level.destination:
         draw_cell_marker(surface, layout.entry_rect(level.destination), DESTINATION_COLOR)
 
@@ -142,35 +140,35 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     for entry in level.movable_blocks:
         draw_pivot_guide(surface, layout, entry)
 
-    # 拖动预览
+    # 拖动预览（浮点自由矩形）
     if editor.drag_start is not None and editor.drag_current is not None:
-        x, y, w, h = normalize_drag(editor.drag_start, editor.drag_current)
+        x, y, w, h = normalize_rect(editor.drag_start, editor.drag_current, MIN_SIZE)
         preview = pygame.Surface((max(1, round(w * tile)), max(1, round(h * tile))), pygame.SRCALPHA)
         preview.fill(PREVIEW)
-        surface.blit(preview, layout.cell_rect(x, y, (w, h)).topleft)
+        surface.blit(preview, layout.world_rect(x, y, w, h).topleft)
 
     if editor.picking_offset:
-        # 选目标位置时：光标所在格的中心画一个红点，和支点/目标点同一个红
-        if editor.hover is not None:
-            center = layout.cell_rect(editor.hover[0], editor.hover[1], (1, 1)).center
-            pygame.draw.circle(surface, PIVOT_COLOR, center, 4)
+        # 选目标位置时：光标处画一个红点，和支点/目标点同一个红
+        position = pygame.mouse.get_pos()
+        pygame.draw.circle(surface, PIVOT_COLOR, position, 4)
     elif editor.creating:
-        # 新建状态：光标所在格用「要放的那种对象」的颜色描边；拖动时改画整个预览范围
+        # 新建状态：光标处用「要放的那种对象」的颜色描边；拖动时改画整个预览范围
         color = readable_color(TOOL_COLORS.get(editor.tool, HIGHLIGHT))
-        if editor.hover is not None:
-            left, bottom = editor.hover
-            pygame.draw.rect(surface, color, layout.cell_rect(left, bottom, (1, 1)), 2)
         if editor.drag_start is not None and editor.drag_current is not None:
-            x, y, w, h = normalize_drag(editor.drag_start, editor.drag_current)
-            pygame.draw.rect(surface, color, layout.cell_rect(x, y, (w, h)), 2)
+            x, y, w, h = normalize_rect(editor.drag_start, editor.drag_current, MIN_SIZE)
+            pygame.draw.rect(surface, color, layout.world_rect(x, y, w, h), 2)
+        else:
+            point = layout.world_point(pygame.mouse.get_pos())
+            left, bottom = point
+            pygame.draw.rect(surface, color, layout.world_rect(left, bottom, 1.0, 1.0), 2)
     elif not editor.startup:
-        # 选中的对象一直亮着，直到选了别的或者点空地取消；正在拖的贴图也算选中
+        # 选中的对象一直亮着，直到选了别的或者点空地取消；正在拖的也算选中
         active = None
-        if editor.texture_grab is not None:
-            active = (KIND_TEXTURE, editor.texture_grab["entry"])
+        if editor.object_grab is not None:
+            active = (editor.object_grab["kind"], editor.object_grab["entry"])
         elif editor.dialog is not None:
             active = (editor.dialog["kind"], editor.dialog["entry"])
-        active_corner = editor.texture_grab["corner"] if editor.texture_grab else None
+        active_corner = editor.object_grab["corner"] if editor.object_grab else None
         if active is not None:
             draw_object_outline(
                 surface,
@@ -179,22 +177,21 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
                 active[1],
                 HIGHLIGHT,
                 2,
-                handles=active[0] == KIND_TEXTURE,
+                handles=active[0] != KIND_NOZZLE,
                 active_corner=active_corner,
             )
-        # 光标压在某张贴图的角上：把那四角也画出来，并高亮要拉的那个
+        # 光标压在某个角把手上：把那个对象的四角也画出来，并高亮要拉的那个
         handle = editor.hovered_handle
-        if handle is not None and (active is None or handle[0] is not active[1]):
-            entry, corner = handle
+        if handle is not None and (active is None or handle[1] is not active[1]):
             draw_object_outline(
-                surface, layout, KIND_TEXTURE, entry, DIM_TEXT, 1, handles=True, active_corner=corner
+                surface, layout, handle[0], handle[1], DIM_TEXT, 1, handles=True, active_corner=handle[2]
             )
         # 光标下的另一个对象只是淡描边，避免和选中项抢视线
         hovered = editor.hovered
         if (
             hovered is not None
             and (active is None or hovered[1] is not active[1])
-            and (handle is None or hovered[1] is not handle[0])
+            and (handle is None or hovered[1] is not handle[1])
         ):
             draw_object_outline(surface, layout, hovered[0], hovered[1], DIM_TEXT, 1)
 
@@ -209,24 +206,22 @@ def draw_object_outline(
     handles: bool = False,
     active_corner: str | None = None,
 ) -> None:
-    """给一个对象画描边；贴图可以顺便画出四角的缩放把手。"""
-    if kind == KIND_TEXTURE:
-        rect = texture_rect(layout, entry)
-        pygame.draw.rect(surface, color, rect, width)
-        if handles:
-            for name, point in (
-                ("bl", rect.bottomleft),
-                ("br", rect.bottomright),
-                ("tl", rect.topleft),
-                ("tr", rect.topright),
-            ):
-                size = 14 if name == active_corner else 9
-                box = pygame.Rect(0, 0, size, size)
-                box.center = point
-                pygame.draw.rect(surface, HIGHLIGHT if name == active_corner else HANDLE_COLOR, box)
-        return
+    """给一个对象画描边，需要时画出四角的缩放把手。"""
     box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
-    pygame.draw.rect(surface, color, layout.entry_rect(box), width)
+    rect = layout.entry_rect(box)
+    pygame.draw.rect(surface, color, rect, width)
+    if not handles or kind == KIND_NOZZLE:
+        return
+    for name, point in (
+        ("bl", rect.bottomleft),
+        ("br", rect.bottomright),
+        ("tl", rect.topleft),
+        ("tr", rect.topright),
+    ):
+        size = 14 if name == active_corner else 9
+        handle = pygame.Rect(0, 0, size, size)
+        handle.center = point
+        pygame.draw.rect(surface, HIGHLIGHT if name == active_corner else HANDLE_COLOR, handle)
 
 
 def _dotted_line(
@@ -253,10 +248,9 @@ def _dotted_line(
 
 
 def draw_pivot_guide(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
-    """可移动方块：pos 那一格的中心是支点，支点 + offset 是目标点，两点红色虚线相连。"""
-    pos = entry["pos"]
-    cell = layout.cell_rect(pos[0], pos[1], (1, 1))
-    pivot = (float(cell.centerx), float(cell.centery))
+    """可移动方块：对象中心是支点，支点 + offset 是目标点，两点红色虚线相连。"""
+    rect = layout.entry_rect(entry)
+    pivot = (float(rect.centerx), float(rect.centery))
     offset = entry.get("offset", [0, 0])
     target = (pivot[0] + offset[0] * layout.tile, pivot[1] - offset[1] * layout.tile)
     _dotted_line(surface, pivot, target, PIVOT_COLOR)
@@ -282,12 +276,12 @@ def _arrow_head(surface: pygame.Surface, tip: tuple, direction: tuple, color: tu
 
 
 def nozzle_range_rect(layout: Layout, entry: dict) -> pygame.Rect:
-    """风区（range）占的那一格宽、length 格高的矩形。"""
+    """风区（range）占的一格宽、length 格高的矩形。"""
     x, y = entry["pos"]
     length = max(0, int(entry.get("range", 0)))
     up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
     bottom = y if up else y - length
-    return layout.cell_rect(x - 0.5, bottom, (1, max(1, length)))
+    return layout.world_rect(x - 0.5, bottom, 1.0, max(1.0, float(length)))
 
 
 def draw_nozzle_range(surface: pygame.Surface, layout: Layout, entry: dict) -> None:

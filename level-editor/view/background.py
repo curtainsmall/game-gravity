@@ -42,7 +42,7 @@ def draw_background(
     if image is None:
         return
 
-    area = layout.cell_rect(0, 0, (layout.cols, layout.rows))
+    area = layout.world_rect(0, 0, layout.cols, layout.rows)
     previous_clip = surface.get_clip()
     surface.set_clip(area)
     pattern_width = image.get_width()
