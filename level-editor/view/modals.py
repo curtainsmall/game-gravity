@@ -30,13 +30,14 @@ def startup_rects(surface: pygame.Surface) -> list:
 
 
 def settings_geometry(surface: pygame.Surface) -> tuple:
-    panel = place_panel(surface, pygame.Rect(0, 0, 560, 248))
+    panel = place_panel(surface, pygame.Rect(0, 0, 560, 282))
     name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
     width_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
     height_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT + 2)
     jump_rect = pygame.Rect(panel.left + 12, panel.top + 140, panel.width - 24, ROW_HEIGHT + 2)
+    speed_rect = pygame.Rect(panel.left + 12, panel.top + 174, panel.width - 24, ROW_HEIGHT + 2)
     background_rect = pygame.Rect(
-        panel.left + 12, panel.top + 174, panel.width - 24, ROW_HEIGHT + 2
+        panel.left + 12, panel.top + 208, panel.width - 24, ROW_HEIGHT + 2
     )
     browse_rect = pygame.Rect(
         background_rect.right - 76, background_rect.top + 1, 76, background_rect.height - 2
@@ -50,6 +51,7 @@ def settings_geometry(surface: pygame.Surface) -> tuple:
         width_rect,
         height_rect,
         jump_rect,
+        speed_rect,
         background_rect,
         browse_rect,
         apply_rect,
@@ -78,6 +80,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         width_rect,
         height_rect,
         jump_rect,
+        speed_rect,
         background_rect,
         browse_rect,
         apply_rect,
@@ -121,8 +124,16 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     draw_stepper(surface, left, -1)
     draw_stepper(surface, right, 1)
 
+    speed_selected = editor.settings_field == 4
+    _draw_settings_row(
+        surface, font, speed_rect, "移动速度", editor.settings["move_speed"], speed_selected
+    )
+    left, right = stepper_rects(speed_rect)
+    draw_stepper(surface, left, -1)
+    draw_stepper(surface, right, 1)
+
     # 背景：直接敲路径，或点右边「选择…」挑一张图；存的是相对关卡目录的路径
-    background_selected = editor.settings_field == 4
+    background_selected = editor.settings_field == 5
     pygame.draw.rect(
         surface, (62, 62, 72) if background_selected else (48, 48, 54), background_rect
     )

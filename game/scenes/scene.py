@@ -25,6 +25,7 @@ from world.level import (
     build_world,
     jump_height_of,
     load_level_file,
+    move_speed_of,
 )
 from world.world import World
 
@@ -58,6 +59,7 @@ class Scene:
         """由关卡数据建场景：方块、机关与物件都成为 GameObject。"""
         world = build_world(level_definition, base_dir)
         InputSource.set_jump_height(jump_height_of(level_definition))
+        InputSource.set_move_speed(move_speed_of(level_definition))
         players = build_player(level_definition)
         buttons = build_buttons(level_definition)
         triggers_by_name = {button.name: button for button in buttons if button.name}

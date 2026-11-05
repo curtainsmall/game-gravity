@@ -8,6 +8,7 @@ from core.constants import (
     DETAIL_PANEL_WIDTH,
     DIALOG_BG,
     DIALOG_BORDER,
+    DIM_TEXT,
     FOOTER,
     HEADER,
     HIGHLIGHT,
@@ -95,6 +96,44 @@ def detail_button_rects(surface: pygame.Surface) -> tuple:
     delete_rect = pygame.Rect(panel.left + 10, y, min(110, panel.width - 86), ROW_HEIGHT)
     close_rect = pygame.Rect(panel.right - 10 - 66, y, 66, ROW_HEIGHT)
     return delete_rect, close_rect
+
+
+def selection_panel_buttons(surface: pygame.Surface) -> tuple:
+    """多选面板底部的两个按钮：删除全部 / 取消。"""
+    panel = detail_panel_rect(surface)
+    y = panel.bottom - 32
+    delete_rect = pygame.Rect(panel.left + 10, y, min(110, panel.width - 86), ROW_HEIGHT)
+    close_rect = pygame.Rect(panel.right - 10 - 66, y, 66, ROW_HEIGHT)
+    return delete_rect, close_rect
+
+
+def draw_selection_panel(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    """多选面板：只列对象清单和数量，不给属性。"""
+    panel = detail_panel_rect(surface)
+    pygame.draw.rect(surface, DIALOG_BG, panel)
+    pygame.draw.rect(surface, DIALOG_BORDER, panel, 1)
+    count = len(editor.selection)
+    surface.blit(font.render(f"已选 {count} 个对象", True, TEXT), (panel.left + 10, panel.top + 8))
+
+    top = panel.top + 34
+    row = ROW_HEIGHT - 2
+    visible = max(1, (panel.bottom - 76 - top) // row)
+    for index, (kind, entry) in enumerate(editor.selection[:visible]):
+        rect = pygame.Rect(panel.left + 8, top + index * row, panel.width - 16, row - 1)
+        pygame.draw.rect(surface, (48, 48, 54), rect)
+        text = font.render(editor.label_of(kind, entry), True, TEXT)
+        surface.blit(
+            text,
+            (rect.left + 6, rect.centery - text.get_height() // 2),
+            (0, 0, min(text.get_width(), rect.width - 10), text.get_height()),
+        )
+    if count > visible:
+        more = font.render(f"…还有 {count - visible} 个", True, DIM_TEXT)
+        surface.blit(more, (panel.left + 10, top + visible * row + 2))
+
+    delete_rect, close_rect = selection_panel_buttons(surface)
+    draw_button(surface, font, delete_rect, "删除全部")
+    draw_button(surface, font, close_rect, "取消")
 
 
 def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:

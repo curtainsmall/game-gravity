@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
     COLS,
-    FOOTER,
     HANDLE_PIXELS,
     HEADER,
     JUMP_HEIGHT_DEFAULT,
@@ -31,9 +30,13 @@ from core.constants import (
     LEVEL_WIDTH_MIN,
     MARGIN,
     MIN_SIZE,
+    MOVE_SPEED_DEFAULT,
+    MOVE_SPEED_MAX,
+    MOVE_SPEED_MIN,
     NAME_MAX_LENGTH,
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_RANGE,
+    NUMBER_TEXT_MAX_LENGTH,
     ROWS,
     TOOL_BLOCK,
     TOOL_BUTTON,
@@ -46,9 +49,9 @@ from core.constants import (
     TOOL_TEXTURE,
 )
 from core.helpers import (
+    clamp_float,
     clamp_int,
     display_path,
-    entry_contains,
     level_base_dir,
     normalize_rect,
     nozzle_box,
@@ -77,6 +80,10 @@ class Editor:
         self.pan_y = 0.0
         self.hovered = None
         self.hovered_handle = None              # 光标下的角把手：(kind, entry, corner)
+        self.selection: list = []               # 选中的对象：(kind, entry)
+        self.marquee_start: tuple | None = None  # 左键拖出的框选，世界坐标
+        self.marquee_current: tuple | None = None
+        self.marquee_additive = False            # 框选开始时是否按着 Ctrl
         self.drag_start: tuple | None = None
         self.drag_current: tuple | None = None
         self.pan_drag: tuple | None = None
@@ -87,6 +94,9 @@ class Editor:
         self.number_buffer: str | None = None   # 正在键盘输入的数字字段，None 表示没在输入
         self.object_grab: dict | None = None    # 正在用鼠标拖对象：移动或缩放
         self.snapping = False                   # 按住 Shift：吸附到整格
+        self.keep_ratio = False                 # 按住 Ctrl：贴图等比缩放
+        self.click_through = False              # 按住 Alt：穿透最上层
+        self.last_mouse = (0, 0)
         self.view_menu_open = False
         # 视图设置：只影响编辑器自己的显示，从不写进关卡数据、不落盘
         self.view_settings: dict = {"background": True}
@@ -101,12 +111,13 @@ class Editor:
 
     # ---- 查询 -------------------------------------------------------
     def all_entries(self) -> list:
-        """所有有矩形的对象，按绘制顺序：(kind, entry)。"""
+        """所有有矩形的对象，按绘制顺序（先画的在前）：(kind, entry)。"""
         pairs = []
         for entries, kind in (
             (self.level.blocks, KIND_BLOCK),
             (self.level.planks, KIND_PLANK),
             (self.level.movable_blocks, KIND_MOVABLE),
+            (self.level.textures, KIND_TEXTURE),
             (self.level.buttons, KIND_BUTTON),
             (self.level.items, KIND_ITEM),
         ):
@@ -117,40 +128,37 @@ class Editor:
             pairs.append((KIND_DESTINATION, self.level.destination))
         return pairs
 
-    def object_at(self, point: tuple):
-        """世界坐标点下的对象：小的机关排在大的方块之前，后加的先命中。"""
-        for entries, kind in (
-            (self.level.buttons, KIND_BUTTON),
-            (self.level.items, KIND_ITEM),
-            (self.level.movable_blocks, KIND_MOVABLE),
-            (self.level.blocks, KIND_BLOCK),
-            (self.level.planks, KIND_PLANK),
-        ):
-            for entry in reversed(entries):
-                if entry_contains(entry, point):
-                    return kind, entry
-        if self.level.player is not None and entry_contains(self.level.player, point):
-            return KIND_PLAYER, self.level.player
-        if self.level.destination is not None and entry_contains(self.level.destination, point):
-            return KIND_DESTINATION, self.level.destination
-        return None
+    def object_stack_at(self, position: tuple, layout: Layout) -> list:
+        """屏幕上该点压着的所有对象，最上层的在前（和绘制顺序相反）。
 
-    def nozzle_at(self, point: tuple):
-        """喷口是一个点：命中按它画出来的那个 1×1 三角判定（世界坐标）。"""
-        x, y = point
+        命中用的就是画出来的那个矩形（layout.entry_rect），所以只要眼睛看得见、
+        不管它延伸到关卡外面还是顶到底部状态栏，都点得到。选中只认最上层那个：
+        不能隔着另一个对象点到它后面的东西。
+        """
+        stack = []
+        if self.level.destination is not None and self._hit(position, layout, self.level.destination):
+            stack.append((KIND_DESTINATION, self.level.destination))
+        if self.level.player is not None and self._hit(position, layout, self.level.player):
+            stack.append((KIND_PLAYER, self.level.player))
         for entry in reversed(self.level.nozzles):
-            box = nozzle_box(entry)
-            left, bottom = box["pos"]
-            if left <= x <= left + 1 and bottom <= y <= bottom + 1:
-                return entry
-        return None
+            if self._hit(position, layout, nozzle_box(entry)):
+                stack.append((KIND_NOZZLE, entry))
+        for kind, entry in reversed(self.all_entries()):
+            if self._hit(position, layout, entry):
+                stack.append((kind, entry))
+        return stack
 
-    def texture_at(self, point: tuple):
-        """贴图是自由矩形：按世界坐标判定。后加的盖住先加的，所以倒序找。"""
-        for entry in reversed(self.level.textures):
-            if entry_contains(entry, point):
-                return entry
-        return None
+    @staticmethod
+    def _hit(position: tuple, layout: Layout, box: dict) -> bool:
+        return layout.entry_rect(box).collidepoint(position)
+
+    def object_at(self, position: tuple, layout: Layout):
+        """最上层的那个对象；按住 Alt 时穿透一层。"""
+        stack = self.object_stack_at(position, layout)
+        if not stack:
+            return None
+        index = 1 if (self.click_through and len(stack) > 1) else 0
+        return stack[index]
 
     def corner_at(self, layout: Layout, entry: dict, position: tuple):
         """光标离对象哪个角够近：返回角名，都不够近返回 None。"""
@@ -169,15 +177,10 @@ class Editor:
         return None
 
     def object_handle_at(self, position: tuple, layout: Layout):
-        """光标压在哪个角把手上：选中项优先，然后贴图，然后其它对象。
-
-        贴图排在其它对象之前，是因为贴图通常盖在方块上，角也落在方块上，
-        不这样排就永远抓不到贴图的角。
-        """
+        """光标压在哪个角把手上：选中项优先，然后按绘制顺序从上往下找。"""
         candidates = []
         if self.dialog is not None:
             candidates.append((self.dialog["kind"], self.dialog["entry"]))
-        candidates += [(KIND_TEXTURE, entry) for entry in reversed(self.level.textures)]
         candidates += [(kind, entry) for kind, entry in reversed(self.all_entries())]
         for kind, entry in candidates:
             corner = self.corner_at(layout, entry, position)
@@ -186,32 +189,18 @@ class Editor:
         return None
 
     def update_hover(self, position: tuple, layout: Layout) -> None:
-        """挑出光标下的对象。
-
-        所有对象都是浮点自由矩形，按世界坐标命中；贴图是背景皮，排在最后选。
-        """
+        """挑出光标下的对象：只认最上层那个（按住 Alt 时穿透一层）。"""
+        self.last_mouse = (position[0], position[1])
         self.hovered = None
         self.hovered_handle = None
-        in_work_area = (
-            HEADER <= position[1] < layout.window[1] - FOOTER
-            and 0 <= position[0] < layout.window[0]
-        )
-        if not in_work_area:
+        # 画布铺满整个窗口：顶部信息栏、底部状态栏只是画字，不挡对象，
+        # 所以整个窗口都算工作区，对象长到哪就点到哪
+        if not (0 <= position[0] < layout.window[0] and 0 <= position[1] < layout.window[1]):
             return
-        point = layout.world_point(position)
-        # 角把手优先：不然压在方块上的贴图（或选中的方块）永远抓不到
+        # 角把手优先：不然压在方块上的对象永远抓不到
         self.hovered_handle = self.object_handle_at(position, layout)
-        nozzle = self.nozzle_at(point)
-        if nozzle is not None:
-            self.hovered = (KIND_NOZZLE, nozzle)
-            return
-        hit = self.object_at(point)
-        if hit is not None:
-            self.hovered = hit
-            return
-        texture = self.texture_at(point)
-        if texture is not None:
-            self.hovered = (KIND_TEXTURE, texture)
+        # 只选最上层那个：不隔着另一个对象去点它后面的东西
+        self.hovered = self.object_at(position, layout)
 
     # ---- 创建 / 删除 -----------------------------------------------
     def begin_drag(self, point: tuple) -> None:
@@ -232,6 +221,7 @@ class Editor:
     def drag_to(self, position: tuple, layout: Layout) -> None:
         if self.drag_start is None:
             return
+        self.last_mouse = (position[0], position[1])
         point = layout.world_point(position)
         if self.snapping:
             point = layout.snap_point(*point)
@@ -288,25 +278,9 @@ class Editor:
     def delete_entry(self, kind: str, entry: dict) -> None:
         self.push_undo()
         self.dirty = True
-        if kind == KIND_BLOCK:
-            self.level.blocks = [e for e in self.level.blocks if e is not entry]
-        elif kind == KIND_PLANK:
-            self.level.planks = [e for e in self.level.planks if e is not entry]
-        elif kind == KIND_MOVABLE:
-            self.level.movable_blocks = [e for e in self.level.movable_blocks if e is not entry]
-        elif kind == KIND_BUTTON:
-            self.level.buttons = [e for e in self.level.buttons if e is not entry]
-        elif kind == KIND_ITEM:
-            self.level.items = [e for e in self.level.items if e is not entry]
-        elif kind == KIND_NOZZLE:
-            self.level.nozzles = [e for e in self.level.nozzles if e is not entry]
-        elif kind == KIND_TEXTURE:
-            self.level.textures = [e for e in self.level.textures if e is not entry]
-        elif kind == KIND_PLAYER:
-            self.level.player = None
-        elif kind == KIND_DESTINATION:
-            self.level.destination = None
+        self.remove_entry(kind, entry)
         self.dialog = None
+        self.selection = []
         self.hovered = None
         self.picking_offset = False
         self.number_buffer = None
@@ -324,6 +298,9 @@ class Editor:
             return
         self.level = Level.from_definition(self.undo_stack.pop())
         self.dialog = None
+        self.selection = []
+        self.marquee_start = None
+        self.marquee_current = None
         self.picking_offset = False
         self.dirty = True
         self.status = "已撤销"
@@ -335,7 +312,12 @@ class Editor:
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
+        self.selection = []
+        self.marquee_start = None
+        self.marquee_current = None
         self.picking_offset = False
+        self.name_focused = False
+        self.number_buffer = None
         self.startup = False
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
@@ -365,7 +347,12 @@ class Editor:
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
+        self.selection = []                 # 上一个关卡的选中项不能带过来
+        self.marquee_start = None
+        self.marquee_current = None
         self.picking_offset = False
+        self.name_focused = False
+        self.number_buffer = None
         self.startup = False
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
@@ -469,7 +456,10 @@ class Editor:
 
     # ---- 鼠标拖动 / 缩放（所有对象） --------------------------------
     def begin_object_grab(self, position: tuple, layout: Layout) -> bool:
-        """左键按下：先看是不是压在某个角把手上（缩放），再看是不是落在对象里（移动）。"""
+        """左键按下：先看是不是压在某个角把手上（缩放），再看是不是落在对象里（移动）。
+
+        只动按下的那一个：多选只是列清单，不做整组编辑。
+        """
         hit = self.hovered_handle
         if hit is None:
             hit = self.object_handle_at(position, layout)
@@ -489,6 +479,7 @@ class Editor:
             "pos": list(entry["pos"]),
             "size": list(entry.get("size", [1.0, 1.0])),
             "moved": False,
+            "additive": self.keep_ratio,   # 按下时就按住 Ctrl：松手时是加选而不是单选
         }
         return True
 
@@ -496,6 +487,7 @@ class Editor:
         grab = self.object_grab
         if grab is None:
             return
+        self.last_mouse = (position[0], position[1])
         point = layout.world_point(position)
         dx = point[0] - grab["start"][0]
         dy = point[1] - grab["start"][1]
@@ -513,6 +505,20 @@ class Editor:
                 entry["pos"] = [round(value) for value in entry["pos"]]
             return
         left, right, bottom, top = x, x + width, y, y + height
+        if self.keep_ratio and width > 0 and height > 0:
+            # 等比缩放（所有能缩放的对象通用）：以对角为锚点，
+            # 取鼠标在横竖两个方向上缩放比例的较大者
+            anchor_x = x + width if "l" in corner else x
+            anchor_y = y + height if "b" in corner else y
+            scale = max(abs(point[0] - anchor_x) / width, abs(point[1] - anchor_y) / height)
+            new_width = max(MIN_SIZE, round(width * scale, 2))
+            new_height = max(MIN_SIZE, round(height * scale, 2))
+            entry["pos"] = [
+                round(anchor_x - new_width if "l" in corner else anchor_x, 2),
+                round(anchor_y - new_height if "b" in corner else anchor_y, 2),
+            ]
+            entry["size"] = [new_width, new_height]
+            return
         if "l" in corner:
             left = point[0]
         if "r" in corner:
@@ -529,6 +535,18 @@ class Editor:
             max(MIN_SIZE, round(abs(top - bottom), 2)),
         ]
 
+    def refresh_grab(self, layout: Layout) -> None:
+        """修饰键按下/松开时：用最近一次鼠标位置把正在进行的拖动重算一遍。
+
+        鼠标不动只按 Ctrl 也要立刻切成等比，所以不能等 MOUSEMOTION。
+        """
+        if self.object_grab is not None:
+            self.update_object_grab(self.last_mouse, layout)
+        elif self.drag_start is not None:
+            self.drag_to(self.last_mouse, layout)
+        else:
+            self.update_hover(self.last_mouse, layout)
+
     def end_object_grab(self) -> bool:
         """松开鼠标：拖过就算一步编辑；只是点了一下就选中那个对象。"""
         grab = self.object_grab
@@ -540,7 +558,11 @@ class Editor:
         if not grab["moved"]:
             if self.undo_stack:
                 self.undo_stack.pop()      # 没动过，把刚压进去的撤销弹掉
-            self.select(kind, entry)       # 点角也是点这个对象，别去选下面的
+            # 点角也是点这个对象，别去选下面的；按住 Ctrl 时是逐个加选
+            if grab.get("additive"):
+                self.toggle_selection(kind, entry)
+            else:
+                self.select(kind, entry)
             return True
         size = entry.get("size")
         text = f"{KIND_TITLES.get(kind, '对象')} ({entry['pos'][0]}, {entry['pos'][1]})"
@@ -549,7 +571,10 @@ class Editor:
         self.status = text
         return True
 
+    # ---- 选择 -------------------------------------------------------
     def select(self, kind: str, entry: dict) -> None:
+        """单选：同时打开属性面板。"""
+        self.selection = [(kind, entry)]
         self.dialog = {"kind": kind, "entry": entry}
         self.dialog_field = 0
         self.picking_offset = False
@@ -557,9 +582,143 @@ class Editor:
         self.number_buffer = None
         self.status = f"已选中{KIND_TITLES.get(kind, '对象')}"
 
+    def select_many(self, pairs: list) -> None:
+        """多选：面板只列清单和数量，不给属性；正好一个时回到属性面板。"""
+        self.selection = list(pairs)
+        if len(self.selection) == 1:
+            kind, entry = self.selection[0]
+            self.dialog = {"kind": kind, "entry": entry}
+            self.dialog_field = 0
+        else:
+            self.dialog = None
+        self.picking_offset = False
+        self.name_focused = False
+        self.number_buffer = None
+        self.status = f"已选中 {len(self.selection)} 个对象" if self.selection else "已取消选中"
+
+    def clear_selection(self) -> None:
+        self.select_many([])
+
+    def select_at(self, position: tuple, layout: Layout, additive: bool = False) -> None:
+        """点一下：选最上层那个；按住 Ctrl 就逐个加选/取消。"""
+        self.update_hover(position, layout)
+        if self.hovered is None:
+            if not additive:
+                self.clear_selection()
+            return
+        kind, entry = self.hovered
+        if additive:
+            self.toggle_selection(kind, entry)
+        else:
+            self.select(kind, entry)
+
+    def toggle_selection(self, kind: str, entry: dict) -> None:
+        """Ctrl 点选：已选中的取消，没选中的加进去。"""
+        rest = [(k, e) for k, e in self.selection if e is not entry]
+        if len(rest) == len(self.selection):
+            rest.append((kind, entry))
+        self.select_many(rest)
+
+    def label_of(self, kind: str, entry: dict) -> str:
+        pos = entry["pos"]
+        name = entry.get("name") or KIND_TITLES.get(kind, "对象")
+        return f"{name} ({pos[0]}, {pos[1]})"
+
+    def delete_selection(self) -> None:
+        """删掉所有选中的对象，算一步撤销。"""
+        if not self.selection:
+            self.status = "没有选中的对象"
+            return
+        self.push_undo()
+        count = len(self.selection)
+        for kind, entry in self.selection:
+            self.remove_entry(kind, entry)
+        self.select_many([])
+        self.hovered = None
+        self.dirty = True
+        self.status = f"已删除 {count} 个对象"
+
+    def remove_entry(self, kind: str, entry: dict) -> None:
+        if kind == KIND_BLOCK:
+            self.level.blocks = [e for e in self.level.blocks if e is not entry]
+        elif kind == KIND_PLANK:
+            self.level.planks = [e for e in self.level.planks if e is not entry]
+        elif kind == KIND_MOVABLE:
+            self.level.movable_blocks = [e for e in self.level.movable_blocks if e is not entry]
+        elif kind == KIND_BUTTON:
+            self.level.buttons = [e for e in self.level.buttons if e is not entry]
+        elif kind == KIND_ITEM:
+            self.level.items = [e for e in self.level.items if e is not entry]
+        elif kind == KIND_NOZZLE:
+            self.level.nozzles = [e for e in self.level.nozzles if e is not entry]
+        elif kind == KIND_TEXTURE:
+            self.level.textures = [e for e in self.level.textures if e is not entry]
+        elif kind == KIND_PLAYER:
+            self.level.player = None
+        elif kind == KIND_DESTINATION:
+            self.level.destination = None
+
+    # ---- 框选 -------------------------------------------------------
+    def begin_marquee(self, position: tuple, layout: Layout) -> None:
+        point = layout.world_point(position)
+        self.marquee_start = point
+        self.marquee_current = point
+        self.marquee_additive = self.keep_ratio   # 按住 Ctrl：框里的对象加进已选
+        self.last_mouse = (position[0], position[1])
+
+    def update_marquee(self, position: tuple, layout: Layout) -> None:
+        if self.marquee_start is None:
+            return
+        self.last_mouse = (position[0], position[1])
+        self.marquee_current = layout.world_point(position)
+
+    def finish_marquee(self, layout: Layout) -> bool:
+        """松开左键：拖出框就框选，几乎没动就当成一次点击。"""
+        start = self.marquee_start
+        current = self.marquee_current or start
+        self.marquee_start = None
+        self.marquee_current = None
+        if start is None:
+            return False
+        moved = (
+            abs(current[0] - start[0]) * layout.tile >= 3
+            or abs(current[1] - start[1]) * layout.tile >= 3
+        )
+        if not moved:
+            self.select_at(self.last_mouse, layout, additive=getattr(self, "marquee_additive", False))
+            return True
+        x0, x1 = sorted((start[0], current[0]))
+        y0, y1 = sorted((start[1], current[1]))
+        picked = [
+            (kind, entry)
+            for kind, entry in self.all_entries()
+            if self._in_marquee(kind, entry, x0, y0, x1, y1)
+        ]
+        for entry in self.level.nozzles:
+            if self._in_marquee(KIND_NOZZLE, nozzle_box(entry), x0, y0, x1, y1):
+                picked.append((KIND_NOZZLE, entry))
+        if getattr(self, "marquee_additive", False):
+            # 加选：把已选的和框里的一起保留（同一对象只算一次）
+            merged = list(self.selection)
+            for pair in picked:
+                if not any(pair[1] is entry for _, entry in merged):
+                    merged.append(pair)
+            picked = merged
+        self.select_many(picked)
+        return True
+
+    @staticmethod
+    def _in_marquee(kind: str, entry: dict, x0: float, y0: float, x1: float, y1: float) -> bool:
+        """贴图要整个框住才算（它是背景皮，一划就中的话太容易误选），其余相交即选。"""
+        px, py = entry["pos"]
+        width, height = entry.get("size", [1.0, 1.0])
+        if kind == KIND_TEXTURE:
+            return px >= x0 and py >= y0 and px + width <= x1 and py + height <= y1
+        return px < x1 and px + width > x0 and py < y1 and py + height > y0
+
     def stop_creating(self) -> None:
         self.creating = False
-        self.status = "已退出新建；左键设置对象，右键新建"
+        self.status = "已退出新建；左键 设置/框选，右键 新建"
 
     # ---- 退出确认 ---------------------------------------------------
     def request_quit(self) -> bool:
@@ -568,23 +727,6 @@ class Editor:
             self.confirm_quit = True
             return False
         return True
-
-    # ---- 详细设置 ---------------------------------------------------
-    def open_dialog(self) -> None:
-        if self.hovered is None:
-            # 点空地：取消选中，高亮跟着消失
-            if self.dialog is not None:
-                self.close_dialog()
-                self.status = "已取消选中"
-            else:
-                self.status = "这里没有可设置的对象"
-            return
-        kind, entry = self.hovered
-        self.dialog = {"kind": kind, "entry": entry}
-        self.dialog_field = 0
-        self.picking_offset = False
-        self.name_focused = False
-        self.number_buffer = None
 
     def close_dialog(self) -> None:
         self.dialog = None
@@ -661,8 +803,8 @@ class Editor:
             offset = entry.get("offset", [0, -3])
             sources = entry.get("sources", [])
             rows += [
-                ("横向偏移", str(offset[0])),
-                ("纵向偏移", str(offset[1])),
+                ("横向偏移", number_text(offset[0])),
+                ("纵向偏移", number_text(offset[1])),
                 ("触发按钮", "、".join(sources) if sources else "无"),
                 ("一次触发", "是" if entry.get("once") else "否"),
             ]
@@ -672,8 +814,8 @@ class Editor:
             rows.append(("变重", "是" if entry.get("heavy") else "否"))
         elif kind == KIND_NOZZLE:
             rows += [
-                ("力度", str(entry.get("power", NOZZLE_DEFAULT_POWER))),
-                ("长度", str(entry.get("range", NOZZLE_DEFAULT_RANGE))),
+                ("力度", number_text(entry.get("power", NOZZLE_DEFAULT_POWER))),
+                ("长度", number_text(entry.get("range", NOZZLE_DEFAULT_RANGE))),
             ]
         elif kind == KIND_TEXTURE:
             rows.append(("图片", entry.get("image") or "（未选择）"))
@@ -752,7 +894,7 @@ class Editor:
         return None
 
     def set_dialog_number(self, field: int, value: float) -> None:
-        """把一个数字字段设成 value：位置和尺寸都是浮点，不再夹到网格。"""
+        """把一个数字字段设成 value：位置、尺寸、偏移、力度都可以带小数。"""
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
         pos = entry["pos"]
@@ -765,17 +907,20 @@ class Editor:
             size[field - 2] = max(MIN_SIZE, round(value, 2))
             entry["size"] = size
         elif kind == KIND_MOVABLE and field in (4, 5):
-            index = field - 4
             offset = list(entry.get("offset", [0, -3]))
-            offset[index] = int(max(-8, min(8, round(value))))
+            offset[field - 4] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
             entry["offset"] = offset
         elif kind == KIND_NOZZLE and field == 2:
-            entry["power"] = int(max(-8, min(8, round(value))))
+            entry["power"] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
         elif kind == KIND_NOZZLE and field == 3:
-            entry["range"] = int(max(1, min(8, round(value))))
+            entry["range"] = round(clamp_float(value, 1.0, 8.0, 1.0), 2)
 
     def type_dialog_number(self, char: str) -> bool:
-        """数字字段键盘输入：第一次敲键起一个新值，之后追加。返回是否吃掉了字符。"""
+        """数字字段键盘输入：第一次敲键起一个新值，之后追加，可以带一个小数点。
+
+        负号只允许打头（偏移、力度可为负）；直接敲小数点就当用户想打「0.」。
+        返回是否吃掉了字符。
+        """
         if self.dialog is None or self.name_focused:
             return False
         if self.dialog_number_value(self.dialog_field) is None:
@@ -784,18 +929,24 @@ class Editor:
             if self.number_buffer is None:
                 self.number_buffer = ""
                 self.push_undo()           # 一次完整输入只记一步撤销
-            if len(self.number_buffer) < 6:
+            if len(self.number_buffer) < NUMBER_TEXT_MAX_LENGTH:
                 self.number_buffer += char
         elif char == "-" and self.number_buffer is None:
             self.number_buffer = "-"       # 负号只允许打头（偏移、力度可为负）
             self.push_undo()
+        elif char == "." and "." not in (self.number_buffer or ""):
+            if self.number_buffer is None:
+                self.number_buffer = "0"   # 空着就敲小数点：当成在打「0.」
+                self.push_undo()
+            if len(self.number_buffer) < NUMBER_TEXT_MAX_LENGTH:
+                self.number_buffer += "."
         else:
             return False
         self.apply_number_buffer()
         return True
 
     def apply_number_buffer(self) -> None:
-        """把输入框里的文本写回字段；只有「-」或空串时先不动。"""
+        """把输入框里的文本写回字段；还没构成数字（空串、「-」、「-.」）时先不动。"""
         text = self.number_buffer or ""
         if not text or text == "-":
             return
@@ -829,6 +980,7 @@ class Editor:
             "width": str(self.level.width),
             "height": str(self.level.height),
             "jump_height": str(self.level.jump_height),
+            "move_speed": str(self.level.move_speed),
             "background": self.level.background,
         }
         self.settings_field = 0
@@ -849,13 +1001,16 @@ class Editor:
                 self._jump_height_limit(self.level.height),
                 JUMP_HEIGHT_DEFAULT,
             )
+            self.level.move_speed = clamp_float(
+                self.settings["move_speed"], MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
+            )
             self.level.background = self.settings["background"]
             self.dirty = True
             background = self.level.background or "无"
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
                 f"尺寸 {self.level.width}×{self.level.height}，"
-                f"跳高 {self.level.jump_height}，背景 {background}"
+                f"跳高 {self.level.jump_height}，速度 {self.level.move_speed}，背景 {background}"
             )
         self.settings = None
 
@@ -868,7 +1023,7 @@ class Editor:
             self.status = "选择背景已取消"
             return
         self.settings["background"] = relative_level_path(path, self.path)
-        self.settings_field = 4
+        self.settings_field = 5
         self.status = "背景已选：只记相对 scene.json 的路径，不复制文件"
 
     def pick_texture_image(self) -> None:
@@ -901,6 +1056,13 @@ class Editor:
             limit = self._jump_height_limit(height)
             current = clamp_int(self.settings["jump_height"], JUMP_HEIGHT_MIN, limit, JUMP_HEIGHT_DEFAULT)
             self.settings["jump_height"] = str(max(JUMP_HEIGHT_MIN, min(limit, current + delta)))
+        elif field == 4:
+            # 移动速度按 0.5 一格加减
+            current = clamp_float(
+                self.settings["move_speed"], MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
+            )
+            stepped = max(MOVE_SPEED_MIN, min(MOVE_SPEED_MAX, current + 0.5 * delta))
+            self.settings["move_speed"] = f"{stepped:g}"
 
     @staticmethod
     def _jump_height_limit(level_height: int) -> int:
@@ -925,6 +1087,10 @@ class Editor:
             if char.isdigit() and len(str(self.settings[key])) < (4 if field == 1 else 2):
                 self.settings[key] = str(self.settings[key]) + char
         elif field == 4:
+            # 移动速度：数字和小数点，最多 5 位
+            if (char.isdigit() or char == ".") and len(str(self.settings["move_speed"])) < 5:
+                self.settings["move_speed"] = str(self.settings["move_speed"]) + char
+        elif field == 5:
             # 背景是路径：可打印字符都能打
             if char.isprintable() and len(self.settings["background"]) < BACKGROUND_MAX_LENGTH:
                 self.settings["background"] += char
@@ -939,6 +1105,8 @@ class Editor:
             key = {1: "width", 2: "height", 3: "jump_height"}[field]
             self.settings[key] = str(self.settings[key])[:-1]
         elif field == 4:
+            self.settings["move_speed"] = str(self.settings["move_speed"])[:-1]
+        elif field == 5:
             self.settings["background"] = self.settings["background"][:-1]
 
 

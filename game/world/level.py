@@ -84,6 +84,14 @@ def jump_height_of(level_definition: LevelDefinition) -> int:
     return int(level_definition.get("jump_height", InputSource.JUMP_HEIGHT_DEFAULT))
 
 
+def move_speed_of(level_definition: LevelDefinition) -> float:
+    """关卡指定的水平移动速度（方块/秒），缺省用默认值。"""
+    try:
+        return float(level_definition.get("move_speed", InputSource.MOVE_SPEED_DEFAULT))
+    except (TypeError, ValueError):
+        return InputSource.MOVE_SPEED_DEFAULT
+
+
 def _read_size(entry: dict) -> tuple[float, float]:
     width, height = entry.get("size", DEFAULT_SIZE)
     return float(width), float(height)
@@ -208,8 +216,8 @@ def build_nozzles(level_definition: LevelDefinition) -> list[GameObject]:
     """喷口的 pos 是三角形底边中点；range 是风区长度，power 是目标偏移。"""
     nozzles = []
     for entry in level_definition.get("nozzles", []):
-        power = int(entry.get("power", NOZZLE_DEFAULT_POWER))
-        length = int(entry.get("range", NOZZLE_DEFAULT_RANGE))
+        power = float(entry.get("power", NOZZLE_DEFAULT_POWER))
+        length = float(entry.get("range", NOZZLE_DEFAULT_RANGE))
         x, y = _read_position(entry)
         bottom = y if power >= 0 else y - length
         nozzles.append(

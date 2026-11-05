@@ -11,9 +11,12 @@ from core.constants import (
     LEVEL_HEIGHT_MIN,
     LEVEL_WIDTH_MAX,
     LEVEL_WIDTH_MIN,
+    MOVE_SPEED_DEFAULT,
+    MOVE_SPEED_MAX,
+    MOVE_SPEED_MIN,
     ROWS,
 )
-from core.helpers import clamp_int
+from core.helpers import clamp_float, clamp_int
 
 
 def dump_level(definition: dict) -> str:
@@ -51,6 +54,7 @@ class Level:
         self.height = ROWS         # 关卡高度，格
         self.background = ""       # 背景图，相对关卡目录的路径；空串表示没有背景
         self.jump_height = JUMP_HEIGHT_DEFAULT
+        self.move_speed = MOVE_SPEED_DEFAULT   # 水平移动速度，方块/秒
         self.blocks: list = []
         self.planks: list = []
         self.movable_blocks: list = []
@@ -67,6 +71,7 @@ class Level:
             "width": self.width,
             "height": self.height,
             "jump_height": self.jump_height,
+            "move_speed": self.move_speed,
             "blocks": copy.deepcopy(self.blocks),
             "planks": copy.deepcopy(self.planks),
             "movable_blocks": copy.deepcopy(self.movable_blocks),
@@ -96,6 +101,12 @@ class Level:
             JUMP_HEIGHT_MIN,
             max(JUMP_HEIGHT_MIN, level.height - 1),   # 跳高不超过关卡高度 - 1
             JUMP_HEIGHT_DEFAULT,
+        )
+        level.move_speed = clamp_float(
+            definition.get("move_speed"),
+            MOVE_SPEED_MIN,
+            MOVE_SPEED_MAX,
+            MOVE_SPEED_DEFAULT,
         )
         level.background = str(definition.get("background", "") or "")
         level.player = copy.deepcopy(definition.get("player"))

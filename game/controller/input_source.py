@@ -19,12 +19,18 @@ class InputState:
 
 
 class InputSource:
-    MOVE_SPEED = 8.0  # 方块/秒
+    MOVE_SPEED_DEFAULT = 8.0  # 方块/秒
 
-    JUMP_HEIGHT_DEFAULT = 4  # 默认跳 4 格
+    JUMP_HEIGHT_DEFAULT = 2  # 默认跳 2 格
     JUMP_HEIGHT_MIN = 0      # 0 = 跳不起来
 
+    move_speed = MOVE_SPEED_DEFAULT   # 关卡可以覆盖
     jump_height_blocks = JUMP_HEIGHT_DEFAULT
+
+    @classmethod
+    def set_move_speed(cls, speed: float) -> None:
+        """关卡给定的水平移动速度（方块/秒）。"""
+        cls.move_speed = float(speed)
 
     @classmethod
     def jump_height(cls) -> int:
@@ -50,7 +56,7 @@ class InputSource:
         if body is None or input_state is None:
             return
 
-        body.velocity_x = self.MOVE_SPEED * input_state.move_axis
+        body.velocity_x = InputSource.move_speed * input_state.move_axis
 
         if input_state.flip_pressed and can_flip_gravity(body):
             flip_gravity(body, game_object.controller)

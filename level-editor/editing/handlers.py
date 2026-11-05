@@ -12,6 +12,7 @@ from view.panel import (
     detail_pick_rect,
     detail_row_rects,
     detail_slot_rect,
+    selection_panel_buttons,
 )
 from view.widgets import stepper_rects
 
@@ -49,6 +50,14 @@ def handle_create_menu(editor: Editor, position: tuple, window_size: tuple, layo
 
 def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
     """只处理落在面板里的点击；画布那边的点击照常走编辑流程。"""
+    if editor.dialog is None:
+        # 多选面板：只有「删除全部」和「取消」两个按钮
+        delete_rect, close_rect = selection_panel_buttons(surface)
+        if delete_rect.collidepoint(position):
+            editor.delete_selection()
+        elif close_rect.collidepoint(position):
+            editor.clear_selection()
+        return
     delete_rect, close_rect = detail_button_rects(surface)
     if delete_rect.collidepoint(position):
         kind, entry = editor.dialog["kind"], editor.dialog["entry"]
@@ -93,6 +102,7 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         width_rect,
         height_rect,
         jump_rect,
+        speed_rect,
         background_rect,
         browse_rect,
         apply_rect,
@@ -111,9 +121,9 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         editor.pick_background()
         return
     if background_rect.collidepoint(position):
-        editor.settings_field = 4
+        editor.settings_field = 5
         return
-    for field, rect in ((1, width_rect), (2, height_rect), (3, jump_rect)):
+    for field, rect in ((1, width_rect), (2, height_rect), (3, jump_rect), (4, speed_rect)):
         if not rect.collidepoint(position):
             continue
         editor.settings_field = field

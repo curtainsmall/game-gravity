@@ -120,7 +120,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         # pos 是底边中点：三角形底边中点就画在这个点上，底边落在 y 这道平面上。
         center_x = layout.left + entry["pos"][0] * tile
         base_y = layout.top + (layout.rows + 1 - entry["pos"][1]) * tile
-        up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
+        up = float(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
         apex_y = base_y - tile if up else base_y + tile
         draw_nozzle_range(surface, layout, entry)
         pygame.draw.polygon(
@@ -147,6 +147,16 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         preview.fill(PREVIEW)
         surface.blit(preview, layout.world_rect(x, y, w, h).topleft)
 
+    # 框选中的矩形
+    if editor.marquee_start is not None and editor.marquee_current is not None:
+        x0, x1 = sorted((editor.marquee_start[0], editor.marquee_current[0]))
+        y0, y1 = sorted((editor.marquee_start[1], editor.marquee_current[1]))
+        rect = layout.world_rect(x0, y0, max(0.0, x1 - x0), max(0.0, y1 - y0))
+        fill = pygame.Surface(rect.size, pygame.SRCALPHA)
+        fill.fill((255, 230, 120, 60))
+        surface.blit(fill, rect.topleft)
+        pygame.draw.rect(surface, HIGHLIGHT, rect, 1)
+
     if editor.picking_offset:
         # 选目标位置时：光标处画一个红点，和支点/目标点同一个红
         position = pygame.mouse.get_pos()
@@ -162,37 +172,28 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
             left, bottom = point
             pygame.draw.rect(surface, color, layout.world_rect(left, bottom, 1.0, 1.0), 2)
     elif not editor.startup:
-        # 选中的对象一直亮着，直到选了别的或者点空地取消；正在拖的也算选中
-        active = None
-        if editor.object_grab is not None:
-            active = (editor.object_grab["kind"], editor.object_grab["entry"])
-        elif editor.dialog is not None:
-            active = (editor.dialog["kind"], editor.dialog["entry"])
-        active_corner = editor.object_grab["corner"] if editor.object_grab else None
-        if active is not None:
+        # 选中的对象都亮着；只有"唯一选中"的那个才画四角把手
+        grabbed = (editor.object_grab["kind"], editor.object_grab["entry"]) if editor.object_grab else None
+        selected = grabbed or (editor.selection[0] if len(editor.selection) == 1 else None)
+        for kind, entry in editor.selection:
+            if selected is not None and entry is selected[1]:
+                continue
+            draw_object_outline(surface, layout, kind, entry, HIGHLIGHT, 1)
+        if selected is not None:
+            active_corner = editor.object_grab["corner"] if editor.object_grab else None
             draw_object_outline(
                 surface,
                 layout,
-                active[0],
-                active[1],
+                selected[0],
+                selected[1],
                 HIGHLIGHT,
                 2,
-                handles=active[0] != KIND_NOZZLE,
+                handles=selected[0] != KIND_NOZZLE,
                 active_corner=active_corner,
             )
-        # 光标压在某个角把手上：把那个对象的四角也画出来，并高亮要拉的那个
-        handle = editor.hovered_handle
-        if handle is not None and (active is None or handle[1] is not active[1]):
-            draw_object_outline(
-                surface, layout, handle[0], handle[1], DIM_TEXT, 1, handles=True, active_corner=handle[2]
-            )
-        # 光标下的另一个对象只是淡描边，避免和选中项抢视线
+        # 光标下的对象只给淡描边，不画把手
         hovered = editor.hovered
-        if (
-            hovered is not None
-            and (active is None or hovered[1] is not active[1])
-            and (handle is None or hovered[1] is not handle[1])
-        ):
+        if hovered is not None and not any(hovered[1] is entry for _, entry in editor.selection):
             draw_object_outline(surface, layout, hovered[0], hovered[1], DIM_TEXT, 1)
 
 
@@ -278,15 +279,15 @@ def _arrow_head(surface: pygame.Surface, tip: tuple, direction: tuple, color: tu
 def nozzle_range_rect(layout: Layout, entry: dict) -> pygame.Rect:
     """风区（range）占的一格宽、length 格高的矩形。"""
     x, y = entry["pos"]
-    length = max(0, int(entry.get("range", 0)))
-    up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
+    length = max(0.0, float(entry.get("range", 0)))
+    up = float(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
     bottom = y if up else y - length
-    return layout.world_rect(x - 0.5, bottom, 1.0, max(1.0, float(length)))
+    return layout.world_rect(x - 0.5, bottom, 1.0, max(1.0, length))
 
 
 def draw_nozzle_range(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
     """范围用虚线框标出来。"""
-    if int(entry.get("range", 0)) <= 0:
+    if float(entry.get("range", 0)) <= 0:
         return
     rect = nozzle_range_rect(layout, entry)
     corners = [rect.topleft, rect.topright, rect.bottomright, rect.bottomleft]
@@ -296,7 +297,7 @@ def draw_nozzle_range(surface: pygame.Surface, layout: Layout, entry: dict) -> N
 
 def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
     """力度用一条从 pos 指向目标的红色尺寸线，只在目标端有一个箭头。"""
-    power = int(entry.get("power", 0))
+    power = float(entry.get("power", 0))
     if power == 0:
         return
     center_x = layout.left + entry["pos"][0] * layout.tile

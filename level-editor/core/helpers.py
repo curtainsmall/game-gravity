@@ -34,7 +34,7 @@ def nozzle_box(entry: dict) -> dict:
     向上的喷口坐在 y 之上，向下的挂在 y 之下，和游戏里风区的朝向一致。
     """
     x, y = entry["pos"]
-    up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
+    up = float(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
     return {"pos": [x - 0.5, y if up else y - 1], "size": [1.0, 1.0]}
 
 
@@ -62,6 +62,15 @@ def clamp_int(value, low: int, high: int, fallback: int) -> int:
     """读关卡尺寸：缺字段、非数字或越界都夹回合法区间，坏数据不至于拖垮画布。"""
     try:
         number = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(low, min(high, number))
+
+
+def clamp_float(value, low: float, high: float, fallback: float) -> float:
+    """读浮点设置：缺字段、非数字或越界都夹回合法区间。"""
+    try:
+        number = float(value)
     except (TypeError, ValueError):
         return fallback
     return max(low, min(high, number))

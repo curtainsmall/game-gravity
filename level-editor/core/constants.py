@@ -104,11 +104,15 @@ TOOL_COLORS = {
 # ---- 默认值 ----
 NOZZLE_DEFAULT_POWER = 7
 NOZZLE_DEFAULT_RANGE = 5
-JUMP_HEIGHT_DEFAULT = 4
+JUMP_HEIGHT_DEFAULT = 2
 JUMP_HEIGHT_MIN = 0   # 上限不是常数：最多到「关卡高度 - 1」，见 Editor._jump_height_limit
 
-# 关卡设置里的字段数：名称、宽度、高度、初始跳高、背景
-SETTINGS_FIELD_COUNT = 5
+# 水平移动速度（方块/秒）：关卡可以覆盖
+MOVE_SPEED_DEFAULT = 8.0
+MOVE_SPEED_MIN, MOVE_SPEED_MAX = 0.5, 40.0
+
+# 关卡设置里的字段数：名称、宽度、高度、初始跳高、移动速度、背景
+SETTINGS_FIELD_COUNT = 6
 BACKGROUND_MAX_LENGTH = 120
 
 # ---- 对象种类 ----
@@ -123,6 +127,7 @@ KIND_DESTINATION = "destination"
 KIND_TEXTURE = "texture"
 MIN_SIZE = 0.05   # 对象最小宽高（格），防止拖成一条看不见的线
 HANDLE_PIXELS = 14  # 对象四角的缩放热区半径（像素）
+NUMBER_TEXT_MAX_LENGTH = 8  # 属性面板里数字字段最多敲几个字符（含负号和小数点）
 
 # 关卡数据里带 name 字段、会被别的对象引用的种类
 KIND_HAS_NAME = (KIND_MOVABLE, KIND_BUTTON, KIND_ITEM)

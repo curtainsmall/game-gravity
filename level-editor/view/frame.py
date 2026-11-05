@@ -9,7 +9,7 @@ from view.canvas import draw_canvas, draw_ruler
 from view.chrome import draw_create_menu, draw_header, draw_view_menu
 from view.layout import Layout
 from view.modals import draw_quit_confirm, draw_settings, draw_startup
-from view.panel import draw_detail_panel
+from view.panel import draw_detail_panel, draw_selection_panel
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -28,6 +28,8 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_view_menu(surface, editor, font)
     if editor.dialog is not None:
         draw_detail_panel(surface, editor, font)
+    elif len(editor.selection) > 1:
+        draw_selection_panel(surface, editor, font)
     if editor.settings is not None:
         draw_settings(surface, editor, font)
     if editor.startup:

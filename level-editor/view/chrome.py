@@ -98,7 +98,8 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
     head = (
         f"{display_path(editor.path)}{marker}   缩放: {zoom_text}   "
         f"尺寸 {editor.level.width}×{editor.level.height}   "
-        f"跳高: {editor.level.jump_height}   撤销 {len(editor.undo_stack)} 步"
+        f"跳高: {editor.level.jump_height}   速度: {editor.level.move_speed:g}   "
+        f"撤销 {len(editor.undo_stack)} 步"
     )
     surface.blit(font.render(head, True, TEXT), (MARGIN, 8))
 
@@ -111,7 +112,7 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
     else:
         hint = (
             "右键 新建对象   左键 设置   数字直接敲   Delete 删除   滚轮缩放   中键平移   "
-            "Ctrl-Z/S/O/N 撤销/保存/打开/新建"
+            "Shift 吸附   Ctrl 加选/等比   Alt 穿透"
         )
     surface.blit(font.render(hint, True, DIM_TEXT), (MARGIN, 30))
 

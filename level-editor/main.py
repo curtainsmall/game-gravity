@@ -26,6 +26,16 @@ from view.layout import Layout
 from view.modals import quit_geometry, startup_rects
 from view.panel import detail_panel_rect, detail_panel_width
 
+MODIFIER_KEYS = (pygame.K_LCTRL, pygame.K_RCTRL, pygame.K_LSHIFT, pygame.K_RSHIFT)
+
+
+def sync_modifiers(editor: Editor) -> None:
+    """把 Shift / Ctrl / Alt 的当前状态同步给编辑器。"""
+    mods = pygame.key.get_mods()
+    editor.snapping = bool(mods & pygame.KMOD_SHIFT)
+    editor.keep_ratio = bool(mods & pygame.KMOD_CTRL)
+    editor.click_through = bool(mods & pygame.KMOD_ALT)
+
 
 def run() -> None:
     pygame.init()
@@ -36,8 +46,9 @@ def run() -> None:
     editor = Editor()
 
     running = True
+    panel_open = lambda: editor.dialog is not None or len(editor.selection) > 1
     while running:
-        reserved_right = 0 if editor.dialog is None else detail_panel_width(screen) + MARGIN
+        reserved_right = 0 if not panel_open() else detail_panel_width(screen) + MARGIN
         layout = Layout(
             screen.get_size(),
             editor.zoom,
@@ -56,7 +67,7 @@ def run() -> None:
             elif event.type == pygame.VIDEORESIZE:
                 size = (max(MIN_WINDOW[0], event.w), max(MIN_WINDOW[1], event.h))
                 screen = pygame.display.set_mode(size, pygame.RESIZABLE)
-                reserved_right = 0 if editor.dialog is None else detail_panel_width(screen) + MARGIN
+                reserved_right = 0 if not panel_open() else detail_panel_width(screen) + MARGIN
                 layout = Layout(
                     size,
                     editor.zoom,
@@ -120,6 +131,10 @@ def run() -> None:
                     if event.button == 1 and handle_view_menu_click(editor, event.pos):
                         continue
                     editor.view_menu_open = False
+            elif event.type in (pygame.KEYDOWN, pygame.KEYUP) and event.key in MODIFIER_KEYS:
+                # 修饰键按下/松开也算一次变化：用最近的鼠标位置把拖动重算一遍
+                sync_modifiers(editor)
+                editor.refresh_grab(layout)
             elif editor.menu_open:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     editor.menu_open = False
@@ -132,9 +147,12 @@ def run() -> None:
                     if event.button == 1:
                         handle_toolbar(editor, event.pos)
             elif event.type == pygame.MOUSEMOTION:
-                editor.snapping = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
+                sync_modifiers(editor)
                 if editor.object_grab is not None:
                     editor.update_object_grab(event.pos, layout)
+                    continue
+                if editor.marquee_start is not None:
+                    editor.update_marquee(event.pos, layout)
                     continue
                 editor.update_hover(event.pos, layout)
                 if editor.pan_drag is not None:
@@ -156,7 +174,7 @@ def run() -> None:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button in (4, 5):
                     continue
-                if editor.dialog is not None and detail_panel_rect(screen).collidepoint(event.pos):
+                if panel_open() and detail_panel_rect(screen).collidepoint(event.pos):
                     if event.button == 1:
                         handle_detail_click(screen, editor, event.pos)
                     continue
@@ -165,7 +183,7 @@ def run() -> None:
                 if event.button == 2:
                     editor.pan_drag = (event.pos[0], event.pos[1], editor.pan_x, editor.pan_y)
                     continue
-                editor.snapping = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
+                sync_modifiers(editor)
                 if editor.picking_offset:
                     if event.button == 1:
                         editor.finish_pick_offset(layout.world_point(event.pos))
@@ -182,15 +200,16 @@ def run() -> None:
                     editor.press_canvas(event.pos, layout)
                 elif event.button == 1:
                     editor.update_hover(event.pos, layout)
-                    # 对象上按下就是拖：移动或缩放；没拖成的话松手时再开面板
+                    # 对象上按下就是拖（移动/缩放）；空地上按下就拉框选
                     if not editor.begin_object_grab(event.pos, layout):
-                        editor.open_dialog()
+                        editor.begin_marquee(event.pos, layout)
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 2:
                     editor.pan_drag = None
                 elif event.button == 1 and editor.object_grab is not None:
-                    if not editor.end_object_grab():
-                        editor.open_dialog()
+                    editor.end_object_grab()
+                elif event.button == 1 and editor.marquee_start is not None:
+                    editor.finish_marquee(layout)
                 elif event.button == 1 and editor.drag_start is not None:
                     editor.finish_drag()
             elif event.type == pygame.KEYDOWN:
@@ -208,8 +227,8 @@ def run() -> None:
                         editor.cancel_pick_offset()
                     elif editor.name_focused:
                         editor.blur_name()
-                    elif editor.dialog is not None:
-                        editor.close_dialog()
+                    elif editor.selection:
+                        editor.clear_selection()
                     elif editor.request_quit():
                         running = False
                 elif editor.name_focused:
@@ -221,15 +240,15 @@ def run() -> None:
                     elif event.unicode and event.unicode.isprintable():
                         editor.type_name(event.unicode)
                 elif event.key == pygame.K_DELETE:
-                    if editor.dialog is not None:
-                        editor.delete_entry(editor.dialog["kind"], editor.dialog["entry"])
+                    if editor.selection:
+                        editor.delete_selection()
                     elif editor.hovered is not None:
                         kind, entry = editor.hovered
                         editor.delete_entry(kind, entry)
                 elif editor.dialog is not None and event.unicode and (
-                    event.unicode.isdigit() or event.unicode == "-"
+                    event.unicode.isdigit() or event.unicode in "-."
                 ):
-                    # 数字字段：直接敲数字输入，点加减或按方向键仍是 ±1
+                    # 数字字段：直接敲数字输入（可以带小数点和负号），点加减或按方向键仍是 ±1
                     editor.type_dialog_number(event.unicode)
                 elif editor.dialog is not None and event.key == pygame.K_BACKSPACE:
                     editor.erase_dialog_number()
