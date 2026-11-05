@@ -6,6 +6,7 @@ import pygame
 
 from controller.controller_system import ControllerSystem
 from controller.input_source import InputSource
+from core.game_object import GameObjectKind
 from item.pickup_system import PickupSystem
 from physics.physics_system import PhysicsSystem
 from renderer.render_system import RenderSystem
@@ -104,6 +105,14 @@ class Scene:
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.physics_system.update(self.objects, self.world, delta_seconds)
         self.pickup_system.update(self.objects)
+
+    @property
+    def destination_reached(self) -> bool:
+        """玩家是否碰到终点：终点是传感器，物理每步会把 interaction_state 写好。"""
+        return any(
+            game_object.kind == GameObjectKind.DESTINATION and game_object.interaction_state
+            for game_object in self.objects
+        )
 
     def draw(self, surface: pygame.Surface) -> None:
         """每帧一次：绘制。镜头跟随玩家水平居中。"""
