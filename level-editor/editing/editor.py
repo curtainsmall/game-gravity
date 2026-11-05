@@ -22,11 +22,13 @@ from core.constants import (
     KIND_NOZZLE,
     KIND_PLANK,
     KIND_PLAYER,
+    KIND_TEXTURE,
     KIND_TITLES,
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
     LEVEL_BACKGROUND_NAME,
     LEVEL_SCENE_NAME,
+    LEVEL_TEXTURES_DIR,
     LEVEL_WIDTH_MAX,
     LEVEL_WIDTH_MIN,
     MARGIN,
@@ -34,6 +36,8 @@ from core.constants import (
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_RANGE,
     ROWS,
+    TEXTURE_HANDLE_PIXELS,
+    TEXTURE_MIN_SIZE,
     TOOL_BLOCK,
     TOOL_BUTTON,
     TOOL_DEST,
@@ -42,19 +46,23 @@ from core.constants import (
     TOOL_PLANK,
     TOOL_PLAYER,
     TOOL_SPECS,
+    TOOL_TEXTURE,
 )
 from core.helpers import (
     clamp_int,
     display_path,
     entry_contains,
     level_base_dir,
+    level_texture_dir,
     normalize_drag,
     nozzle_box,
     number_text,
     resolve_background,
+    resolve_texture,
 )
 from core.level import Level, dump_level
-from editing.files import ask_background_path, ask_level_folder
+from editing.files import ask_image_path, ask_level_folder
+from view.texture import image_size, texture_rect
 
 if TYPE_CHECKING:
     from view.layout import Layout
@@ -80,6 +88,10 @@ class Editor:
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer: str | None = None   # 正在键盘输入的数字字段，None 表示没在输入
+        self.texture_grab: dict | None = None   # 正在用鼠标拖贴图：移动或缩放
+        self.view_menu_open = False
+        # 视图设置：只影响编辑器自己的显示，从不写进关卡数据、不落盘
+        self.view_settings: dict = {"background": True}
         self.menu_open = False
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
@@ -122,6 +134,16 @@ class Editor:
                 return entry
         return None
 
+    def texture_at(self, point: tuple):
+        """贴图是自由矩形：按世界坐标判定。后加的盖住先加的，所以倒序找。"""
+        x, y = point
+        for entry in reversed(self.level.textures):
+            left, bottom = entry["pos"]
+            width, height = entry.get("size", [1.0, 1.0])
+            if left <= x <= left + width and bottom <= y <= bottom + height:
+                return entry
+        return None
+
     def update_hover(self, position: tuple, layout: Layout) -> None:
         inside = (
             layout.left <= position[0] < layout.left + layout.width
@@ -136,6 +158,11 @@ class Editor:
             self.hovered = (KIND_NOZZLE, nozzle)
         elif self.hover is not None:
             self.hovered = self.object_at(self.hover)
+        if self.hovered is None:
+            # 贴图是背景皮，排在最后选：格子里的对象优先
+            texture = self.texture_at(layout.world_point(position))
+            if texture is not None:
+                self.hovered = (KIND_TEXTURE, texture)
 
     # ---- 创建 / 删除 -----------------------------------------------
     def begin_drag(self, cell: tuple) -> None:
@@ -149,7 +176,7 @@ class Editor:
         """新建状态里的左键按下：光标下已有对象就只提示、不新建。
 
         喷口是点、不占格，所以喷口工具允许压在别的对象上放；其余工具遇到
-        任何已有对象（包括喷口）都不新建，免得一次单击把该改的对象盖掉。
+        任何已有对象都不新建，免得一次单击把该改的对象盖掉。
         """
         self.update_hover(position, layout)
         if self.hovered is not None:
@@ -232,6 +259,8 @@ class Editor:
             self.level.items = [e for e in self.level.items if e is not entry]
         elif kind == KIND_NOZZLE:
             self.level.nozzles = [e for e in self.level.nozzles if e is not entry]
+        elif kind == KIND_TEXTURE:
+            self.level.textures = [e for e in self.level.textures if e is not entry]
         elif kind == KIND_PLAYER:
             self.level.player = None
         elif kind == KIND_DESTINATION:
@@ -269,6 +298,7 @@ class Editor:
         self.startup = False
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
+        self.drag_start = self.drag_current = None
         self.status = "新建关卡（尚未保存）"
 
     def open_level(self) -> None:
@@ -298,10 +328,11 @@ class Editor:
         self.startup = False
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
+        self.drag_start = self.drag_current = None
         self.status = f"已打开 {display_path(folder)}"
 
     def save(self) -> None:
-        """保存到关卡文件夹：scene.json 放数据，背景图复制成 background.png。"""
+        """保存到关卡文件夹：scene.json 放数据，背景与贴图复制进文件夹。"""
         folder = self.path
         if folder is None:
             folder = ask_level_folder("选择关卡文件夹（文件夹名就是关卡名）")
@@ -314,6 +345,7 @@ class Editor:
         try:
             os.makedirs(folder, exist_ok=True)
             self.store_background(folder)
+            self.store_textures(folder)
             with open(
                 os.path.join(folder, LEVEL_SCENE_NAME), "w", encoding="utf-8", newline="\n"
             ) as file:
@@ -339,18 +371,176 @@ class Editor:
             shutil.copyfile(source, target)
         self.level.background = LEVEL_BACKGROUND_NAME
 
+    def store_textures(self, folder: str) -> None:
+        """贴图也不链接：复制进关卡文件夹的 textures/，schema 里只记相对路径。"""
+        textures_dir = os.path.join(folder, LEVEL_TEXTURES_DIR)
+        for entry in self.level.textures:
+            value = entry.get("image")
+            if not value:
+                continue
+            source = resolve_texture(value, folder)
+            if source is None:
+                entry["image"] = ""
+                continue
+            name = os.path.basename(source)
+            target = os.path.join(textures_dir, name)
+            if os.path.abspath(source) != os.path.abspath(target):
+                os.makedirs(textures_dir, exist_ok=True)
+                shutil.copyfile(source, target)
+            entry["image"] = f"{LEVEL_TEXTURES_DIR}/{name}"
+
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:
         """右键弹出新建菜单，光标位置就是菜单的左上角。"""
         self.menu_open = True
         self.menu_origin = (position[0], position[1])
 
-    def start_creating(self, tool: int) -> None:
+    def start_creating(self, tool: int, layout: Layout | None = None) -> None:
+        # 贴图不进创建模式：直接弹文件选择、导进来就完事
+        if tool == TOOL_TEXTURE:
+            self.menu_open = False          # 先把右键菜单收掉，文件框别压在菜单上
+            if layout is not None:
+                self.import_texture(layout)
+            return
         self.tool = tool
         self.creating = True
         self.menu_open = False
         action = "左键拖出矩形" if TOOL_SPECS[tool][1] == "rect" else "左键单击放置"
         self.status = f"新建：{TOOL_SPECS[tool][0]}（{action}，右键退出）"
+
+    # ---- 贴图 -------------------------------------------------------
+    def import_texture(self, layout: Layout) -> None:
+        """直接导入一张贴图：复制进 textures/，贴着右键的位置放下。
+
+        图片按游戏比例（可玩行 400px）换算成世界格尺寸，位置和大小之后在详情里调。
+        """
+        path = ask_image_path("导入贴图", level_texture_dir(self.path))
+        if not path:
+            self.status = "导入贴图已取消"
+            return
+        pixels = image_size(path)
+        if pixels is None:
+            self.status = f"图片读不出来：{os.path.basename(path)}"
+            return
+        tile = max(1.0, layout.game_tile)
+        width = max(TEXTURE_MIN_SIZE, round(pixels[0] / tile, 2))
+        height = max(TEXTURE_MIN_SIZE, round(pixels[1] / tile, 2))
+        at = layout.world_point(self.menu_origin)
+        try:
+            image = self.import_texture_image(path)
+        except OSError as error:
+            self.status = f"复制贴图失败：{error}"
+            return
+        self.push_undo()
+        self.dirty = True
+        self.creating = False
+        self.level.textures.append(
+            {
+                "pos": [round(at[0], 2), round(at[1], 2)],
+                "size": [width, height],
+                "image": image,
+                "smooth": False,
+            }
+        )
+        self.status = f"已导入贴图 {os.path.basename(path)}（{width}×{height} 格）"
+
+    def import_texture_image(self, path: str) -> str:
+        """把关卡外的图片复制进 textures/，返回 schema 里该写的路径。
+
+        关卡还没保存时没有文件夹可放，先记绝对路径，保存时 store_textures 再复制。
+        """
+        if not self.path:
+            return path.replace(os.sep, "/")
+        name = os.path.basename(path)
+        target_dir = os.path.join(self.path, LEVEL_TEXTURES_DIR)
+        target = os.path.join(target_dir, name)
+        if os.path.abspath(path) != os.path.abspath(target):
+            os.makedirs(target_dir, exist_ok=True)
+            shutil.copyfile(path, target)
+        return f"{LEVEL_TEXTURES_DIR}/{name}"
+
+    # ---- 贴图的鼠标拖动 / 缩放 -------------------------------------
+    def texture_corner_at(self, layout: Layout, entry: dict, position: tuple) -> str | None:
+        """位置离哪个角够近：够近就缩放那个角，否则整体移动。"""
+        rect = texture_rect(layout, entry)
+        for name, point in (
+            ("bl", rect.bottomleft),
+            ("br", rect.bottomright),
+            ("tl", rect.topleft),
+            ("tr", rect.topright),
+        ):
+            if (
+                abs(position[0] - point[0]) <= TEXTURE_HANDLE_PIXELS
+                and abs(position[1] - point[1]) <= TEXTURE_HANDLE_PIXELS
+            ):
+                return name
+        return None
+
+    def begin_texture_grab(self, position: tuple, layout: Layout) -> bool:
+        """左键落在贴图上就准备拖：四角是缩放，其余区域是移动。"""
+        if self.hovered is None or self.hovered[0] != KIND_TEXTURE:
+            return False
+        entry = self.hovered[1]
+        self.push_undo()                   # 先记下拖动前的状态，没动过就弹掉
+        self.texture_grab = {
+            "entry": entry,
+            "corner": self.texture_corner_at(layout, entry, position),
+            "start": layout.world_point(position),
+            "pos": list(entry["pos"]),
+            "size": list(entry.get("size", [1.0, 1.0])),
+            "moved": False,
+        }
+        return True
+
+    def update_texture_grab(self, position: tuple, layout: Layout) -> None:
+        grab = self.texture_grab
+        if grab is None:
+            return
+        point = layout.world_point(position)
+        dx = point[0] - grab["start"][0]
+        dy = point[1] - grab["start"][1]
+        if not grab["moved"] and abs(dx) * layout.tile < 1 and abs(dy) * layout.tile < 1:
+            return                          # 还不到 1 像素，当作抖动
+        grab["moved"] = True
+        self.dirty = True
+        entry = grab["entry"]
+        x, y = grab["pos"]
+        width, height = grab["size"]
+        corner = grab["corner"]
+        if corner is None:
+            entry["pos"] = [round(x + dx, 2), round(y + dy, 2)]
+            return
+        left, right, bottom, top = x, x + width, y, y + height
+        if "l" in corner:
+            left = point[0]
+        if "r" in corner:
+            right = point[0]
+        if "b" in corner:
+            bottom = point[1]
+        if "t" in corner:
+            top = point[1]
+        entry["pos"] = [round(min(left, right), 2), round(min(bottom, top), 2)]
+        entry["size"] = [
+            max(TEXTURE_MIN_SIZE, round(abs(right - left), 2)),
+            max(TEXTURE_MIN_SIZE, round(abs(top - bottom), 2)),
+        ]
+
+    def end_texture_grab(self) -> bool:
+        """松开鼠标：拖过就算一步编辑；没动过返回 False，让调用方去开详情面板。"""
+        grab = self.texture_grab
+        self.texture_grab = None
+        if grab is None:
+            return False
+        if not grab["moved"]:
+            if self.undo_stack:
+                self.undo_stack.pop()      # 只是点了一下，把刚压进去的撤销弹掉
+            return False
+        entry = grab["entry"]
+        self.status = (
+            f"贴图 ({entry['pos'][0]}, {entry['pos'][1]}) "
+            f"{entry['size'][0]}×{entry['size'][1]}"
+        )
+        return True
 
     def stop_creating(self) -> None:
         self.creating = False
@@ -375,6 +565,15 @@ class Editor:
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
+
+    def select(self, kind: str, entry) -> None:
+        """直接选中一个对象并打开详情面板。"""
+        self.dialog = {"kind": kind, "entry": entry}
+        self.dialog_field = 0
+        self.picking_offset = False
+        self.name_focused = False
+        self.number_buffer = None
+        self.status = f"已选中{KIND_TITLES.get(kind, '对象')}"
 
     def close_dialog(self) -> None:
         self.dialog = None
@@ -443,9 +642,9 @@ class Editor:
         entry = self.dialog["entry"]
         pos = entry["pos"]
         rows = [("位置 x", number_text(pos[0])), ("位置 y", number_text(pos[1]))]
-        if kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE):
+        if kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE, KIND_TEXTURE):
             size = entry.get("size", [1, 1])
-            rows += [("宽度", str(size[0])), ("高度", str(size[1]))]
+            rows += [("宽度", number_text(size[0])), ("高度", number_text(size[1]))]
         if kind == KIND_MOVABLE:
             offset = entry.get("offset", [0, -3])
             sources = entry.get("sources", [])
@@ -464,6 +663,8 @@ class Editor:
                 ("力度", str(entry.get("power", NOZZLE_DEFAULT_POWER))),
                 ("长度", str(entry.get("range", NOZZLE_DEFAULT_RANGE))),
             ]
+        elif kind == KIND_TEXTURE:
+            rows.append(("图片", entry.get("image") or "（未选择）"))
         return rows
 
     def dialog_title(self) -> str:
@@ -528,7 +729,7 @@ class Editor:
             return entry["pos"][0]
         if field == 1:
             return entry["pos"][1]
-        if kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE) and field in (2, 3):
+        if kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE, KIND_TEXTURE) and field in (2, 3):
             return entry.get("size", [1, 1])[field - 2]
         if kind == KIND_MOVABLE and field in (4, 5):
             return entry.get("offset", [0, -3])[field - 4]
@@ -543,6 +744,15 @@ class Editor:
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
         pos = entry["pos"]
+        if kind == KIND_TEXTURE:
+            # 贴图不吸格子：位置和尺寸都保留两位小数
+            if field in (0, 1):
+                pos[field] = round(value, 2)
+            elif field in (2, 3):
+                size = list(entry.get("size", [1.0, 1.0]))
+                size[field - 2] = max(TEXTURE_MIN_SIZE, round(value, 2))
+                entry["size"] = size
+            return
         if field == 0:
             if kind == KIND_NOZZLE:
                 # 喷口是点：底边中点始终落在半格上
@@ -655,13 +865,27 @@ class Editor:
         """挑一张背景图：保存时才复制进关卡文件夹，复制后固定叫 background.png。"""
         if self.settings is None:
             return
-        path = ask_background_path(level_base_dir(self.path))
+        path = ask_image_path("选择背景图", level_base_dir(self.path))
         if not path:
             self.status = "选择背景已取消"
             return
         self.settings["background"] = path.replace(os.sep, "/")
         self.settings_field = 4
         self.status = "背景已选：保存时复制到关卡文件夹并命名为 background.png"
+
+    def pick_texture_image(self) -> None:
+        """给当前贴图挑一张图；保存时复制进关卡文件夹的 textures/。"""
+        if self.dialog is None or self.dialog["kind"] != KIND_TEXTURE:
+            return
+        path = ask_image_path("选择贴图", level_texture_dir(self.path))
+        if not path:
+            self.status = "选择贴图已取消"
+            return
+        self.push_undo()
+        self.dirty = True
+        self.dialog["entry"]["image"] = path.replace(os.sep, "/")
+        self.number_buffer = None
+        self.status = "贴图已选：保存时复制进关卡文件夹的 textures/"
 
     def adjust_settings(self, delta: int) -> None:
         if self.settings is None:

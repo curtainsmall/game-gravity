@@ -18,6 +18,7 @@ from core.constants import (
     TOOLBAR_ITEMS,
     TOOL_ORDER,
     TOOL_SPECS,
+    VIEW_MENU_WIDTH,
 )
 from core.helpers import display_path
 from view.layout import Layout
@@ -33,6 +34,51 @@ def toolbar_rects() -> list:
         rects.append((pygame.Rect(x, HEADER - 34, width, TOOLBAR_HEIGHT), label, action))
         x += width + 8
     return rects
+
+
+def view_menu_rects() -> list:
+    """工具栏「视图」按钮下方的菜单：每行是 (矩形, 设置键, 标题)。
+
+    这里的东西只影响编辑器自己的显示，不进关卡数据、不写盘。
+    """
+    anchor = next(rect for rect, _, action in toolbar_rects() if action == "view")
+    items = [("background", "显示背景")]
+    return [
+        (
+            pygame.Rect(
+                anchor.left,
+                anchor.bottom + 2 + index * ROW_HEIGHT,
+                VIEW_MENU_WIDTH,
+                ROW_HEIGHT,
+            ),
+            key,
+            label,
+        )
+        for index, (key, label) in enumerate(items)
+    ]
+
+
+def draw_view_menu(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    rects = view_menu_rects()
+    border = rects[0][0].unionall([rect for rect, _, _ in rects])
+    pygame.draw.rect(surface, BUTTON_BG, border)
+    pygame.draw.rect(surface, DIALOG_BORDER, border, 1)
+    mouse = pygame.mouse.get_pos()
+    for rect, key, label in rects:
+        if rect.collidepoint(mouse):
+            pygame.draw.rect(surface, (100, 100, 110), rect)
+        mark = "[x]" if editor.view_settings.get(key, True) else "[ ]"
+        text = font.render(f"{mark} {label}", True, TEXT)
+        surface.blit(text, (rect.left + 6, rect.centery - text.get_height() // 2))
+
+
+def handle_view_menu_click(editor: Editor, position: tuple) -> bool:
+    """点菜单里的一行就切换那个视图开关；返回点是否落在菜单里。"""
+    for rect, key, _ in view_menu_rects():
+        if rect.collidepoint(position):
+            editor.view_settings[key] = not editor.view_settings.get(key, True)
+            return True
+    return False
 
 
 def create_menu_rects(origin: tuple, window_size: tuple) -> list:

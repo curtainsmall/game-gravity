@@ -72,6 +72,25 @@ class Layout:
             self.rows + 1 - (position[1] - self.top) / self.tile,
         )
 
+    def world_rect(self, x: float, y: float, width: float, height: float) -> pygame.Rect:
+        """自由矩形（左下角 + 宽高，单位格，可小数）→ 屏幕矩形。
+
+        贴图这类不吸格子的对象用它；别套 cell_rect，那里的 (size - 1) 是给整数格留的补偿。
+        """
+        return pygame.Rect(
+            round(self.left + x * self.tile),
+            round(self.top + (self.rows - (y + height)) * self.tile),
+            max(1, round(width * self.tile)),
+            max(1, round(height * self.tile)),
+        )
+
+    def world_point(self, position: tuple) -> tuple:
+        """屏幕坐标 → 世界连续坐标（左下角为原点，y 向上，单位格）。"""
+        return (
+            (position[0] - self.left) / self.tile,
+            self.rows - (position[1] - self.top) / self.tile,
+        )
+
     def cell_rect(self, x: float, y: float, size: tuple = (1, 1)) -> pygame.Rect:
         left = self.left + (x - 0.5 if size[0] < 1 else x) * self.tile
         top = self.top + (self.rows - y - (size[1] - 1)) * self.tile

@@ -53,3 +53,13 @@ class Viewport:
             total_row_count(world),
             self.origin_y,
         )
+
+    def playable_rect(self, world: World) -> pygame.Rect:
+        """可玩区（0..width, 0..height 格）在屏幕上的矩形：贴图超出这块就裁掉。"""
+        tile = self.pixels_per_tile
+        return pygame.Rect(
+            round(-self.left_in_blocks * tile),
+            round(self.origin_y + tile),
+            max(1, round(world.width_in_blocks * tile)),
+            max(1, round(world.height_in_blocks * tile)),
+        )

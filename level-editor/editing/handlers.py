@@ -8,6 +8,7 @@ from view.chrome import create_menu_rects, toolbar_rects
 from view.modals import settings_geometry
 from view.panel import (
     detail_button_rects,
+    detail_image_rect,
     detail_pick_rect,
     detail_row_rects,
     detail_slot_rect,
@@ -32,14 +33,16 @@ def handle_toolbar(editor: Editor, position: tuple) -> str | None:
             editor.undo()
         elif action == "settings":
             editor.open_settings()
+        elif action == "view":
+            editor.view_menu_open = not editor.view_menu_open
         return action
     return None
 
 
-def handle_create_menu(editor: Editor, position: tuple, window_size: tuple) -> bool:
+def handle_create_menu(editor: Editor, position: tuple, window_size: tuple, layout) -> bool:
     for rect, tool in create_menu_rects(editor.menu_origin, window_size):
         if rect.collidepoint(position):
-            editor.start_creating(tool)
+            editor.start_creating(tool, layout)
             return True
     return False
 
@@ -58,6 +61,12 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
     if pick_rect is not None and pick_rect.collidepoint(position):
         editor.blur_name()
         editor.begin_pick_offset()
+        return
+    image_rect = detail_image_rect(surface, editor)
+    if image_rect is not None and image_rect.collidepoint(position):
+        editor.blur_name()
+        editor.blur_number()
+        editor.pick_texture_image()
         return
     name_rect = detail_slot_rect(surface, editor, "name")
     if name_rect is not None and name_rect.collidepoint(position):

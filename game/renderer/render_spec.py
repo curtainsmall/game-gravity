@@ -1,4 +1,4 @@
-"""RenderSpec：占位图形的描述。纯数据，本阶段不做绘制。"""
+"""RenderSpec：占位图形与贴图的描述。纯数据，行为在渲染系统里。"""
 
 from enum import StrEnum
 
@@ -35,6 +35,8 @@ class RenderSpec:
         placeholder_direction: int = 1,
         placeholder_face: PlaceholderFace = PlaceholderFace.UP,
         placeholder_has_axis: bool = False,
+        texture_path: str | None = None,
+        texture_smooth: bool = False,
     ) -> None:
         self.placeholder_shape: PlaceholderShape = placeholder_shape
         self.placeholder_size_in_blocks: tuple[float, float] = placeholder_size_in_blocks
@@ -43,3 +45,5 @@ class RenderSpec:
         self.placeholder_direction: int = placeholder_direction    # 三角形朝向：+1 上，-1 下
         self.placeholder_face: PlaceholderFace = placeholder_face  # 棱台窄端朝向
         self.placeholder_has_axis: bool = placeholder_has_axis      # 沿 body 中轴画虚线
+        self.texture_path: str | None = texture_path                # 有图就画图，占位形状退到兜底
+        self.texture_smooth: bool = texture_smooth                  # 平滑缩放（像素画应关掉）

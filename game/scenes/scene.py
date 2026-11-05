@@ -20,6 +20,7 @@ from world.level import (
     build_items,
     build_movable_blocks,
     build_player,
+    build_textures,
     build_world,
     jump_height_of,
     load_level_file,
@@ -60,14 +61,15 @@ class Scene:
         buttons = build_buttons(level_definition)
         triggers_by_name = {button.name: button for button in buttons if button.name}
         objects = (
-            build_blocks(level_definition)
+            build_blocks(level_definition)                 # 方块与木板
             + build_movable_blocks(level_definition, triggers_by_name)
+            + build_boundaries(world)                      # 地面/天花板/墙
+            + build_textures(level_definition, base_dir)   # 贴图压在所有方块之上
             + build_items(level_definition)
             + buttons
             + build_nozzles(level_definition)
             + build_destination(level_definition)
-            + players
-            + build_boundaries(world)
+            + players                                      # 玩家在最上面
         )
         scene = cls(world=world, objects=objects)
         scene.player = players[0] if players else None

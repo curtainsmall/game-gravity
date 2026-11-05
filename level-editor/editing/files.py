@@ -19,7 +19,8 @@ def ask_level_folder(title: str, initial_dir: str = LEVELS_DIR) -> str | None:
     return folder or None
 
 
-def ask_background_path(initial_dir: str) -> str | None:
+def ask_image_path(title: str, initial_dir: str) -> str | None:
+    """挑一张图片（背景、贴图都用它）。"""
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -29,7 +30,7 @@ def ask_background_path(initial_dir: str) -> str | None:
     root.withdraw()
     try:
         path = filedialog.askopenfilename(
-            title="选择背景图", initialdir=initial_dir, filetypes=BACKGROUND_FILTERS
+            title=title, initialdir=initial_dir, filetypes=BACKGROUND_FILTERS
         )
     finally:
         root.destroy()

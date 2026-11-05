@@ -47,6 +47,10 @@ DIALOG_BORDER = (200, 200, 200)
 HIGHLIGHT = (255, 230, 120)
 BUTTON_BG = (70, 70, 78)
 PREVIEW = (255, 230, 120, 90)
+TEXTURE_COLOR = (150, 150, 170)
+HANDLE_COLOR = (255, 255, 255)
+TEXTURE_HANDLE_PIXELS = 10     # 贴图四角的缩放热区半径（像素）
+VIEW_MENU_WIDTH = 170          # 视图设置菜单宽度
 
 # ---- 新建菜单里的对象种类 ----
 (
@@ -58,7 +62,8 @@ PREVIEW = (255, 230, 120, 90)
     TOOL_NOZZLE,
     TOOL_PLAYER,
     TOOL_DEST,
-) = range(8)
+    TOOL_TEXTURE,
+) = range(9)
 
 TOOL_SPECS = {
     TOOL_BLOCK: ("方块", "rect"),
@@ -69,6 +74,7 @@ TOOL_SPECS = {
     TOOL_NOZZLE: ("喷口", "single"),
     TOOL_PLAYER: ("起点", "single"),
     TOOL_DEST: ("终点", "single"),
+    TOOL_TEXTURE: ("贴图", "import"),   # import：选图直接导入，不进创建模式
 }
 
 TOOL_ORDER = [
@@ -80,6 +86,7 @@ TOOL_ORDER = [
     TOOL_NOZZLE,
     TOOL_PLAYER,
     TOOL_DEST,
+    TOOL_TEXTURE,
 ]
 
 # 新建时预览框用的颜色：和画布里这种对象本身的颜色一致
@@ -92,6 +99,7 @@ TOOL_COLORS = {
     TOOL_NOZZLE: NOZZLE_COLOR,
     TOOL_PLAYER: PLAYER_COLOR,
     TOOL_DEST: DESTINATION_COLOR,
+    TOOL_TEXTURE: TEXTURE_COLOR,
 }
 
 # ---- 默认值 ----
@@ -113,6 +121,8 @@ KIND_ITEM = "item"
 KIND_NOZZLE = "nozzle"
 KIND_PLAYER = "player"
 KIND_DESTINATION = "destination"
+KIND_TEXTURE = "texture"
+TEXTURE_MIN_SIZE = 0.05   # 贴图最小宽高（格），防止拖成一条看不见的线
 
 # 关卡数据里带 name 字段、会被别的对象引用的种类
 KIND_HAS_NAME = (KIND_MOVABLE, KIND_BUTTON, KIND_ITEM)
@@ -127,6 +137,7 @@ KIND_TITLES = {
     KIND_NOZZLE: "喷口",
     KIND_PLAYER: "起点",
     KIND_DESTINATION: "终点",
+    KIND_TEXTURE: "贴图",
 }
 
 # ---- 路径 ----
@@ -140,6 +151,7 @@ LEVELS_DIR = os.path.join(ROOT, "assets", "levels")
 # 一个关卡 = 一个文件夹，文件夹名就是关卡名
 LEVEL_SCENE_NAME = "scene.json"            # 关卡数据
 LEVEL_BACKGROUND_NAME = "background.png"   # 背景图进来后固定叫这个名字
+LEVEL_TEXTURES_DIR = "textures"            # 贴图收在这个子目录里，不自动启用
 BACKGROUND_FILTERS = [("图片", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
 
 # ---- 界面尺寸 ----
@@ -149,6 +161,7 @@ TOOLBAR_ITEMS = [
     ("保存", "save", 56),
     ("撤销", "undo", 56),
     ("关卡设置", "settings", 88),
+    ("视图", "view", 56),
 ]
 
 TOOLBAR_HEIGHT = 24

@@ -13,6 +13,7 @@ from core.constants import (
     HIGHLIGHT,
     KIND_HAS_NAME,
     KIND_MOVABLE,
+    KIND_TEXTURE,
     MARGIN,
     ROW_HEIGHT,
     TEXT,
@@ -39,10 +40,10 @@ def detail_panel_rect(surface: pygame.Surface) -> pygame.Rect:
 
 
 def detail_slots(surface: pygame.Surface, editor: Editor) -> list:
-    """面板从上到下的槽位：('name', None) / ('row', 字段下标) / ('pick', None)。
+    """面板从上到下的槽位：('name', None) / ('row', 字段下标) / ('pick', None) / ('image', None)。
 
     有名字的对象最上面是名称输入框；可移动方块的「纵向偏移」下面插一个
-    「选择目标位置」按钮。
+    「选择目标位置」按钮；贴图的「图片」下面插一个「选择图片」按钮。
     """
     panel = detail_panel_rect(surface)
     count = len(editor.dialog_rows())
@@ -54,6 +55,8 @@ def detail_slots(surface: pygame.Surface, editor: Editor) -> list:
         slots.append(("row", index))
         if kind == KIND_MOVABLE and index == 5:
             slots.append(("pick", None))
+        if kind == KIND_TEXTURE and index == 4:
+            slots.append(("image", None))
     top = panel.top + 28
     bottom = panel.bottom - 34
     height = min(ROW_HEIGHT, max(16, (bottom - top) // max(1, len(slots))))
@@ -80,6 +83,10 @@ def detail_slot_rect(surface: pygame.Surface, editor: Editor, wanted: str) -> py
 
 def detail_pick_rect(surface: pygame.Surface, editor: Editor) -> pygame.Rect | None:
     return detail_slot_rect(surface, editor, "pick")
+
+
+def detail_image_rect(surface: pygame.Surface, editor: Editor) -> pygame.Rect | None:
+    return detail_slot_rect(surface, editor, "image")
 
 
 def detail_button_rects(surface: pygame.Surface) -> tuple:
@@ -148,3 +155,11 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
     delete_rect, close_rect = detail_button_rects(surface)
     draw_button(surface, font, delete_rect, "删除对象")
     draw_button(surface, font, close_rect, "关闭")
+
+    image_rect = detail_image_rect(surface, editor)
+    if image_rect is not None:
+        hovered = image_rect.collidepoint(pygame.mouse.get_pos())
+        pygame.draw.rect(surface, (100, 100, 110) if hovered else BUTTON_BG, image_rect)
+        pygame.draw.rect(surface, DIALOG_BORDER, image_rect, 1)
+        text = font.render("选择图片", True, TEXT)
+        surface.blit(text, (image_rect.left + 8, image_rect.centery - text.get_height() // 2))

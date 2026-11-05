@@ -20,6 +20,7 @@ from editing.handlers import (
     handle_settings_click,
     handle_toolbar,
 )
+from view.chrome import handle_view_menu_click
 from view.frame import draw
 from view.layout import Layout
 from view.modals import quit_geometry, startup_rects
@@ -112,16 +113,28 @@ def run() -> None:
                         editor.type_settings(event.unicode)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
+            elif editor.view_menu_open:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    editor.view_menu_open = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1 and handle_view_menu_click(editor, event.pos):
+                        continue
+                    editor.view_menu_open = False
             elif editor.menu_open:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     editor.menu_open = False
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
-                    if event.button == 1 and handle_create_menu(editor, event.pos, screen.get_size()):
+                    if event.button == 1 and handle_create_menu(
+                        editor, event.pos, screen.get_size(), layout
+                    ):
                         continue
                     editor.menu_open = False
                     if event.button == 1:
                         handle_toolbar(editor, event.pos)
             elif event.type == pygame.MOUSEMOTION:
+                if editor.texture_grab is not None:
+                    editor.update_texture_grab(event.pos, layout)
+                    continue
                 cell = layout.cell_at(event.pos)
                 editor.update_hover(event.pos, layout)
                 if editor.pan_drag is not None:
@@ -170,10 +183,15 @@ def run() -> None:
                         editor.press_canvas(event.pos, layout)
                 elif event.button == 1:
                     editor.update_hover(event.pos, layout)
-                    editor.open_dialog()
+                    # 贴图上按下就是拖：移动或缩放；没拖成的话松手时再开面板
+                    if not editor.begin_texture_grab(event.pos, layout):
+                        editor.open_dialog()
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 2:
                     editor.pan_drag = None
+                elif event.button == 1 and editor.texture_grab is not None:
+                    if not editor.end_texture_grab():
+                        editor.open_dialog()
                 elif event.button == 1 and editor.drag_start is not None:
                     editor.finish_drag()
             elif event.type == pygame.KEYDOWN:

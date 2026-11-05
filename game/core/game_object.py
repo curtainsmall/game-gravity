@@ -24,6 +24,7 @@ class GameObjectKind(StrEnum):
     MOVABLE_BLOCK = "movable_block"
     BUTTON = "button"
     DESTINATION = "destination"
+    TEXTURE = "texture"    # 只显示美术图，不参与碰撞
 
 
 class GameObject:

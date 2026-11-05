@@ -7,6 +7,7 @@ import pygame
 from core.game_object import GameObject
 from renderer.background import draw_background
 from renderer.render_spec import PlaceholderFace, PlaceholderShape
+from renderer.texture import load_scaled
 from renderer.viewport import ViewMode, Viewport
 from world.world import World
 
@@ -29,15 +30,30 @@ class RenderSystem:
         self.viewport.fit(world, surface)
         self.viewport.follow(focus_x, world, surface)
         draw_background(surface, world, self.viewport)
+        playable = self.viewport.playable_rect(world)
         for game_object in objects:
             body = game_object.body
             render = game_object.render
             if body is None or render is None:
                 continue
             rect = self.viewport.to_screen_rect(body, world)
+            if render.texture_path and self._texture(surface, rect, render, playable):
+                continue
             if render.placeholder_has_axis:
                 self._dotted_axis(surface, rect, render.placeholder_color)
             self._shape(surface, rect, render)
+
+    @staticmethod
+    def _texture(surface: pygame.Surface, rect: pygame.Rect, render, playable: pygame.Rect) -> bool:
+        """贴图按世界矩形整张缩放铺上去，超出可玩区的部分裁掉。没图返回 False。"""
+        image = load_scaled(render.texture_path, rect.size, render.texture_smooth)
+        if image is None:
+            return False
+        previous = surface.get_clip()
+        surface.set_clip(previous.clip(playable))
+        surface.blit(image, rect.topleft)
+        surface.set_clip(previous)
+        return True
 
     def _shape(self, surface: pygame.Surface, rect: pygame.Rect, render) -> None:
         shape = render.placeholder_shape

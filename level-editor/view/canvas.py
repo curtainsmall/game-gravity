@@ -14,9 +14,11 @@ from core.constants import (
     FACE_ROTATIONS,
     GRID,
     GROUND_COLOR,
+    HANDLE_COLOR,
     HIGHLIGHT,
     ITEM_COLOR,
     KIND_NOZZLE,
+    KIND_TEXTURE,
     MOVABLE_COLOR,
     NOZZLE_COLOR,
     NOZZLE_DEFAULT_POWER,
@@ -33,6 +35,7 @@ from core.helpers import nozzle_box, normalize_drag, readable_color
 from core.level import player_position
 from view.background import draw_background
 from view.layout import Layout
+from view.texture import draw_textures, texture_rect
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -69,7 +72,8 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     level = editor.level
     tile = layout.tile
     pygame.draw.rect(surface, PANEL, (layout.left, layout.top, layout.width, layout.height))
-    draw_background(surface, layout, level.background, editor.path)
+    if editor.view_settings.get("background", True):
+        draw_background(surface, layout, level.background, editor.path)
 
     for row in range(layout.rows + 2):
         top = layout.top + row * tile
@@ -80,6 +84,11 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         pygame.draw.rect(surface, BLOCK_COLOR, layout.entry_rect(entry))
     for entry in level.planks:
         pygame.draw.rect(surface, PLANK_COLOR, layout.entry_rect(entry))
+    for entry in level.movable_blocks:
+        pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
+
+    # 贴图压在所有方块之上（方块、木板、可移动方块），网格线再盖在贴图上当辅助线
+    draw_textures(surface, layout, level, editor.path)
 
     for col in range(layout.cols + 1):
         x = layout.left + col * tile
@@ -88,9 +97,6 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     for row in range(layout.rows + 3):
         y = layout.top + row * tile
         pygame.draw.line(surface, GRID, (layout.left, y), (layout.left + layout.width, y))
-
-    for entry in level.movable_blocks:
-        pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
     for entry in level.buttons:
         pygame.draw.polygon(surface, BUTTON_COLOR, frustum_points(layout.entry_rect(entry), entry.get("face", "")))
@@ -158,10 +164,18 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
             x, y, w, h = normalize_drag(editor.drag_start, editor.drag_current)
             pygame.draw.rect(surface, color, layout.cell_rect(x, y, (w, h)), 2)
     elif editor.hovered is not None and not editor.startup:
-        # 编辑状态：高亮光标下的整个对象
+        # 编辑状态：高亮光标下的整个对象；贴图额外画出四角的缩放把手
         kind, entry = editor.hovered
-        box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
-        pygame.draw.rect(surface, HIGHLIGHT, layout.entry_rect(box), 2)
+        if kind == KIND_TEXTURE:
+            rect = texture_rect(layout, entry)
+            pygame.draw.rect(surface, HIGHLIGHT, rect, 2)
+            for point in (rect.bottomleft, rect.bottomright, rect.topleft, rect.topright):
+                pygame.draw.rect(
+                    surface, HANDLE_COLOR, pygame.Rect(point[0] - 4, point[1] - 4, 8, 8)
+                )
+        else:
+            box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
+            pygame.draw.rect(surface, HIGHLIGHT, layout.entry_rect(box), 2)
 
 
 def _dotted_line(

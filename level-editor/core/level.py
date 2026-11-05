@@ -56,6 +56,7 @@ class Level:
         self.buttons: list = []
         self.items: list = []
         self.nozzles: list = []
+        self.textures: list = []   # 贴图：浮点世界矩形 + 图片名，不吸格子
         self.player: dict | None = None
         self.destination: dict | None = None
 
@@ -71,6 +72,7 @@ class Level:
             "buttons": copy.deepcopy(self.buttons),
             "items": copy.deepcopy(self.items),
             "nozzles": copy.deepcopy(self.nozzles),
+            "textures": copy.deepcopy(self.textures),
         }
         # 起点和终点都只有一份，没有就不写这个键
         if self.player is not None:
@@ -98,6 +100,7 @@ class Level:
         level.buttons = copy.deepcopy(list(definition.get("buttons", [])))
         level.items = copy.deepcopy(list(definition.get("items", [])))
         level.nozzles = copy.deepcopy(list(definition.get("nozzles", [])))
+        level.textures = copy.deepcopy(list(definition.get("textures", [])))
         return level
 
 

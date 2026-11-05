@@ -2,7 +2,13 @@
 
 import os
 
-from core.constants import LEVEL_BACKGROUND_NAME, LEVELS_DIR, NOZZLE_DEFAULT_POWER, ROOT
+from core.constants import (
+    LEVEL_BACKGROUND_NAME,
+    LEVEL_TEXTURES_DIR,
+    LEVELS_DIR,
+    NOZZLE_DEFAULT_POWER,
+    ROOT,
+)
 
 
 def entry_contains(entry: dict, cell: tuple) -> bool:
@@ -76,3 +82,19 @@ def resolve_background(value: str, level_path: str | None) -> str | None:
         if os.path.isfile(candidate):
             return candidate
     return None
+
+
+def level_texture_dir(level_path: str | None) -> str:
+    """贴图目录：关卡文件夹下的 textures/。"""
+    return os.path.join(level_base_dir(level_path), LEVEL_TEXTURES_DIR)
+
+
+def resolve_texture(value: str, level_path: str | None) -> str | None:
+    """贴图路径解析成绝对路径；相对路径以关卡文件夹为基准，没有兜底。"""
+    if not value:
+        return None
+    path = value.replace("/", os.sep)
+    if not os.path.isabs(path):
+        path = os.path.join(level_base_dir(level_path), path)
+    path = os.path.normpath(path)
+    return path if os.path.isfile(path) else None

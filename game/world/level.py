@@ -63,6 +63,16 @@ def resolve_background(value, base_dir: str | Path | None) -> str | None:
     return None
 
 
+def resolve_texture(value, base_dir: str | Path | None) -> str | None:
+    """贴图路径：相对关卡文件夹；没有兜底，scene.json 不写就是没图。"""
+    if not value:
+        return None
+    path = Path(str(value))
+    if not path.is_absolute() and base_dir is not None:
+        path = Path(base_dir) / path
+    return str(path) if path.is_file() else None
+
+
 def _read_position(entry: dict) -> tuple[float, float]:
     x, y = entry["pos"]
     return float(x), float(y)
@@ -127,6 +137,41 @@ def build_blocks(level_definition: LevelDefinition) -> list[GameObject]:
         for entry in level_definition.get("planks", [])
     ]
     return blocks + planks
+
+
+def build_textures(
+    level_definition: LevelDefinition, base_dir: str | Path | None = None
+) -> list[GameObject]:
+    """贴图：整张美术图盖在方块上。位置和尺寸都是浮点世界单位，不吸格子。
+
+    只认 schema 里列出来的条目，不自动扫描 textures/ 目录。
+    """
+    textures = []
+    for entry in level_definition.get("textures", []):
+        x, y = _read_position(entry)
+        width, height = _read_size(entry)
+        textures.append(
+            GameObject(
+                kind=GameObjectKind.TEXTURE,
+                name=str(entry.get("name", "")),
+                body=Body(
+                    left=x,
+                    bottom=y,
+                    width=width,
+                    height=height,
+                    is_static=True,
+                    is_sensor=True,   # 只显示：不挡路、不被积分
+                ),
+                render=RenderSpec(
+                    placeholder_size_in_blocks=(width, height),
+                    placeholder_color=color_for_kind(GameObjectKind.TEXTURE),
+                    placeholder_label_text=str(GameObjectKind.TEXTURE),
+                    texture_path=resolve_texture(entry.get("image"), base_dir),
+                    texture_smooth=bool(entry.get("smooth", False)),
+                ),
+            )
+        )
+    return textures
 
 
 def build_boundaries(world: World) -> list[GameObject]:
