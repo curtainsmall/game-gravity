@@ -260,6 +260,22 @@
       "face": "up"
     }
   ],
+  "portals": [
+    {
+      "name": "p1",
+      "pos": [8, 0],
+      "size": [1.0, 0.3],
+      "face": "up",
+      "target": "p2"
+    },
+    {
+      "name": "p2",
+      "pos": [13, 0],
+      "size": [1.0, 0.3],
+      "face": "up",
+      "target": ""
+    }
+  ],
   "items": [
     {
       "name": "i1",
