@@ -22,6 +22,7 @@ GEAR_SIZE = 56
 LEVEL_ROW_HEIGHT = 96
 LEVEL_ROW_GAP = 12
 LEVEL_LIST_MARGIN = 48
+DEBUG_ROW_HEIGHT = 26     # 设置里那一行勾选框的高度
 
 _FONTS: dict[int, pygame.font.Font] = {}
 
@@ -185,12 +186,14 @@ def pause_rects(surface: pygame.Surface) -> dict:
 
 
 def settings_rects(surface: pygame.Surface) -> dict:
+    """设置浮层：一个调试显示开关，加上返回按钮。"""
     width, height = surface.get_size()
-    panel = pygame.Rect(0, 0, 380, 240)
+    panel = pygame.Rect(0, 0, 380, 228)
     panel.center = (width // 2, height // 2)
     return {
         "panel": panel,
+        "debug": pygame.Rect(panel.left + 24, panel.top + 92, panel.width - 48, DEBUG_ROW_HEIGHT),
         "back": pygame.Rect(
-            panel.left + 30, panel.bottom - 70, panel.width - 60, BUTTON_SIZE[1]
+            panel.left + 30, panel.bottom - 20 - BUTTON_SIZE[1], panel.width - 60, BUTTON_SIZE[1]
         ),
     }

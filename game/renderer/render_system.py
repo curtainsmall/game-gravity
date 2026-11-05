@@ -4,7 +4,10 @@ import math
 
 import pygame
 
+import debug_display
+from controller.flip_rule import flip_area
 from core.game_object import GameObject
+from physics.body import Body
 from renderer.background import draw_background
 from renderer.render_spec import PlaceholderFace, PlaceholderShape
 from renderer.texture import load_scaled
@@ -23,6 +26,8 @@ class RenderSystem:
         surface: pygame.Surface,
         focus_x: float | None = None,
         view_mode: ViewMode = ViewMode.VERTICAL_EXPAND,
+        debug: bool = False,
+        flip_area_offsets=(0.0, 0.0),
     ) -> None:
         if world is None:
             return
@@ -30,6 +35,9 @@ class RenderSystem:
         self.viewport.fit(world, surface)
         self.viewport.follow(focus_x, world, surface)
         draw_background(surface, world, self.viewport)
+        # 翻转带画在对象下面：标出区域，但不盖住方块和玩家
+        if debug:
+            self._debug_flip_area(surface, world, flip_area_offsets)
         playable = self.viewport.playable_rect(world)
         for game_object in objects:
             body = game_object.body
@@ -37,7 +45,13 @@ class RenderSystem:
             if body is None or render is None:
                 continue
             rect = self.viewport.to_screen_rect(body, world)
-            if render.texture_path and self._texture(surface, rect, render, playable):
+            if render.texture_path:
+                # 贴图是美术，任何时候都画；图读不出来时留个淡框兜底
+                if not self._texture(surface, rect, render, playable):
+                    self._shape(surface, rect, render)
+                continue
+            # 其余对象只有占位几何体可画，那就是调试显示：没勾就什么都不画
+            if not debug:
                 continue
             if render.placeholder_has_axis:
                 self._dotted_axis(surface, rect, render.placeholder_color)
@@ -138,3 +152,30 @@ class RenderSystem:
             (center_x, apex_y),
         ]
         pygame.draw.polygon(surface, tuple(render.placeholder_color[:3]), points)
+
+    # ---- 翻转带调试显示 ---------------------------------------------
+    def _debug_flip_area(self, surface: pygame.Surface, world: World, offsets) -> None:
+        """翻转带：贴顶那条红色斜纹是向上翻，贴底那条蓝色是向下翻。"""
+        height = float(world.height_in_blocks)
+        window = surface.get_rect()
+        for upward in (True, False):
+            low, high = flip_area(height, offsets, upward)
+            if high - low <= 0.0:
+                continue
+            band = Body(left=0.0, bottom=low, width=world.width_in_blocks, height=high - low)
+            rect = self.viewport.to_screen_rect(band, world).clip(window)
+            if rect.width <= 0 or rect.height <= 0:
+                continue
+            color = debug_display.FLIP_UP_COLOR if upward else debug_display.FLIP_DOWN_COLOR
+            self._hatch(surface, rect, color)
+            edge_y = rect.top if upward else rect.bottom - 1
+            pygame.draw.line(surface, color[:3], (rect.left, edge_y), (rect.right, edge_y), 1)
+
+    @staticmethod
+    def _hatch(surface: pygame.Surface, rect: pygame.Rect, color: tuple, step: int = 14, width: int = 4) -> None:
+        """斜向斑马纹：45° 斜线铺满这块矩形，颜色带 alpha 所以是半透明的。"""
+        layer = pygame.Surface(rect.size, pygame.SRCALPHA)
+        reach = rect.height
+        for x in range(-reach - step, rect.width + step, step):
+            pygame.draw.line(layer, color, (x, rect.height), (x + reach, 0), width)
+        surface.blit(layer, rect.topleft)

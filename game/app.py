@@ -55,6 +55,8 @@ class App:
         self.flip_edge = False
         self.toast_text = ""
         self.toast_seconds = 0.0
+        # 调试显示：启动时不画占位几何体
+        self.debug = False
 
     # ---- 事件 -------------------------------------------------------
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -150,6 +152,9 @@ class App:
             return
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             rects = ui.settings_rects(self.surface)
+            if rects["debug"].collidepoint(event.pos):
+                self.debug = not self.debug
+                return
             if rects["back"].collidepoint(event.pos) or not rects["panel"].collidepoint(event.pos):
                 self.settings_open = False
 
@@ -239,6 +244,7 @@ class App:
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.screen == Screen.PLAYING and self.scene is not None:
+            self.scene.debug = self.debug
             surface.fill(BACKGROUND_COLOR)
             self.scene.draw(surface)
         elif self.screen == Screen.LEVEL_SELECT:
@@ -251,6 +257,6 @@ class App:
         if self.paused:
             screens.draw_pause(surface)
         if self.settings_open:
-            screens.draw_settings(surface)
+            screens.draw_settings(surface, self)
         if self.toast_seconds > 0.0 and self.toast_text:
             ui.draw_toast(surface, self.toast_text, self.toast_seconds)

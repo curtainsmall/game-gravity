@@ -2,6 +2,7 @@
 
 import pygame
 
+import debug_display
 import ui
 from levels import level_preview
 
@@ -100,16 +101,38 @@ def draw_pause(surface: pygame.Surface) -> None:
     ui.draw_button(surface, rects["title"], "返回标题")
 
 
-def draw_settings(surface: pygame.Surface) -> None:
+def draw_settings(surface: pygame.Surface, app) -> None:
     ui.draw_shade(surface)
     rects = ui.settings_rects(surface)
-    ui.draw_panel(surface, rects["panel"])
-    ui.draw_text(surface, "设置", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
+    panel = rects["panel"]
+    ui.draw_panel(surface, panel)
+    ui.draw_text(surface, "设置", 30, center=(panel.centerx, panel.top + 40))
+
+    row = rects["debug"]
+    hovered = row.collidepoint(pygame.mouse.get_pos())
+    if hovered:
+        pygame.draw.rect(surface, (245, 245, 245), row)
+    box = pygame.Rect(row.left + 6, row.centery - 8, 16, 16)
+    pygame.draw.rect(surface, ui.BUTTON_HOVER if app.debug else ui.BUTTON, box)
+    pygame.draw.rect(surface, ui.BORDER, box, 2)
+    if app.debug:
+        pygame.draw.lines(
+            surface,
+            ui.TEXT,
+            False,
+            [
+                (box.left + 3, box.centery),
+                (box.centerx, box.bottom - 4),
+                (box.right - 3, box.top + 4),
+            ],
+            2,
+        )
     ui.draw_text(
         surface,
-        "（暂无设置项）",
+        "调试显示（占位几何体 + 翻转带）",
         18,
-        center=(rects["panel"].centerx, rects["panel"].top + 108),
-        color=ui.DIM_TEXT,
+        pos=(box.right + 10, row.centery - 11),
+        color=ui.TEXT if app.debug else ui.DIM_TEXT,
     )
+
     ui.draw_button(surface, rects["back"], "返回")

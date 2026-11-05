@@ -5,6 +5,7 @@ from pathlib import Path
 import pygame
 
 from controller.controller_system import ControllerSystem
+from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
 from core.game_object import GameObjectKind
 from item.pickup_system import PickupSystem
@@ -55,6 +56,9 @@ class Scene:
 
         self.requested_next_scene: Scene | None = None
         self.elapsed_seconds: float = 0.0
+        # 调试显示：由 App 按设置里的那一个开关填进来
+        self.debug: bool = False
+        self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
 
     @classmethod
     def from_level(
@@ -84,6 +88,7 @@ class Scene:
         )
         scene = cls(world=world, objects=objects)
         scene.player = players[0] if players else None
+        scene.flip_area_offsets = flip_area_offsets_of(level_definition)
         return scene
 
     @classmethod
@@ -131,4 +136,12 @@ class Scene:
         if self.player is not None and self.player.body is not None:
             body = self.player.body
             focus_x = body.left + body.width / 2.0
-        self.render_system.update(self.objects, self.world, surface, focus_x, self.view_mode)
+        self.render_system.update(
+            self.objects,
+            self.world,
+            surface,
+            focus_x,
+            self.view_mode,
+            self.debug,
+            self.flip_area_offsets,
+        )
