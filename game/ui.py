@@ -171,10 +171,10 @@ def ending_rects(surface: pygame.Surface) -> dict:
 # ---- 暂停与设置浮层 -------------------------------------------------
 def pause_rects(surface: pygame.Surface) -> dict:
     width, height = surface.get_size()
-    panel = pygame.Rect(0, 0, 320, 300)
+    panel = pygame.Rect(0, 0, 320, 366)
     panel.center = (width // 2, height // 2)
     rects = {"panel": panel}
-    for index, key in enumerate(("resume", "settings", "title")):
+    for index, key in enumerate(("resume", "restart", "settings", "title")):
         rects[key] = pygame.Rect(
             panel.left + 30,
             panel.top + 84 + index * (BUTTON_SIZE[1] + BUTTON_GAP),

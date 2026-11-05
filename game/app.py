@@ -126,10 +126,8 @@ class App:
             self.view_mode = self.scene.view_mode
         elif event.key == pygame.K_SPACE:
             self.jump_edge = True
-        elif event.key == pygame.K_e:
-            self.flip_edge = True
         elif event.key == pygame.K_r:
-            self.start_level(self.level_index)
+            self.flip_edge = True
 
     def handle_pause_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -139,6 +137,8 @@ class App:
             rects = ui.pause_rects(self.surface)
             if rects["resume"].collidepoint(event.pos) or not rects["panel"].collidepoint(event.pos):
                 self.paused = False
+            elif rects["restart"].collidepoint(event.pos):
+                self.start_level(self.level_index)
             elif rects["settings"].collidepoint(event.pos):
                 self.settings_open = True
             elif rects["title"].collidepoint(event.pos):

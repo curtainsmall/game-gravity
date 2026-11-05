@@ -95,6 +95,7 @@ def draw_pause(surface: pygame.Surface) -> None:
     ui.draw_panel(surface, rects["panel"])
     ui.draw_text(surface, "Paused", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
     ui.draw_button(surface, rects["resume"], "Back to Game")
+    ui.draw_button(surface, rects["restart"], "Restart Level")
     ui.draw_button(surface, rects["settings"], "Settings")
     ui.draw_button(surface, rects["title"], "Quit to Title")
 
