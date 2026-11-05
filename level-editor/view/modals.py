@@ -30,14 +30,16 @@ def startup_rects(surface: pygame.Surface) -> list:
 
 
 def settings_geometry(surface: pygame.Surface) -> tuple:
-    panel = place_panel(surface, pygame.Rect(0, 0, 560, 282))
+    panel = place_panel(surface, pygame.Rect(0, 0, 560, 350))
     name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
     width_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
     height_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT + 2)
     jump_rect = pygame.Rect(panel.left + 12, panel.top + 140, panel.width - 24, ROW_HEIGHT + 2)
     speed_rect = pygame.Rect(panel.left + 12, panel.top + 174, panel.width - 24, ROW_HEIGHT + 2)
+    flip_up_rect = pygame.Rect(panel.left + 12, panel.top + 208, panel.width - 24, ROW_HEIGHT + 2)
+    flip_down_rect = pygame.Rect(panel.left + 12, panel.top + 242, panel.width - 24, ROW_HEIGHT + 2)
     background_rect = pygame.Rect(
-        panel.left + 12, panel.top + 208, panel.width - 24, ROW_HEIGHT + 2
+        panel.left + 12, panel.top + 276, panel.width - 24, ROW_HEIGHT + 2
     )
     browse_rect = pygame.Rect(
         background_rect.right - 76, background_rect.top + 1, 76, background_rect.height - 2
@@ -52,6 +54,8 @@ def settings_geometry(surface: pygame.Surface) -> tuple:
         height_rect,
         jump_rect,
         speed_rect,
+        flip_up_rect,
+        flip_down_rect,
         background_rect,
         browse_rect,
         apply_rect,
@@ -81,6 +85,8 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         height_rect,
         jump_rect,
         speed_rect,
+        flip_up_rect,
+        flip_down_rect,
         background_rect,
         browse_rect,
         apply_rect,
@@ -132,8 +138,19 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     draw_stepper(surface, left, -1)
     draw_stepper(surface, right, 1)
 
+    # 翻转区：玩家要做到区域里才翻得动，数值是「离关卡顶多少格」，0 表示不设限
+    for field, rect, label, key in (
+        (5, flip_up_rect, "向上翻起点（离顶）", "flip_up"),
+        (6, flip_down_rect, "向下翻起点（离顶）", "flip_down"),
+    ):
+        selected = editor.settings_field == field
+        _draw_settings_row(surface, font, rect, label, editor.settings[key], selected)
+        left, right = stepper_rects(rect)
+        draw_stepper(surface, left, -1)
+        draw_stepper(surface, right, 1)
+
     # 背景：直接敲路径，或点右边「选择…」挑一张图；存的是相对关卡目录的路径
-    background_selected = editor.settings_field == 5
+    background_selected = editor.settings_field == 7
     pygame.draw.rect(
         surface, (62, 62, 72) if background_selected else (48, 48, 54), background_rect
     )

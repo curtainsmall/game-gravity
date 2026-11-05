@@ -5,6 +5,7 @@ import json
 
 from core.constants import (
     COLS,
+    FLIP_AREA_OFFSETS_DEFAULT,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MIN,
     LEVEL_HEIGHT_MAX,
@@ -47,6 +48,20 @@ def _format_block(value, depth: int) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
+    """翻转区两个起点：缺字段、写坏了都退回默认值，夹在 0 ~ 关卡高度之间。"""
+    value = definition.get("flip_area_offsets", FLIP_AREA_OFFSETS_DEFAULT)
+    try:
+        up_offset, down_offset = value
+    except (TypeError, ValueError):
+        up_offset, down_offset = FLIP_AREA_OFFSETS_DEFAULT
+    limit = float(level_height)
+    return [
+        clamp_float(up_offset, 0.0, limit, 0.0),
+        clamp_float(down_offset, 0.0, limit, 0.0),
+    ]
+
+
 class Level:
     def __init__(self) -> None:
         self.name = ""
@@ -55,6 +70,7 @@ class Level:
         self.background = ""       # 背景图，相对关卡目录的路径；空串表示没有背景
         self.jump_height = JUMP_HEIGHT_DEFAULT
         self.move_speed = MOVE_SPEED_DEFAULT   # 水平移动速度，方块/秒
+        self.flip_area_offsets = list(FLIP_AREA_OFFSETS_DEFAULT)  # 翻转区离顶多少格
         self.blocks: list = []
         self.planks: list = []
         self.movable_blocks: list = []
@@ -72,6 +88,7 @@ class Level:
             "height": self.height,
             "jump_height": self.jump_height,
             "move_speed": self.move_speed,
+            "flip_area_offsets": list(self.flip_area_offsets),
             "blocks": copy.deepcopy(self.blocks),
             "planks": copy.deepcopy(self.planks),
             "movable_blocks": copy.deepcopy(self.movable_blocks),
@@ -108,6 +125,7 @@ class Level:
             MOVE_SPEED_MAX,
             MOVE_SPEED_DEFAULT,
         )
+        level.flip_area_offsets = _read_flip_area_offsets(definition, level.height)
         level.background = str(definition.get("background", "") or "")
         level.player = copy.deepcopy(definition.get("player"))
         level.destination = copy.deepcopy(definition.get("destination"))

@@ -23,6 +23,7 @@ from world.level import (
     build_player,
     build_textures,
     build_world,
+    flip_area_offsets_of,
     jump_height_of,
     load_level_file,
     move_speed_of,
@@ -60,6 +61,9 @@ class Scene:
         world = build_world(level_definition, base_dir)
         InputSource.set_jump_height(jump_height_of(level_definition))
         InputSource.set_move_speed(move_speed_of(level_definition))
+        InputSource.set_flip_area(
+            flip_area_offsets_of(level_definition), world.height_in_blocks
+        )
         players = build_player(level_definition)
         buttons = build_buttons(level_definition)
         triggers_by_name = {button.name: button for button in buttons if button.name}

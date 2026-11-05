@@ -111,8 +111,11 @@ JUMP_HEIGHT_MIN = 0   # 上限不是常数：最多到「关卡高度 - 1」，�
 MOVE_SPEED_DEFAULT = 8.0
 MOVE_SPEED_MIN, MOVE_SPEED_MAX = 0.5, 40.0
 
-# 关卡设置里的字段数：名称、宽度、高度、初始跳高、移动速度、背景
-SETTINGS_FIELD_COUNT = 6
+# 翻转区离关卡顶多少格：第一个向上翻、第二个向下翻；0 表示这一侧不设限
+FLIP_AREA_OFFSETS_DEFAULT = (0.0, 0.0)
+
+# 关卡设置里的字段数：名称、宽度、高度、初始跳高、移动速度、翻转区上/下、背景
+SETTINGS_FIELD_COUNT = 8
 BACKGROUND_MAX_LENGTH = 120
 
 # ---- 对象种类 ----

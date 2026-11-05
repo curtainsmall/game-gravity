@@ -4,7 +4,7 @@
 用和物理同一套离散积分现算，重力与步长固定，反解一次就够。
 """
 
-from controller.flip_rule import can_flip_gravity, flip_gravity
+from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT, can_flip_gravity, flip_gravity
 from physics.ballistics import launch_speed
 from world.world import GRAVITY_ACCELERATION
 
@@ -27,10 +27,20 @@ class InputSource:
     move_speed = MOVE_SPEED_DEFAULT   # 关卡可以覆盖
     jump_height_blocks = JUMP_HEIGHT_DEFAULT
 
+    # 翻转区：离关卡顶多少格才能翻（第一个向上、第二个向下），要配合关卡高度用
+    flip_area_offsets = FLIP_AREA_OFFSETS_DEFAULT
+    level_height_blocks = 0.0
+
     @classmethod
     def set_move_speed(cls, speed: float) -> None:
         """关卡给定的水平移动速度（方块/秒）。"""
         cls.move_speed = float(speed)
+
+    @classmethod
+    def set_flip_area(cls, offsets, level_height: float) -> None:
+        """关卡给定的翻转区起点（离关卡顶的格数）和关卡高度（格）。"""
+        cls.flip_area_offsets = (float(offsets[0]), float(offsets[1]))
+        cls.level_height_blocks = float(level_height)
 
     @classmethod
     def jump_height(cls) -> int:
@@ -58,7 +68,9 @@ class InputSource:
 
         body.velocity_x = InputSource.move_speed * input_state.move_axis
 
-        if input_state.flip_pressed and can_flip_gravity(body):
+        if input_state.flip_pressed and can_flip_gravity(
+            body, InputSource.level_height_blocks, InputSource.flip_area_offsets
+        ):
             flip_gravity(body, game_object.controller)
 
         if input_state.jump_pressed and body.is_grounded:

@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 from controller.controller import Controller
+from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
 from controller.trigger_source import TriggerSource
 from core.game_object import GameObject, GameObjectKind
@@ -90,6 +91,19 @@ def move_speed_of(level_definition: LevelDefinition) -> float:
         return float(level_definition.get("move_speed", InputSource.MOVE_SPEED_DEFAULT))
     except (TypeError, ValueError):
         return InputSource.MOVE_SPEED_DEFAULT
+
+
+def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, float]:
+    """翻转区离关卡顶多少格：第一个是向上翻的起点，第二个是向下翻的起点。
+
+    没写、写坏了或写成负数都退回默认值，负数按 0 算（等于这一侧不设限）。
+    """
+    value = level_definition.get("flip_area_offsets", FLIP_AREA_OFFSETS_DEFAULT)
+    try:
+        up_offset, down_offset = value
+        return (max(0.0, float(up_offset)), max(0.0, float(down_offset)))
+    except (TypeError, ValueError):
+        return FLIP_AREA_OFFSETS_DEFAULT
 
 
 def _read_size(entry: dict) -> tuple[float, float]:

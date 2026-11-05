@@ -103,6 +103,8 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         height_rect,
         jump_rect,
         speed_rect,
+        flip_up_rect,
+        flip_down_rect,
         background_rect,
         browse_rect,
         apply_rect,
@@ -121,9 +123,16 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         editor.pick_background()
         return
     if background_rect.collidepoint(position):
-        editor.settings_field = 5
+        editor.settings_field = 7
         return
-    for field, rect in ((1, width_rect), (2, height_rect), (3, jump_rect), (4, speed_rect)):
+    for field, rect in (
+        (1, width_rect),
+        (2, height_rect),
+        (3, jump_rect),
+        (4, speed_rect),
+        (5, flip_up_rect),
+        (6, flip_down_rect),
+    ):
         if not rect.collidepoint(position):
             continue
         editor.settings_field = field

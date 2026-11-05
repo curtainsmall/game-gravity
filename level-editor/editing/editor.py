@@ -975,12 +975,15 @@ class Editor:
     # ---- 关卡设置 ---------------------------------------------------
     def open_settings(self) -> None:
         # 名称以外的数字项都按字符串编辑：可以直接敲数字，也可以点右边的加减
+        flip_up, flip_down = self.level.flip_area_offsets
         self.settings = {
             "name": self.level.name,
             "width": str(self.level.width),
             "height": str(self.level.height),
             "jump_height": str(self.level.jump_height),
             "move_speed": str(self.level.move_speed),
+            "flip_up": f"{flip_up:g}",
+            "flip_down": f"{flip_down:g}",
             "background": self.level.background,
         }
         self.settings_field = 0
@@ -1004,13 +1007,21 @@ class Editor:
             self.level.move_speed = clamp_float(
                 self.settings["move_speed"], MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
             )
+            # 翻转区起点按「离关卡顶多少格」记，最多到关卡高度（等于这一侧翻不了）
+            flip_limit = float(self.level.height)
+            self.level.flip_area_offsets = [
+                clamp_float(self.settings["flip_up"], 0.0, flip_limit, 0.0),
+                clamp_float(self.settings["flip_down"], 0.0, flip_limit, 0.0),
+            ]
             self.level.background = self.settings["background"]
             self.dirty = True
             background = self.level.background or "无"
+            flip_up, flip_down = self.level.flip_area_offsets
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
                 f"尺寸 {self.level.width}×{self.level.height}，"
-                f"跳高 {self.level.jump_height}，速度 {self.level.move_speed}，背景 {background}"
+                f"跳高 {self.level.jump_height}，速度 {self.level.move_speed}，"
+                f"翻转区 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}"
             )
         self.settings = None
 
@@ -1023,7 +1034,7 @@ class Editor:
             self.status = "选择背景已取消"
             return
         self.settings["background"] = relative_level_path(path, self.path)
-        self.settings_field = 5
+        self.settings_field = 7
         self.status = "背景已选：只记相对 scene.json 的路径，不复制文件"
 
     def pick_texture_image(self) -> None:
@@ -1063,6 +1074,14 @@ class Editor:
             )
             stepped = max(MOVE_SPEED_MIN, min(MOVE_SPEED_MAX, current + 0.5 * delta))
             self.settings["move_speed"] = f"{stepped:g}"
+        elif field in (5, 6):
+            # 翻转区起点：离关卡顶的格数，按 0.5 加减，最多到关卡高度
+            key = "flip_up" if field == 5 else "flip_down"
+            height = clamp_int(
+                self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, self.level.height
+            )
+            current = clamp_float(self.settings[key], 0.0, float(height), 0.0)
+            self.settings[key] = f"{max(0.0, min(float(height), current + 0.5 * delta)):g}"
 
     @staticmethod
     def _jump_height_limit(level_height: int) -> int:
@@ -1090,7 +1109,12 @@ class Editor:
             # 移动速度：数字和小数点，最多 5 位
             if (char.isdigit() or char == ".") and len(str(self.settings["move_speed"])) < 5:
                 self.settings["move_speed"] = str(self.settings["move_speed"]) + char
-        elif field == 5:
+        elif field in (5, 6):
+            # 翻转区起点：数字和小数点，同样最多 5 位
+            key = "flip_up" if field == 5 else "flip_down"
+            if (char.isdigit() or char == ".") and len(str(self.settings[key])) < 5:
+                self.settings[key] = str(self.settings[key]) + char
+        elif field == 7:
             # 背景是路径：可打印字符都能打
             if char.isprintable() and len(self.settings["background"]) < BACKGROUND_MAX_LENGTH:
                 self.settings["background"] += char
@@ -1106,7 +1130,10 @@ class Editor:
             self.settings[key] = str(self.settings[key])[:-1]
         elif field == 4:
             self.settings["move_speed"] = str(self.settings["move_speed"])[:-1]
-        elif field == 5:
+        elif field in (5, 6):
+            key = "flip_up" if field == 5 else "flip_down"
+            self.settings[key] = str(self.settings[key])[:-1]
+        elif field == 7:
             self.settings["background"] = self.settings["background"][:-1]
 
 

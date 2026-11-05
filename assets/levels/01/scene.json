@@ -4,6 +4,7 @@
   "height": 16,
   "jump_height": 8,
   "move_speed": 8.0,
+  "flip_area_offsets": [8.0, 8.0],
   "blocks": [
     {
       "pos": [2, 0],
