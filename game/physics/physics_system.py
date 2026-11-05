@@ -1,7 +1,7 @@
 """PhysicsSystem：先积分、再解算，最后采样传感器并施加风力。"""
 
 from core.game_object import GameObject
-from nozzle.nozzle import launch_speed
+from physics.ballistics import launch_speed
 from physics.body import Body
 from world.world import World
 

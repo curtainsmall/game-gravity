@@ -1,6 +1,12 @@
-"""InputSource：玩家输入；InputState 是一帧的输入快照。"""
+"""InputSource：玩家输入；InputState 是一帧的输入快照。
+
+跳高按格数记（关卡设的初始值，变重道具会再降），起跳速度不查表：
+用和物理同一套离散积分现算，重力与步长固定，反解一次就够。
+"""
 
 from controller.flip_rule import can_flip_gravity, flip_gravity
+from physics.ballistics import launch_speed
+from world.world import GRAVITY_ACCELERATION
 
 
 class InputState:
@@ -15,44 +21,29 @@ class InputState:
 class InputSource:
     MOVE_SPEED = 8.0  # 方块/秒
 
-    JUMP_LADDER_INDEX_DEFAULT = 4  # 默认 4 格
+    JUMP_HEIGHT_DEFAULT = 4  # 默认跳 4 格
+    JUMP_HEIGHT_MIN = 0      # 0 = 跳不起来
 
-    # (目标跳高格数, 起跳速度)，重力 60、60 步/秒下按离散积分反解
-    JUMP_LADDER: list[tuple[int, float]] = [
-        (0, 0.000),  # 跳不起来
-        (1, 11.500),
-        (2, 16.059),
-        (3, 19.500),
-        (4, 22.435),
-        (5, 25.038),
-        (6, 27.357),
-        (7, 29.500),
-    ]
-    jump_speed_index = JUMP_LADDER_INDEX_DEFAULT
+    jump_height_blocks = JUMP_HEIGHT_DEFAULT
 
     @classmethod
     def jump_height(cls) -> int:
-        return cls.JUMP_LADDER[cls.jump_speed_index][0]
+        return cls.jump_height_blocks
 
     @classmethod
-    def jump_speed(cls) -> float:
-        return cls.JUMP_LADDER[cls.jump_speed_index][1]
+    def jump_speed(cls, delta_seconds: float) -> float:
+        """按当前跳高反解起跳速度：离散积分下要正好升到这么多格。"""
+        return launch_speed(cls.jump_height_blocks, GRAVITY_ACCELERATION, delta_seconds)
 
     @classmethod
-    def decrease_jump_speed(cls) -> None:
-        """变重：降一档，到底不再降。"""
-        cls.jump_speed_index = max(0, cls.jump_speed_index - 1)
+    def decrease_jump_height(cls) -> None:
+        """变重：跳高降一格，到 0 不再降。"""
+        cls.jump_height_blocks = max(cls.JUMP_HEIGHT_MIN, cls.jump_height_blocks - 1)
 
     @classmethod
     def set_jump_height(cls, height: int) -> None:
-        """按关卡给定的跳高设定初始档位，找不到就取最接近的一档。"""
-        heights = [h for h, _ in cls.JUMP_LADDER]
-        if height in heights:
-            cls.jump_speed_index = heights.index(height)
-        else:
-            cls.jump_speed_index = min(
-                range(len(heights)), key=lambda i: abs(heights[i] - height)
-            )
+        """关卡给定的初始跳高（格）。"""
+        cls.jump_height_blocks = max(cls.JUMP_HEIGHT_MIN, int(height))
 
     def advance(self, game_object, delta_seconds: float, input_state) -> None:
         body = game_object.body
@@ -66,4 +57,4 @@ class InputSource:
 
         if input_state.jump_pressed and body.is_grounded:
             # 起跳方向与重力方向相反
-            body.velocity_y = InputSource.jump_speed() * body.gravity_direction_sign
+            body.velocity_y = InputSource.jump_speed(delta_seconds) * body.gravity_direction_sign

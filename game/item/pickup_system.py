@@ -14,4 +14,4 @@ class PickupSystem:
                 continue
             item.consumed = True
             if item.heavy:
-                InputSource.decrease_jump_speed()
+                InputSource.decrease_jump_height()
