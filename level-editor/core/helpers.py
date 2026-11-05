@@ -45,3 +45,12 @@ def readable_color(color: tuple) -> tuple:
 
 def number_text(value) -> str:
     return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+def clamp_int(value, low: int, high: int, fallback: int) -> int:
+    """读关卡尺寸：缺字段、非数字或越界都夹回合法区间，坏数据不至于拖垮画布。"""
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(low, min(high, number))

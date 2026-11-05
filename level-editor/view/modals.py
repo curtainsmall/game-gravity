@@ -30,13 +30,15 @@ def startup_rects(surface: pygame.Surface) -> list:
 
 
 def settings_geometry(surface: pygame.Surface) -> tuple:
-    panel = place_panel(surface, pygame.Rect(0, 0, 440, 172))
+    panel = place_panel(surface, pygame.Rect(0, 0, 440, 214))
     name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
-    jump_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
+    width_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
+    height_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT + 2)
+    jump_rect = pygame.Rect(panel.left + 12, panel.top + 140, panel.width - 24, ROW_HEIGHT + 2)
     button_y = panel.bottom - BUTTON_HEIGHT - 8
     apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
     cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
-    return panel, name_rect, jump_rect, apply_rect, cancel_rect
+    return panel, name_rect, width_rect, height_rect, jump_rect, apply_rect, cancel_rect
 
 
 def _draw_settings_row(
@@ -54,7 +56,9 @@ def _draw_settings_row(
 
 
 def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    panel, name_rect, jump_rect, apply_rect, cancel_rect = settings_geometry(surface)
+    panel, name_rect, width_rect, height_rect, jump_rect, apply_rect, cancel_rect = (
+        settings_geometry(surface)
+    )
     draw_panel(surface, panel)
 
     surface.blit(font.render("关卡设置", True, TEXT), (panel.left + 12, panel.top + 8))
@@ -74,7 +78,18 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         (0, 0, min(text.get_width(), clip), text.get_height()),
     )
 
-    jump_selected = editor.settings_field == 1
+    # 宽高决定画布大小：游戏里可玩行固定 400px，所以高度越大格子越小
+    for field, rect, label, key in (
+        (1, width_rect, "宽度（格）", "width"),
+        (2, height_rect, "高度（格）", "height"),
+    ):
+        selected = editor.settings_field == field
+        _draw_settings_row(surface, font, rect, label, editor.settings[key], selected)
+        left, right = stepper_rects(rect)
+        draw_stepper(surface, left, -1)
+        draw_stepper(surface, right, 1)
+
+    jump_selected = editor.settings_field == 3
     _draw_settings_row(
         surface, font, jump_rect, "初始跳高", editor.settings["jump_height"], jump_selected
     )

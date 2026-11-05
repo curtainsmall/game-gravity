@@ -67,6 +67,7 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         if not rect.collidepoint(position):
             continue
         editor.blur_name()
+        editor.blur_number()
         editor.dialog_field = index
         left, right = stepper_rects(rect)
         if left.collidepoint(position):
@@ -77,7 +78,9 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
 
 
 def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
-    panel, name_rect, jump_rect, apply_rect, cancel_rect = settings_geometry(surface)
+    panel, name_rect, width_rect, height_rect, jump_rect, apply_rect, cancel_rect = (
+        settings_geometry(surface)
+    )
     if apply_rect.collidepoint(position):
         editor.close_settings(True)
         return
@@ -87,9 +90,11 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
     if name_rect.collidepoint(position):
         editor.settings_field = 0
         return
-    if jump_rect.collidepoint(position):
-        editor.settings_field = 1
-        left, right = stepper_rects(jump_rect)
+    for field, rect in ((1, width_rect), (2, height_rect), (3, jump_rect)):
+        if not rect.collidepoint(position):
+            continue
+        editor.settings_field = field
+        left, right = stepper_rects(rect)
         if left.collidepoint(position):
             editor.adjust_settings(-1)
         elif right.collidepoint(position):

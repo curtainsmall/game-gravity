@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from core.constants import (
     COLS,
     HEADER,
+    JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
     KIND_BLOCK,
@@ -20,6 +21,10 @@ from core.constants import (
     KIND_PLANK,
     KIND_PLAYER,
     KIND_TITLES,
+    LEVEL_HEIGHT_MAX,
+    LEVEL_HEIGHT_MIN,
+    LEVEL_WIDTH_MAX,
+    LEVEL_WIDTH_MIN,
     MARGIN,
     NAME_MAX_LENGTH,
     NOZZLE_DEFAULT_POWER,
@@ -34,7 +39,14 @@ from core.constants import (
     TOOL_PLAYER,
     TOOL_SPECS,
 )
-from core.helpers import display_path, entry_contains, normalize_drag, nozzle_box, number_text
+from core.helpers import (
+    clamp_int,
+    display_path,
+    entry_contains,
+    normalize_drag,
+    nozzle_box,
+    number_text,
+)
 from core.level import Level
 from editing.files import ask_open_path, ask_save_path
 
@@ -61,6 +73,7 @@ class Editor:
         self.dialog_field = 0
         self.picking_offset = False
         self.name_focused = False
+        self.number_buffer: str | None = None   # 正在键盘输入的数字字段，None 表示没在输入
         self.menu_open = False
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
@@ -220,6 +233,7 @@ class Editor:
         self.dialog = None
         self.hovered = None
         self.picking_offset = False
+        self.number_buffer = None
         self.status = f"已删除{KIND_TITLES.get(kind, '对象')}"
 
     # ---- 撤销 -------------------------------------------------------
@@ -331,11 +345,13 @@ class Editor:
         self.dialog_field = 0
         self.picking_offset = False
         self.name_focused = False
+        self.number_buffer = None
 
     def close_dialog(self) -> None:
         self.dialog = None
         self.picking_offset = False
         self.name_focused = False
+        self.number_buffer = None
 
     # ---- 名称输入 ---------------------------------------------------
     def focus_name(self) -> None:
@@ -429,90 +445,222 @@ class Editor:
         return f"{KIND_TITLES.get(kind, '')} {name}".strip()
 
     def adjust_dialog(self, delta: int) -> None:
+        """方向键与加减按钮：数字字段加 delta，其余字段循环切换。"""
         if self.dialog is None:
             return
+        self.number_buffer = None          # 改用加减就把键盘输入状态收起来
         self.push_undo()
+        self.dirty = True
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
         field = self.dialog_field
-        self.dirty = True
-        pos = entry["pos"]
-        if field == 0:
-            if kind == KIND_NOZZLE:
-                # 喷口是点：x 按半格移动，底边中点始终落在 0.5 的整数倍上。
-                pos[0] = round(max(0.5, min(COLS - 0.5, float(pos[0]) + 0.5 * delta)), 1)
-            else:
-                pos[0] = max(0, min(COLS - 1, int(pos[0]) + delta))
-        elif field == 1:
-            pos[1] = max(0, min(ROWS - 1, int(pos[1]) + delta))
-        elif kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE) and field in (2, 3):
-            size = list(entry.get("size", [1, 1]))
-            axis = field - 2
-            limit = COLS - int(pos[0]) if axis == 0 else ROWS - int(pos[1])
-            size[axis] = max(1, min(limit, int(size[axis]) + delta))
-            entry["size"] = size
-        elif kind == KIND_MOVABLE:
-            index = field - 4
-            if index == 0 or index == 1:
-                offset = list(entry.get("offset", [0, -3]))
-                offset[index] = max(-8, min(8, int(offset[index]) + delta))
-                entry["offset"] = offset
-            elif index == 2:
-                names = [button.get("name", "") for button in self.level.buttons if button.get("name")]
+
+        current_number = self.dialog_number_value(field)
+        if current_number is not None:
+            self.set_dialog_number(field, current_number + delta)
+            return
+
+        if kind == KIND_MOVABLE:
+            if field == 6:                 # 触发按钮：在「无」和已有按钮名之间循环
+                names = [
+                    button.get("name", "") for button in self.level.buttons if button.get("name")
+                ]
                 options = [None, *names]
                 current = (entry.get("sources") or [None])[0]
-                chosen = options[(options.index(current) + delta) % len(options)] if current in options else names[0] if names else None
+                chosen = (
+                    options[(options.index(current) + delta) % len(options)]
+                    if current in options
+                    else names[0]
+                    if names
+                    else None
+                )
                 entry["sources"] = [chosen] if chosen else []
-            else:
+            else:                          # 一次触发：开关
                 entry["once"] = not entry.get("once", False)
         elif kind == KIND_BUTTON:
             faces = ["up", "right", "down", "left"]
-            current = entry.get("face", "up")
-            entry["face"] = faces[(faces.index(current) + delta) % len(faces)] if current in faces else "up"
+            current_face = entry.get("face", "up")
+            entry["face"] = (
+                faces[(faces.index(current_face) + delta) % len(faces)]
+                if current_face in faces
+                else "up"
+            )
         elif kind == KIND_ITEM:
             entry["heavy"] = not entry.get("heavy", False)
-        elif kind == KIND_NOZZLE:
-            if field == 2:
-                entry["power"] = max(-8, min(8, int(entry.get("power", NOZZLE_DEFAULT_POWER)) + delta))
+
+    # ---- 数字字段的键盘输入 -----------------------------------------
+    def dialog_number_value(self, field: int):
+        """字段是数字就返回当前值；朝向、触发按钮这类枚举返回 None。"""
+        if self.dialog is None:
+            return None
+        kind = self.dialog["kind"]
+        entry = self.dialog["entry"]
+        if field == 0:
+            return entry["pos"][0]
+        if field == 1:
+            return entry["pos"][1]
+        if kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE) and field in (2, 3):
+            return entry.get("size", [1, 1])[field - 2]
+        if kind == KIND_MOVABLE and field in (4, 5):
+            return entry.get("offset", [0, -3])[field - 4]
+        if kind == KIND_NOZZLE and field == 2:
+            return entry.get("power", NOZZLE_DEFAULT_POWER)
+        if kind == KIND_NOZZLE and field == 3:
+            return entry.get("range", NOZZLE_DEFAULT_RANGE)
+        return None
+
+    def set_dialog_number(self, field: int, value: float) -> None:
+        """把一个数字字段设成 value；越界一律夹到该字段自己的范围里。"""
+        kind = self.dialog["kind"]
+        entry = self.dialog["entry"]
+        pos = entry["pos"]
+        if field == 0:
+            if kind == KIND_NOZZLE:
+                # 喷口是点：底边中点始终落在半格上
+                pos[0] = round(max(0.5, min(self.level.width - 0.5, value)), 1)
             else:
-                entry["range"] = max(1, min(8, int(entry.get("range", NOZZLE_DEFAULT_RANGE)) + delta))
+                pos[0] = int(max(0, min(self.level.width - 1, round(value))))
+        elif field == 1:
+            pos[1] = int(max(0, min(self.level.height - 1, round(value))))
+        elif kind in (KIND_BLOCK, KIND_PLANK, KIND_MOVABLE) and field in (2, 3):
+            axis = field - 2
+            size = list(entry.get("size", [1, 1]))
+            limit = (
+                self.level.width - int(pos[0]) if axis == 0 else self.level.height - int(pos[1])
+            )
+            size[axis] = int(max(1, min(limit, round(value))))
+            entry["size"] = size
+        elif kind == KIND_MOVABLE and field in (4, 5):
+            index = field - 4
+            offset = list(entry.get("offset", [0, -3]))
+            offset[index] = int(max(-8, min(8, round(value))))
+            entry["offset"] = offset
+        elif kind == KIND_NOZZLE and field == 2:
+            entry["power"] = int(max(-8, min(8, round(value))))
+        elif kind == KIND_NOZZLE and field == 3:
+            entry["range"] = int(max(1, min(8, round(value))))
+
+    def type_dialog_number(self, char: str) -> bool:
+        """数字字段键盘输入：第一次敲键起一个新值，之后追加。返回是否吃掉了字符。"""
+        if self.dialog is None or self.name_focused:
+            return False
+        if self.dialog_number_value(self.dialog_field) is None:
+            return False
+        if char.isdigit():
+            if self.number_buffer is None:
+                self.number_buffer = ""
+                self.push_undo()           # 一次完整输入只记一步撤销
+            if len(self.number_buffer) < 6:
+                self.number_buffer += char
+        elif char == "-" and self.number_buffer is None:
+            self.number_buffer = "-"       # 负号只允许打头（偏移、力度可为负）
+            self.push_undo()
+        else:
+            return False
+        self.apply_number_buffer()
+        return True
+
+    def apply_number_buffer(self) -> None:
+        """把输入框里的文本写回字段；只有「-」或空串时先不动。"""
+        text = self.number_buffer or ""
+        if not text or text == "-":
+            return
+        try:
+            value = float(text)
+        except ValueError:
+            return
+        self.set_dialog_number(self.dialog_field, value)
+        self.dirty = True
+
+    def erase_dialog_number(self) -> None:
+        if not self.number_buffer:
+            return
+        self.number_buffer = self.number_buffer[:-1]
+        self.apply_number_buffer()
+
+    def blur_number(self) -> None:
+        self.number_buffer = None
 
     def move_dialog_field(self, delta: int) -> None:
+        self.number_buffer = None
         count = len(self.dialog_rows())
         if count:
             self.dialog_field = (self.dialog_field + delta) % count
 
     # ---- 关卡设置 ---------------------------------------------------
     def open_settings(self) -> None:
-        self.settings = {"name": self.level.name, "jump_height": self.level.jump_height}
+        # 名称以外的数字项都按字符串编辑：可以直接敲数字，也可以点右边的加减
+        self.settings = {
+            "name": self.level.name,
+            "width": str(self.level.width),
+            "height": str(self.level.height),
+            "jump_height": str(self.level.jump_height),
+        }
         self.settings_field = 0
         self.push_undo()
 
     def close_settings(self, commit: bool) -> None:
         if self.settings is not None and commit:
             self.level.name = self.settings["name"]
-            self.level.jump_height = int(self.settings["jump_height"])
+            self.level.width = clamp_int(
+                self.settings["width"], LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS
+            )
+            self.level.height = clamp_int(
+                self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS
+            )
+            self.level.jump_height = clamp_int(
+                self.settings["jump_height"], JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
+            )
             self.dirty = True
-            self.status = f"关卡设置：名称 {self.level.name or '（空）'}，跳高 {self.level.jump_height}"
+            self.status = (
+                f"关卡设置：名称 {self.level.name or '（空）'}，"
+                f"尺寸 {self.level.width}×{self.level.height}，跳高 {self.level.jump_height}"
+            )
         self.settings = None
 
     def adjust_settings(self, delta: int) -> None:
         if self.settings is None:
             return
-        if self.settings_field == 1:
-            self.settings["jump_height"] = max(
-                JUMP_HEIGHT_MIN, min(JUMP_HEIGHT_MAX, int(self.settings["jump_height"]) + delta)
+        field = self.settings_field
+        if field == 1:
+            self._step_size("width", delta, LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
+        elif field == 2:
+            self._step_size("height", delta, LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
+        elif field == 3:
+            current = clamp_int(
+                self.settings["jump_height"], JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
+            )
+            self.settings["jump_height"] = str(
+                max(JUMP_HEIGHT_MIN, min(JUMP_HEIGHT_MAX, current + delta))
             )
 
+    def _step_size(self, key: str, delta: int, low: int, high: int, fallback: int) -> None:
+        """宽高在编辑期间是字符串：先夹回合法区间再加，空字符串按默认值算。"""
+        current = clamp_int(self.settings[key], low, high, fallback)
+        self.settings[key] = str(max(low, min(high, current + delta)))
+
     def type_settings(self, char: str) -> None:
-        if self.settings is None or self.settings_field != 0:
+        if self.settings is None:
             return
-        if char.isprintable() and len(self.settings["name"]) < 24:
-            self.settings["name"] += char
+        field = self.settings_field
+        if field == 0:
+            if char.isprintable() and len(self.settings["name"]) < 24:
+                self.settings["name"] += char
+        elif field in (1, 2, 3):
+            # 数字项只吃数字：宽度最多 4 位（1000 格上限），高度和跳高 2 位够用
+            key = {1: "width", 2: "height", 3: "jump_height"}[field]
+            if char.isdigit() and len(str(self.settings[key])) < (4 if field == 1 else 2):
+                self.settings[key] = str(self.settings[key]) + char
 
     def erase_settings_char(self) -> None:
-        if self.settings is not None and self.settings_field == 0:
+        if self.settings is None:
+            return
+        field = self.settings_field
+        if field == 0:
             self.settings["name"] = self.settings["name"][:-1]
+        elif field in (1, 2, 3):
+            key = {1: "width", 2: "height", 3: "jump_height"}[field]
+            self.settings[key] = str(self.settings[key])[:-1]
 
 
 # ---- 绘制 -----------------------------------------------------------

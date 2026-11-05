@@ -4,8 +4,17 @@ import os
 import sys
 
 # ---- 画布与窗口 ----
-COLS = 120
-ROWS = 8
+COLS = 120          # 新建关卡的默认宽度（格）
+ROWS = 8            # 新建关卡的默认高度（格）
+
+# 关卡尺寸的取值范围（宽、高，以格计）。宽度上限防手滑打成几万格把画布拖死。
+LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX = 8, 1000
+LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX = 2, 40
+
+# 和游戏同一套像素规则：可玩行在屏幕上固定 400px 高，背景图按这个高度画，
+# 且只铺可玩区（地面行与天花板行在背景之外）。编辑器默认就按这个比例显示。
+BAND_PIXEL_HEIGHT = 400.0
+
 HEADER = 88
 FOOTER = 30
 MARGIN = 12
@@ -13,7 +22,7 @@ DEFAULT_WINDOW = (1280, 720)
 MIN_WINDOW = (620, 260)
 
 ZOOM_STEP = 1.1
-ZOOM_MAX_TILE = 48.0
+ZOOM_MAX_TILE = 100.0   # px/格上限；游戏比例比它大时以游戏比例为准，保证默认可达
 
 # ---- 配色 ----
 BACKGROUND = (30, 30, 30)
@@ -91,8 +100,8 @@ NOZZLE_DEFAULT_RANGE = 5
 JUMP_HEIGHT_DEFAULT = 4
 JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX = 0, 7
 
-# 关卡设置里的字段数：名称、初始跳高
-SETTINGS_FIELD_COUNT = 2
+# 关卡设置里的字段数：名称、宽度、高度、初始跳高
+SETTINGS_FIELD_COUNT = 4
 
 # ---- 对象种类 ----
 KIND_BLOCK = "block"

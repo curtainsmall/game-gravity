@@ -37,7 +37,15 @@ def run() -> None:
     running = True
     while running:
         reserved_right = 0 if editor.dialog is None else detail_panel_width(screen) + MARGIN
-        layout = Layout(screen.get_size(), editor.zoom, editor.pan_x, editor.pan_y, reserved_right)
+        layout = Layout(
+            screen.get_size(),
+            editor.zoom,
+            editor.pan_x,
+            editor.pan_y,
+            reserved_right,
+            cols=editor.level.width,
+            rows=editor.level.height,
+        )
         editor.pan_x, editor.pan_y = layout.pan_x, layout.pan_y
 
         for event in pygame.event.get():
@@ -48,7 +56,15 @@ def run() -> None:
                 size = (max(MIN_WINDOW[0], event.w), max(MIN_WINDOW[1], event.h))
                 screen = pygame.display.set_mode(size, pygame.RESIZABLE)
                 reserved_right = 0 if editor.dialog is None else detail_panel_width(screen) + MARGIN
-                layout = Layout(size, editor.zoom, editor.pan_x, editor.pan_y, reserved_right)
+                layout = Layout(
+                    size,
+                    editor.zoom,
+                    editor.pan_x,
+                    editor.pan_y,
+                    reserved_right,
+                    cols=editor.level.width,
+                    rows=editor.level.height,
+                )
                 editor.pan_x, editor.pan_y = layout.pan_x, layout.pan_y
             elif editor.confirm_quit:
                 if event.type == pygame.KEYDOWN:
@@ -193,6 +209,15 @@ def run() -> None:
                     elif editor.hovered is not None:
                         kind, entry = editor.hovered
                         editor.delete_entry(kind, entry)
+                elif editor.dialog is not None and event.unicode and (
+                    event.unicode.isdigit() or event.unicode == "-"
+                ):
+                    # 数字字段：直接敲数字输入，点加减或按方向键仍是 ±1
+                    editor.type_dialog_number(event.unicode)
+                elif editor.dialog is not None and event.key == pygame.K_BACKSPACE:
+                    editor.erase_dialog_number()
+                elif editor.dialog is not None and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    editor.blur_number()
                 elif editor.dialog is not None and event.key == pygame.K_UP:
                     editor.move_dialog_field(-1)
                 elif editor.dialog is not None and event.key == pygame.K_DOWN:

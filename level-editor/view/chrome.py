@@ -48,9 +48,10 @@ def create_menu_rects(origin: tuple, window_size: tuple) -> list:
 
 def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: pygame.font.Font) -> None:
     marker = " *" if editor.dirty else ""
-    zoom_text = "自适应" if layout.zoom is None else f"{layout.tile:.1f}px/格"
+    zoom_text = "游戏比例" if layout.zoom is None else f"{layout.tile:.1f}px/格"
     head = (
         f"{display_path(editor.path)}{marker}   缩放: {zoom_text}   "
+        f"尺寸 {editor.level.width}×{editor.level.height}   "
         f"跳高: {editor.level.jump_height}   撤销 {len(editor.undo_stack)} 步"
     )
     surface.blit(font.render(head, True, TEXT), (MARGIN, 8))
@@ -63,7 +64,7 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
         hint = "左键拖出矩形 / 单击放置   右键 退出新建   滚轮缩放   中键平移"
     else:
         hint = (
-            "右键 新建对象   左键 设置   Delete 删除   滚轮缩放   中键平移   "
+            "右键 新建对象   左键 设置   数字直接敲   Delete 删除   滚轮缩放   中键平移   "
             "Ctrl-Z/S/O/N 撤销/保存/打开/新建"
         )
     surface.blit(font.render(hint, True, DIM_TEXT), (MARGIN, 30))

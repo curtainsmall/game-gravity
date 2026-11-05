@@ -8,7 +8,6 @@ import pygame
 from core.constants import (
     BLOCK_COLOR,
     BUTTON_COLOR,
-    COLS,
     DESTINATION_COLOR,
     DIALOG_BORDER,
     DIM_TEXT,
@@ -27,7 +26,6 @@ from core.constants import (
     PLAYER_COLOR,
     PREVIEW,
     RANGE_COLOR,
-    ROWS,
     RULER_STEP,
     TOOL_COLORS,
 )
@@ -71,9 +69,9 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     tile = layout.tile
     pygame.draw.rect(surface, PANEL, (layout.left, layout.top, layout.width, layout.height))
 
-    for row in range(ROWS + 2):
+    for row in range(layout.rows + 2):
         top = layout.top + row * tile
-        if row in (0, ROWS + 1):
+        if row in (0, layout.rows + 1):
             pygame.draw.rect(surface, GROUND_COLOR, (layout.left, top, layout.width, tile))
 
     for entry in level.blocks:
@@ -81,11 +79,11 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     for entry in level.planks:
         pygame.draw.rect(surface, PLANK_COLOR, layout.entry_rect(entry))
 
-    for col in range(COLS + 1):
+    for col in range(layout.cols + 1):
         x = layout.left + col * tile
         if -tile <= x <= layout.window[0] + tile:
             pygame.draw.line(surface, GRID, (x, layout.top), (x, layout.top + layout.height))
-    for row in range(ROWS + 3):
+    for row in range(layout.rows + 3):
         y = layout.top + row * tile
         pygame.draw.line(surface, GRID, (layout.left, y), (layout.left + layout.width, y))
 
@@ -114,7 +112,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     for entry in level.nozzles:
         # pos 是底边中点：三角形底边中点就画在这个点上，底边落在 y 这道平面上。
         center_x = layout.left + entry["pos"][0] * tile
-        base_y = layout.top + (ROWS + 1 - entry["pos"][1]) * tile
+        base_y = layout.top + (layout.rows + 1 - entry["pos"][1]) * tile
         up = int(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
         apex_y = base_y - tile if up else base_y + tile
         draw_nozzle_range(surface, layout, entry)
@@ -241,7 +239,7 @@ def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict) -> N
     if power == 0:
         return
     center_x = layout.left + entry["pos"][0] * layout.tile
-    base_y = layout.top + (ROWS + 1 - entry["pos"][1]) * layout.tile
+    base_y = layout.top + (layout.rows + 1 - entry["pos"][1]) * layout.tile
     tip_y = base_y - power * layout.tile
     pygame.draw.line(surface, PIVOT_COLOR, (center_x, base_y), (center_x, tip_y), 2)
     direction = (0.0, -1.0 if power > 0 else 1.0)
@@ -250,10 +248,10 @@ def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict) -> N
 
 def draw_ruler(surface: pygame.Surface, layout: Layout, font: pygame.font.Font) -> None:
     """画布底部的刻度：每 10 格一个刻度和编号，跟着网格一起移动。"""
-    top = layout.top + (ROWS + 2) * layout.tile
+    top = layout.top + (layout.rows + 2) * layout.tile
     left = layout.left
     pygame.draw.line(surface, DIALOG_BORDER, (left, top), (left + layout.width, top))
-    for block in range(0, COLS + 1, RULER_STEP):
+    for block in range(0, layout.cols + 1, RULER_STEP):
         x = left + block * layout.tile
         if x < -layout.tile or x > surface.get_width() + layout.tile:
             continue
@@ -261,7 +259,7 @@ def draw_ruler(surface: pygame.Surface, layout: Layout, font: pygame.font.Font) 
         text = font.render(str(block), True, DIM_TEXT)
         if block == 0:
             text_x = x + 2
-        elif block == COLS:
+        elif block == layout.cols:
             text_x = x - text.get_width() - 2
         else:
             text_x = x - text.get_width() / 2

@@ -2,12 +2,23 @@
 
 import copy
 
-from core.constants import COLS, JUMP_HEIGHT_DEFAULT, ROWS
+from core.constants import (
+    COLS,
+    JUMP_HEIGHT_DEFAULT,
+    LEVEL_HEIGHT_MAX,
+    LEVEL_HEIGHT_MIN,
+    LEVEL_WIDTH_MAX,
+    LEVEL_WIDTH_MIN,
+    ROWS,
+)
+from core.helpers import clamp_int
 
 
 class Level:
     def __init__(self) -> None:
         self.name = ""
+        self.width = COLS          # 关卡宽度，格
+        self.height = ROWS         # 关卡高度，格
         self.jump_height = JUMP_HEIGHT_DEFAULT
         self.blocks: list = []
         self.planks: list = []
@@ -21,8 +32,8 @@ class Level:
     def to_definition(self) -> dict:
         definition = {
             "name": self.name,
-            "width": COLS,
-            "height": ROWS,
+            "width": self.width,
+            "height": self.height,
             "jump_height": self.jump_height,
             "blocks": copy.deepcopy(self.blocks),
             "planks": copy.deepcopy(self.planks),
@@ -42,6 +53,8 @@ class Level:
     def from_definition(cls, definition: dict) -> "Level":
         level = cls()
         level.name = str(definition.get("name", ""))
+        level.width = clamp_int(definition.get("width"), LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
+        level.height = clamp_int(definition.get("height"), LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
         level.jump_height = int(definition.get("jump_height", JUMP_HEIGHT_DEFAULT))
         level.player = copy.deepcopy(definition.get("player"))
         level.destination = copy.deepcopy(definition.get("destination"))

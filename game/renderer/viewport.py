@@ -1,4 +1,9 @@
-"""Viewport：纵向铺满时沿 x 滚动；横向铺满时整关可见。"""
+"""Viewport：纵向铺满时沿 x 滚动；横向铺满时整关可见。
+
+纵向铺满分格不看窗口高度：可玩行（0 到 height_in_blocks）恒定 BAND_PIXEL_HEIGHT
+像素高，行数变了就变格子大小。背景图按这个像素高度画，且只铺可玩区——地面行和
+天花板行都在背景之外，所以关卡改高改矮都不用重画背景。
+"""
 
 from enum import StrEnum
 
@@ -7,9 +12,11 @@ import pygame
 from renderer.coordinates import body_to_screen_rect, total_row_count
 from world.world import World
 
+BAND_PIXEL_HEIGHT = 400.0  # 背景图高度：只量可玩行，地面和天花板在它外面
+
 
 class ViewMode(StrEnum):
-    VERTICAL_EXPAND = "vertical_expand"      # 十行铺满窗口高，横向滚动
+    VERTICAL_EXPAND = "vertical_expand"      # 可玩区固定 400px 高，横向滚动
     HORIZONTAL_EXPAND = "horizontal_expand"  # 一百二十列铺满窗口宽，整关可见
 
 
@@ -24,9 +31,11 @@ class Viewport:
         if self.mode == ViewMode.HORIZONTAL_EXPAND:
             self.pixels_per_tile = surface.get_width() / world.width_in_blocks
         else:
-            self.pixels_per_tile = surface.get_height() / total_row_count(world)
+            # 400 只摊在可玩行上：行数只影响每格多大，可玩区总高不变，
+            # 地面行和天花板行各再占一格，落在背景外侧
+            self.pixels_per_tile = BAND_PIXEL_HEIGHT / max(1, world.height_in_blocks)
         band_height = total_row_count(world) * self.pixels_per_tile
-        self.origin_y = (surface.get_height() - band_height) / 2.0
+        self.origin_y = (surface.get_height() - band_height) / 2.0  # 多出来的高度上下均分
 
     def follow(self, center_x: float | None, world: World, surface: pygame.Surface) -> None:
         if self.mode == ViewMode.HORIZONTAL_EXPAND or center_x is None:

@@ -100,6 +100,10 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
     for rect, index in detail_row_rects(surface, editor):
         label, value = rows[index]
         selected = index == editor.dialog_field
+        typing = selected and editor.number_buffer is not None
+        if typing:
+            # 正在键盘输入：显示输入框内容加光标，而不是已生效的值
+            value = f"{editor.number_buffer}|"
         pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
         pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
         left, right = stepper_rects(rect)
