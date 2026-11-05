@@ -12,6 +12,7 @@ from core.constants import (
     HEADER,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MIN,
+    FACE_ORDER,
     KIND_BLOCK,
     KIND_BUTTON,
     KIND_DESTINATION,
@@ -21,6 +22,7 @@ from core.constants import (
     KIND_NOZZLE,
     KIND_PLANK,
     KIND_PLAYER,
+    KIND_PORTAL,
     KIND_TEXTURE,
     KIND_TITLES,
     LEVEL_HEIGHT_MAX,
@@ -37,6 +39,8 @@ from core.constants import (
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_RANGE,
     NUMBER_TEXT_MAX_LENGTH,
+    PORTAL_DEFAULT_RANGE,
+    PORTAL_SIZE,
     ROWS,
     TOOL_BLOCK,
     TOOL_BUTTON,
@@ -45,6 +49,7 @@ from core.constants import (
     TOOL_NOZZLE,
     TOOL_PLANK,
     TOOL_PLAYER,
+    TOOL_PORTAL,
     TOOL_SPECS,
     TOOL_TEXTURE,
 )
@@ -119,6 +124,7 @@ class Editor:
             (self.level.movable_blocks, KIND_MOVABLE),
             (self.level.textures, KIND_TEXTURE),
             (self.level.buttons, KIND_BUTTON),
+            (self.level.portals, KIND_PORTAL),
             (self.level.items, KIND_ITEM),
         ):
             pairs += [(kind, entry) for entry in entries]
@@ -263,6 +269,18 @@ class Editor:
         # 新对象的数值/布尔/字符串一律给中性默认值，具体参数再在面板里调
         if self.tool == TOOL_BUTTON:
             level.buttons.append({"name": "", "pos": [x, y], "size": list(size), "face": ""})
+        elif self.tool == TOOL_PORTAL:
+            # 门本身固定 1×0.3，触发区默认和门一样大，目标和朝向在面板里调
+            level.portals.append(
+                {
+                    "name": "",
+                    "pos": [x, y],
+                    "size": list(PORTAL_SIZE),
+                    "face": FACE_ORDER[0],
+                    "target": "",
+                    "range": list(PORTAL_DEFAULT_RANGE),
+                }
+            )
         elif self.tool == TOOL_ITEM:
             level.items.append({"name": "", "pos": [x, y], "size": list(size), "heavy": False})
         elif self.tool == TOOL_NOZZLE:
@@ -647,6 +665,8 @@ class Editor:
             self.level.movable_blocks = [e for e in self.level.movable_blocks if e is not entry]
         elif kind == KIND_BUTTON:
             self.level.buttons = [e for e in self.level.buttons if e is not entry]
+        elif kind == KIND_PORTAL:
+            self.level.portals = [e for e in self.level.portals if e is not entry]
         elif kind == KIND_ITEM:
             self.level.items = [e for e in self.level.items if e is not entry]
         elif kind == KIND_NOZZLE:
@@ -810,6 +830,14 @@ class Editor:
             ]
         elif kind == KIND_BUTTON:
             rows.append(("朝向", entry.get("face") or "（空）"))
+        elif kind == KIND_PORTAL:
+            trigger_range = entry.get("range", list(PORTAL_DEFAULT_RANGE))
+            rows += [
+                ("朝向", entry.get("face") or FACE_ORDER[0]),
+                ("目标", entry.get("target") or "无"),
+                ("触发区宽", number_text(trigger_range[0])),
+                ("触发区高", number_text(trigger_range[1])),
+            ]
         elif kind == KIND_ITEM:
             rows.append(("变重", "是" if entry.get("heavy") else "否"))
         elif kind == KIND_NOZZLE:
@@ -862,13 +890,36 @@ class Editor:
             else:                          # 一次触发：开关
                 entry["once"] = not entry.get("once", False)
         elif kind == KIND_BUTTON:
-            faces = ["up", "right", "down", "left"]
-            current_face = entry.get("face", "up")
+            current_face = entry.get("face", FACE_ORDER[0])
             entry["face"] = (
-                faces[(faces.index(current_face) + delta) % len(faces)]
-                if current_face in faces
-                else "up"
+                FACE_ORDER[(FACE_ORDER.index(current_face) + delta) % len(FACE_ORDER)]
+                if current_face in FACE_ORDER
+                else FACE_ORDER[0]
             )
+        elif kind == KIND_PORTAL:
+            if field == 4:                 # 朝向：按 up/right/down/left 循环
+                current_face = entry.get("face", FACE_ORDER[0])
+                entry["face"] = (
+                    FACE_ORDER[(FACE_ORDER.index(current_face) + delta) % len(FACE_ORDER)]
+                    if current_face in FACE_ORDER
+                    else FACE_ORDER[0]
+                )
+            elif field == 5:               # 目标：在「无」和别的传送门名字之间循环
+                names = [
+                    portal.get("name", "")
+                    for portal in self.level.portals
+                    if portal.get("name") and portal is not entry
+                ]
+                options = [None, *names]
+                current = entry.get("target") or None
+                chosen = (
+                    options[(options.index(current) + delta) % len(options)]
+                    if current in options
+                    else names[0]
+                    if names
+                    else None
+                )
+                entry["target"] = chosen or ""
         elif kind == KIND_ITEM:
             entry["heavy"] = not entry.get("heavy", False)
 
@@ -891,6 +942,8 @@ class Editor:
             return entry.get("power", NOZZLE_DEFAULT_POWER)
         if kind == KIND_NOZZLE and field == 3:
             return entry.get("range", NOZZLE_DEFAULT_RANGE)
+        if kind == KIND_PORTAL and field in (6, 7):
+            return entry.get("range", list(PORTAL_DEFAULT_RANGE))[field - 6]
         return None
 
     def set_dialog_number(self, field: int, value: float) -> None:
@@ -914,6 +967,10 @@ class Editor:
             entry["power"] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
         elif kind == KIND_NOZZLE and field == 3:
             entry["range"] = round(clamp_float(value, 1.0, 8.0, 1.0), 2)
+        elif kind == KIND_PORTAL and field in (6, 7):
+            trigger_range = list(entry.get("range", list(PORTAL_DEFAULT_RANGE)))
+            trigger_range[field - 6] = max(MIN_SIZE, round(value, 2))
+            entry["range"] = trigger_range
 
     def type_dialog_number(self, char: str) -> bool:
         """数字字段键盘输入：第一次敲键起一个新值，之后追加，可以带一个小数点。

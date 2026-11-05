@@ -9,6 +9,7 @@ from controller.input_source import InputSource
 from core.game_object import GameObjectKind
 from item.pickup_system import PickupSystem
 from physics.physics_system import PhysicsSystem
+from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from world.level import (
@@ -21,6 +22,7 @@ from world.level import (
     build_items,
     build_movable_blocks,
     build_player,
+    build_portals,
     build_textures,
     build_world,
     flip_area_offsets_of,
@@ -48,6 +50,7 @@ class Scene:
         self.controller_system: ControllerSystem = ControllerSystem()
         self.physics_system: PhysicsSystem = PhysicsSystem()
         self.pickup_system: PickupSystem = PickupSystem()
+        self.portal_system: PortalSystem = PortalSystem()
         self.render_system: RenderSystem = RenderSystem()
 
         self.requested_next_scene: Scene | None = None
@@ -74,6 +77,7 @@ class Scene:
             + build_textures(level_definition, base_dir)   # 贴图压在所有方块之上
             + build_items(level_definition)
             + buttons
+            + build_portals(level_definition)
             + build_nozzles(level_definition)
             + build_destination(level_definition)
             + players                                      # 玩家在最上面
@@ -104,13 +108,14 @@ class Scene:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
     def update(self, delta_seconds: float) -> None:
-        """一步：控制来源 → 物理积分与解算 → 道具拾取。"""
+        """一步：控制来源 → 物理积分与解算 → 道具拾取 → 传送门。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.physics_system.update(self.objects, self.world, delta_seconds)
         self.pickup_system.update(self.objects)
+        self.portal_system.update(self.objects, self.player)
 
     @property
     def destination_reached(self) -> bool:

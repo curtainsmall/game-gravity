@@ -75,6 +75,7 @@ class Level:
         self.planks: list = []
         self.movable_blocks: list = []
         self.buttons: list = []
+        self.portals: list = []
         self.items: list = []
         self.nozzles: list = []
         self.textures: list = []   # 贴图：浮点世界矩形 + 图片名，不吸格子
@@ -93,6 +94,7 @@ class Level:
             "planks": copy.deepcopy(self.planks),
             "movable_blocks": copy.deepcopy(self.movable_blocks),
             "buttons": copy.deepcopy(self.buttons),
+            "portals": copy.deepcopy(self.portals),
             "items": copy.deepcopy(self.items),
             "nozzles": copy.deepcopy(self.nozzles),
             "textures": copy.deepcopy(self.textures),
@@ -133,6 +135,7 @@ class Level:
         level.planks = copy.deepcopy(list(definition.get("planks", [])))
         level.movable_blocks = copy.deepcopy(list(definition.get("movable_blocks", [])))
         level.buttons = copy.deepcopy(list(definition.get("buttons", [])))
+        level.portals = copy.deepcopy(list(definition.get("portals", [])))
         level.items = copy.deepcopy(list(definition.get("items", [])))
         level.nozzles = copy.deepcopy(list(definition.get("nozzles", [])))
         level.textures = copy.deepcopy(list(definition.get("textures", [])))

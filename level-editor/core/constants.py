@@ -37,6 +37,7 @@ MOVABLE_COLOR = (255, 105, 180)
 BUTTON_COLOR = (220, 20, 60)
 ITEM_COLOR = (220, 20, 60)
 NOZZLE_COLOR = (220, 20, 60)
+PORTAL_COLOR = (130, 80, 200)
 PLAYER_COLOR = (255, 140, 0)
 DESTINATION_COLOR = (34, 139, 34)
 PIVOT_COLOR = (255, 70, 70)
@@ -62,13 +63,15 @@ VIEW_MENU_WIDTH = 170          # 视图设置菜单宽度
     TOOL_PLAYER,
     TOOL_DEST,
     TOOL_TEXTURE,
-) = range(9)
+    TOOL_PORTAL,
+) = range(10)
 
 TOOL_SPECS = {
     TOOL_BLOCK: ("方块", "rect"),
     TOOL_PLANK: ("木板", "rect"),
     TOOL_MOVABLE: ("可移动方块", "rect"),
     TOOL_BUTTON: ("按钮", "single"),
+    TOOL_PORTAL: ("传送门", "single"),
     TOOL_ITEM: ("道具", "single"),
     TOOL_NOZZLE: ("喷口", "single"),
     TOOL_PLAYER: ("起点", "single"),
@@ -81,6 +84,7 @@ TOOL_ORDER = [
     TOOL_PLANK,
     TOOL_MOVABLE,
     TOOL_BUTTON,
+    TOOL_PORTAL,
     TOOL_ITEM,
     TOOL_NOZZLE,
     TOOL_PLAYER,
@@ -94,6 +98,7 @@ TOOL_COLORS = {
     TOOL_PLANK: PLANK_COLOR,
     TOOL_MOVABLE: MOVABLE_COLOR,
     TOOL_BUTTON: BUTTON_COLOR,
+    TOOL_PORTAL: PORTAL_COLOR,
     TOOL_ITEM: ITEM_COLOR,
     TOOL_NOZZLE: NOZZLE_COLOR,
     TOOL_PLAYER: PLAYER_COLOR,
@@ -104,6 +109,16 @@ TOOL_COLORS = {
 # ---- 默认值 ----
 NOZZLE_DEFAULT_POWER = 7
 NOZZLE_DEFAULT_RANGE = 5
+# 传送门画出来的那块门：1 格宽、0.3 格高；触发区默认和它一样大
+PORTAL_SIZE = (1.0, 0.3)
+PORTAL_DEFAULT_RANGE = (1.0, 0.3)
+FACE_ORDER = ("up", "right", "down", "left")   # 按钮和传送门的朝向循环顺序
+FACE_DIRECTIONS = {
+    "up": (0.0, 1.0),
+    "right": (1.0, 0.0),
+    "down": (0.0, -1.0),
+    "left": (-1.0, 0.0),
+}
 JUMP_HEIGHT_DEFAULT = 2
 JUMP_HEIGHT_MIN = 0   # 上限不是常数：最多到「关卡高度 - 1」，见 Editor._jump_height_limit
 
@@ -123,6 +138,7 @@ KIND_BLOCK = "block"
 KIND_PLANK = "plank"
 KIND_MOVABLE = "movable_block"
 KIND_BUTTON = "button"
+KIND_PORTAL = "portal"
 KIND_ITEM = "item"
 KIND_NOZZLE = "nozzle"
 KIND_PLAYER = "player"
@@ -133,7 +149,7 @@ HANDLE_PIXELS = 14  # 对象四角的缩放热区半径（像素）
 NUMBER_TEXT_MAX_LENGTH = 8  # 属性面板里数字字段最多敲几个字符（含负号和小数点）
 
 # 关卡数据里带 name 字段、会被别的对象引用的种类
-KIND_HAS_NAME = (KIND_MOVABLE, KIND_BUTTON, KIND_ITEM)
+KIND_HAS_NAME = (KIND_MOVABLE, KIND_BUTTON, KIND_PORTAL, KIND_ITEM)
 NAME_MAX_LENGTH = 24
 
 KIND_TITLES = {
@@ -141,6 +157,7 @@ KIND_TITLES = {
     KIND_PLANK: "木板",
     KIND_MOVABLE: "可移动方块",
     KIND_BUTTON: "按钮",
+    KIND_PORTAL: "传送门",
     KIND_ITEM: "道具",
     KIND_NOZZLE: "喷口",
     KIND_PLAYER: "起点",

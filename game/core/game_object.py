@@ -6,6 +6,7 @@ from controller.controller import Controller
 from nozzle.nozzle import Nozzle
 from item.item import Item
 from physics.body import Body
+from portal.portal import Portal
 from renderer.render_spec import RenderSpec
 
 
@@ -23,6 +24,7 @@ class GameObjectKind(StrEnum):
     ITEM = "item"
     MOVABLE_BLOCK = "movable_block"
     BUTTON = "button"
+    PORTAL = "portal"
     DESTINATION = "destination"
     TEXTURE = "texture"    # 只显示美术图，不参与碰撞
 
@@ -36,6 +38,7 @@ class GameObject:
         render: RenderSpec | None = None,
         nozzle: Nozzle | None = None,
         item: Item | None = None,
+        portal: Portal | None = None,
         interaction_state: int = 0,
         name: str = "",
     ) -> None:
@@ -46,12 +49,13 @@ class GameObject:
         self.render: RenderSpec | None = render           # 显示部件
         self.nozzle: Nozzle | None = nozzle                        # 风区参数
         self.item: Item | None = item                     # 道具参数
+        self.portal: Portal | None = portal               # 传送门参数
         self.interaction_state: int = interaction_state   # 交互状态，由系统写入
 
     def describe(self) -> str:
         parts = [
             name
-            for name in ("body", "controller", "render", "nozzle", "item")
+            for name in ("body", "controller", "render", "nozzle", "item", "portal")
             if getattr(self, name) is not None
         ]
         label = self.name or str(self.kind)

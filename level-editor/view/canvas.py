@@ -11,6 +11,8 @@ from core.constants import (
     DESTINATION_COLOR,
     DIALOG_BORDER,
     DIM_TEXT,
+    FACE_DIRECTIONS,
+    FACE_ORDER,
     FACE_ROTATIONS,
     GRID,
     GROUND_COLOR,
@@ -26,6 +28,8 @@ from core.constants import (
     PIVOT_COLOR,
     PLANK_COLOR,
     PLAYER_COLOR,
+    PORTAL_COLOR,
+    PORTAL_DEFAULT_RANGE,
     PREVIEW,
     RANGE_COLOR,
     RULER_STEP,
@@ -115,6 +119,9 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
                 for i in range(5)
             ],
         )
+
+    for entry in level.portals:
+        draw_portal(surface, layout, entry)
 
     for entry in level.nozzles:
         # pos 是底边中点：三角形底边中点就画在这个点上，底边落在 y 这道平面上。
@@ -306,6 +313,40 @@ def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict) -> N
     pygame.draw.line(surface, PIVOT_COLOR, (center_x, base_y), (center_x, tip_y), 2)
     direction = (0.0, -1.0 if power > 0 else 1.0)
     _arrow_head(surface, (center_x, tip_y), direction, PIVOT_COLOR)
+
+
+def portal_trigger_rect(layout: Layout, entry: dict) -> pygame.Rect:
+    """触发区：以门为中心，宽高就是 range。"""
+    rect = layout.entry_rect(entry)
+    width, height = entry.get("range", list(PORTAL_DEFAULT_RANGE))
+    return layout.world_rect(
+        entry["pos"][0] + entry.get("size", [1.0, 1.0])[0] / 2.0 - width / 2.0,
+        entry["pos"][1] + entry.get("size", [1.0, 1.0])[1] / 2.0 - height / 2.0,
+        width,
+        height,
+    )
+
+
+def draw_portal(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
+    """传送门：1×0.3 的那块门 + 朝向箭头，触发区用虚线框标出来。"""
+    rect = layout.entry_rect(entry)
+    pygame.draw.rect(surface, PORTAL_COLOR, rect)
+    pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
+
+    trigger = portal_trigger_rect(layout, entry)
+    corners = [trigger.topleft, trigger.topright, trigger.bottomright, trigger.bottomleft]
+    for start, end in zip(corners, corners[1:] + corners[:1]):
+        _dotted_line(surface, start, end, RANGE_COLOR, dash=3.0, gap=3.0)
+
+    # 朝向：从门的中心往朝的那一边画一小段箭头，出来时也是往这边挪
+    step_x, step_y = FACE_DIRECTIONS.get(str(entry.get("face", FACE_ORDER[0])), (0.0, 1.0))
+    center = rect.center
+    tip = (
+        center[0] + step_x * layout.tile * 0.7,
+        center[1] - step_y * layout.tile * 0.7,
+    )
+    pygame.draw.line(surface, PORTAL_COLOR, center, tip, 2)
+    _arrow_head(surface, tip, (step_x, -step_y), PORTAL_COLOR, size=6)
 
 
 def draw_ruler(surface: pygame.Surface, layout: Layout, font: pygame.font.Font) -> None:

@@ -21,6 +21,7 @@ from core.game_object import GameObject, GameObjectKind
 from nozzle.nozzle import Nozzle
 from item.item import Item
 from physics.body import Body
+from portal.portal import PORTAL_DEFAULT_RANGE, Portal
 from renderer.palette import color_for_kind
 from renderer.render_spec import PlaceholderFace, PlaceholderShape, RenderSpec
 from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
@@ -28,6 +29,7 @@ from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
 LevelDefinition = dict[str, object]
 
 DEFAULT_SIZE = (1.0, 1.0)
+PORTAL_SIZE = (1.0, 0.3)   # 传送门画出来的那块门：1 格宽、0.3 格高
 PLAYER_SIZE = (0.8, 1.0)   # 玩家比一格窄，过缝与贴墙时更宽容
 NOZZLE_DEFAULT_RANGE = 5   # 喷口没写 range 时的风区长度
 NOZZLE_DEFAULT_POWER = 7   # 喷口没写 power 时的目标偏移
@@ -106,9 +108,18 @@ def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, floa
         return FLIP_AREA_OFFSETS_DEFAULT
 
 
-def _read_size(entry: dict) -> tuple[float, float]:
-    width, height = entry.get("size", DEFAULT_SIZE)
+def _read_size(entry: dict, default: tuple[float, float] = DEFAULT_SIZE) -> tuple[float, float]:
+    width, height = entry.get("size", default)
     return float(width), float(height)
+
+
+def _read_portal_range(value) -> tuple[float, float]:
+    """传送门触发区的宽高：缺省、写坏了都退回默认值，太小的夹到 0.01。"""
+    try:
+        width, height = value
+        return (max(0.01, float(width)), max(0.01, float(height)))
+    except (TypeError, ValueError):
+        return PORTAL_DEFAULT_RANGE
 
 
 def _read_face(entry: dict) -> PlaceholderFace:
@@ -126,9 +137,10 @@ def _make(
     is_sensor: bool = False,
     is_passable_during_flip: bool = False,
     controller: Controller | None = None,
+    default_size: tuple[float, float] = DEFAULT_SIZE,
 ) -> GameObject:
     x, y = _read_position(entry)
-    width, height = _read_size(entry)
+    width, height = _read_size(entry, default_size)
     return GameObject(
         kind=kind,
         name=str(entry.get("name", "")),
@@ -278,6 +290,26 @@ def build_buttons(level_definition: LevelDefinition) -> list[GameObject]:
         game_object.render.placeholder_face = _read_face(entry)
         buttons.append(game_object)
     return buttons
+
+
+def build_portals(level_definition: LevelDefinition) -> list[GameObject]:
+    """传送门：pos/size 是画出来的那块门，range 是触发区（以门为中心），target 是目标门的名字。"""
+    portals = []
+    for entry in level_definition.get("portals", []):
+        game_object = _make(
+            entry,
+            GameObjectKind.PORTAL,
+            is_static=True,
+            is_sensor=True,
+            default_size=PORTAL_SIZE,
+        )
+        game_object.portal = Portal(
+            target=str(entry.get("target", "")),
+            face=str(entry.get("face", PlaceholderFace.UP)),
+            range_size=_read_portal_range(entry.get("range")),
+        )
+        portals.append(game_object)
+    return portals
 
 
 def build_movable_blocks(level_definition: LevelDefinition, triggers_by_name: dict) -> list[GameObject]:
