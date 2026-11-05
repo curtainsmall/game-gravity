@@ -151,7 +151,7 @@ LEVELS_DIR = os.path.join(ROOT, "assets", "levels")
 # 一个关卡 = 一个文件夹，文件夹名就是关卡名
 LEVEL_SCENE_NAME = "scene.json"            # 关卡数据
 LEVEL_BACKGROUND_NAME = "background.png"   # 背景图进来后固定叫这个名字
-LEVEL_TEXTURES_DIR = "textures"            # 贴图收在这个子目录里，不自动启用
+# 贴图没有专门的目录：image 只要求是相对 scene.json 的路径，放哪儿都行
 BACKGROUND_FILTERS = [("图片", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
 
 # ---- 界面尺寸 ----

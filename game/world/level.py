@@ -58,6 +58,7 @@ def resolve_background(value, base_dir: str | Path | None) -> str | None:
     if base is not None:
         candidates.append(base / BACKGROUND_NAME)
     for candidate in candidates:
+        candidate = candidate.resolve()     # 把 ../ 这类写法归一化，日志里好读
         if candidate.is_file():
             return str(candidate)
     return None

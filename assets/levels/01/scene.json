@@ -278,5 +278,5 @@
   "destination": {
     "pos": [117, 3]
   },
-  "background": "background.png"
+  "background": "textures/background.png"
 }

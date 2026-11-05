@@ -3,12 +3,12 @@
 import copy
 import json
 import os
-import shutil
 from typing import TYPE_CHECKING
 
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
     COLS,
+    FOOTER,
     HEADER,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
@@ -26,9 +26,7 @@ from core.constants import (
     KIND_TITLES,
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
-    LEVEL_BACKGROUND_NAME,
     LEVEL_SCENE_NAME,
-    LEVEL_TEXTURES_DIR,
     LEVEL_WIDTH_MAX,
     LEVEL_WIDTH_MIN,
     MARGIN,
@@ -53,12 +51,11 @@ from core.helpers import (
     display_path,
     entry_contains,
     level_base_dir,
-    level_texture_dir,
     normalize_drag,
     nozzle_box,
     number_text,
-    resolve_background,
-    resolve_texture,
+    relative_level_path,
+    resolve_level_path,
 )
 from core.level import Level, dump_level
 from editing.files import ask_image_path, ask_level_folder
@@ -145,24 +142,35 @@ class Editor:
         return None
 
     def update_hover(self, position: tuple, layout: Layout) -> None:
-        inside = (
+        """挑出光标下的对象。
+
+        格子里的对象和喷口只在画布矩形内选；贴图是自由矩形，可能飘到关卡外面，
+        所以整个可点区域（信息栏与状态栏之间）都参与贴图命中。
+        """
+        self.hover = layout.cell_at(position)
+        self.hovered = None
+        inside_canvas = (
             layout.left <= position[0] < layout.left + layout.width
             and layout.top <= position[1] < layout.top + layout.height
         )
-        self.hover = layout.cell_at(position)
-        self.hovered = None
-        if not inside:
+        if inside_canvas:
+            nozzle = self.nozzle_at(layout.level_point(position))
+            if nozzle is not None:
+                self.hovered = (KIND_NOZZLE, nozzle)
+            elif self.hover is not None:
+                self.hovered = self.object_at(self.hover)
+        if self.hovered is not None:
             return
-        nozzle = self.nozzle_at(layout.level_point(position))
-        if nozzle is not None:
-            self.hovered = (KIND_NOZZLE, nozzle)
-        elif self.hover is not None:
-            self.hovered = self.object_at(self.hover)
-        if self.hovered is None:
-            # 贴图是背景皮，排在最后选：格子里的对象优先
-            texture = self.texture_at(layout.world_point(position))
-            if texture is not None:
-                self.hovered = (KIND_TEXTURE, texture)
+        in_work_area = (
+            HEADER <= position[1] < layout.window[1] - FOOTER
+            and 0 <= position[0] < layout.window[0]
+        )
+        if not in_work_area:
+            return
+        # 贴图是背景皮，排在最后选：格子里的对象优先
+        texture = self.texture_at(layout.world_point(position))
+        if texture is not None:
+            self.hovered = (KIND_TEXTURE, texture)
 
     # ---- 创建 / 删除 -----------------------------------------------
     def begin_drag(self, cell: tuple) -> None:
@@ -175,11 +183,12 @@ class Editor:
     def press_canvas(self, position: tuple, layout: Layout) -> None:
         """新建状态里的左键按下：光标下已有对象就只提示、不新建。
 
-        喷口是点、不占格，所以喷口工具允许压在别的对象上放；其余工具遇到
-        任何已有对象都不新建，免得一次单击把该改的对象盖掉。
+        喷口是点、不占格，所以喷口工具允许压在别的对象上放；贴图是背景皮，
+        本来就该压在方块上，所以也不算"占位"。其余工具遇到已有对象都不新建，
+        免得一次单击把该改的对象盖掉。
         """
         self.update_hover(position, layout)
-        if self.hovered is not None:
+        if self.hovered is not None and self.hovered[0] != KIND_TEXTURE:
             kind = self.hovered[0]
             if self.tool != TOOL_NOZZLE or kind == KIND_NOZZLE:
                 self.status = f"这里是{KIND_TITLES.get(kind, '对象')}；换个空位画，右键退出新建"
@@ -344,8 +353,7 @@ class Editor:
             self.level.name = os.path.basename(folder)
         try:
             os.makedirs(folder, exist_ok=True)
-            self.store_background(folder)
-            self.store_textures(folder)
+            self.normalize_media_paths(folder)
             with open(
                 os.path.join(folder, LEVEL_SCENE_NAME), "w", encoding="utf-8", newline="\n"
             ) as file:
@@ -357,37 +365,24 @@ class Editor:
         self.dirty = False
         self.status = f"已保存 {display_path(folder)}"
 
-    def store_background(self, folder: str) -> None:
-        """背景图不链接而是复制：一律存成文件夹里的 background.png。"""
-        if not self.level.background:
-            return
-        target = os.path.join(folder, LEVEL_BACKGROUND_NAME)
-        source = resolve_background(self.level.background, folder)
-        if source is None:
-            # 找不到源图就沿用文件夹里已有的那张，没有就当作没背景
-            self.level.background = LEVEL_BACKGROUND_NAME if os.path.isfile(target) else ""
-            return
-        if os.path.abspath(source) != os.path.abspath(target):
-            shutil.copyfile(source, target)
-        self.level.background = LEVEL_BACKGROUND_NAME
+    def normalize_media_paths(self, folder: str) -> None:
+        """背景和贴图都只记相对 scene.json 的路径，一个文件都不复制。
 
-    def store_textures(self, folder: str) -> None:
-        """贴图也不链接：复制进关卡文件夹的 textures/，schema 里只记相对路径。"""
-        textures_dir = os.path.join(folder, LEVEL_TEXTURES_DIR)
+        图片要事先放进关卡文件夹（或者任意位置，只要相对路径写得出来）；
+        找不到的路径原样留着，别把用户填的值抹掉。
+        """
+        if self.level.background:
+            source = resolve_level_path(self.level.background, folder)
+            if source is not None:
+                self.level.background = relative_level_path(source, folder)
         for entry in self.level.textures:
             value = entry.get("image")
             if not value:
                 continue
-            source = resolve_texture(value, folder)
+            source = resolve_level_path(value, folder)
             if source is None:
-                entry["image"] = ""
                 continue
-            name = os.path.basename(source)
-            target = os.path.join(textures_dir, name)
-            if os.path.abspath(source) != os.path.abspath(target):
-                os.makedirs(textures_dir, exist_ok=True)
-                shutil.copyfile(source, target)
-            entry["image"] = f"{LEVEL_TEXTURES_DIR}/{name}"
+            entry["image"] = relative_level_path(source, folder)
 
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:
@@ -410,11 +405,11 @@ class Editor:
 
     # ---- 贴图 -------------------------------------------------------
     def import_texture(self, layout: Layout) -> None:
-        """直接导入一张贴图：复制进 textures/，贴着右键的位置放下。
+        """直接导入一张贴图：不复制，只记一个相对 scene.json 的路径。
 
         图片按游戏比例（可玩行 400px）换算成世界格尺寸，位置和大小之后在详情里调。
         """
-        path = ask_image_path("导入贴图", level_texture_dir(self.path))
+        path = ask_image_path("导入贴图", level_base_dir(self.path))
         if not path:
             self.status = "导入贴图已取消"
             return
@@ -426,11 +421,7 @@ class Editor:
         width = max(TEXTURE_MIN_SIZE, round(pixels[0] / tile, 2))
         height = max(TEXTURE_MIN_SIZE, round(pixels[1] / tile, 2))
         at = layout.world_point(self.menu_origin)
-        try:
-            image = self.import_texture_image(path)
-        except OSError as error:
-            self.status = f"复制贴图失败：{error}"
-            return
+        image = relative_level_path(path, self.path)
         self.push_undo()
         self.dirty = True
         self.creating = False
@@ -443,21 +434,6 @@ class Editor:
             }
         )
         self.status = f"已导入贴图 {os.path.basename(path)}（{width}×{height} 格）"
-
-    def import_texture_image(self, path: str) -> str:
-        """把关卡外的图片复制进 textures/，返回 schema 里该写的路径。
-
-        关卡还没保存时没有文件夹可放，先记绝对路径，保存时 store_textures 再复制。
-        """
-        if not self.path:
-            return path.replace(os.sep, "/")
-        name = os.path.basename(path)
-        target_dir = os.path.join(self.path, LEVEL_TEXTURES_DIR)
-        target = os.path.join(target_dir, name)
-        if os.path.abspath(path) != os.path.abspath(target):
-            os.makedirs(target_dir, exist_ok=True)
-            shutil.copyfile(path, target)
-        return f"{LEVEL_TEXTURES_DIR}/{name}"
 
     # ---- 贴图的鼠标拖动 / 缩放 -------------------------------------
     def texture_corner_at(self, layout: Layout, entry: dict, position: tuple) -> str | None:
@@ -557,7 +533,12 @@ class Editor:
     # ---- 详细设置 ---------------------------------------------------
     def open_dialog(self) -> None:
         if self.hovered is None:
-            self.status = "这里没有可设置的对象"
+            # 点空地：取消选中，高亮跟着消失
+            if self.dialog is not None:
+                self.close_dialog()
+                self.status = "已取消选中"
+            else:
+                self.status = "这里没有可设置的对象"
             return
         kind, entry = self.hovered
         self.dialog = {"kind": kind, "entry": entry}
@@ -565,15 +546,6 @@ class Editor:
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
-
-    def select(self, kind: str, entry) -> None:
-        """直接选中一个对象并打开详情面板。"""
-        self.dialog = {"kind": kind, "entry": entry}
-        self.dialog_field = 0
-        self.picking_offset = False
-        self.name_focused = False
-        self.number_buffer = None
-        self.status = f"已选中{KIND_TITLES.get(kind, '对象')}"
 
     def close_dialog(self) -> None:
         self.dialog = None
@@ -869,23 +841,23 @@ class Editor:
         if not path:
             self.status = "选择背景已取消"
             return
-        self.settings["background"] = path.replace(os.sep, "/")
+        self.settings["background"] = relative_level_path(path, self.path)
         self.settings_field = 4
-        self.status = "背景已选：保存时复制到关卡文件夹并命名为 background.png"
+        self.status = "背景已选：只记相对 scene.json 的路径，不复制文件"
 
     def pick_texture_image(self) -> None:
-        """给当前贴图挑一张图；保存时复制进关卡文件夹的 textures/。"""
+        """给当前贴图换一张图：只记相对 scene.json 的路径，不复制文件。"""
         if self.dialog is None or self.dialog["kind"] != KIND_TEXTURE:
             return
-        path = ask_image_path("选择贴图", level_texture_dir(self.path))
+        path = ask_image_path("选择贴图", level_base_dir(self.path))
         if not path:
             self.status = "选择贴图已取消"
             return
         self.push_undo()
         self.dirty = True
-        self.dialog["entry"]["image"] = path.replace(os.sep, "/")
+        self.dialog["entry"]["image"] = relative_level_path(path, self.path)
         self.number_buffer = None
-        self.status = "贴图已选：保存时复制进关卡文件夹的 textures/"
+        self.status = "贴图已换：路径相对 scene.json"
 
     def adjust_settings(self, delta: int) -> None:
         if self.settings is None:

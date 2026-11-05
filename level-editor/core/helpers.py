@@ -4,7 +4,6 @@ import os
 
 from core.constants import (
     LEVEL_BACKGROUND_NAME,
-    LEVEL_TEXTURES_DIR,
     LEVELS_DIR,
     NOZZLE_DEFAULT_POWER,
     ROOT,
@@ -69,28 +68,8 @@ def level_base_dir(level_path: str | None) -> str:
     return LEVELS_DIR
 
 
-def resolve_background(value: str, level_path: str | None) -> str | None:
-    """background 解析成绝对路径；scene.json 没写就退回文件夹里的 background.png。"""
-    base = level_base_dir(level_path)
-    candidates = []
-    if value:
-        path = value.replace("/", os.sep)
-        candidates.append(path if os.path.isabs(path) else os.path.join(base, path))
-    candidates.append(os.path.join(base, LEVEL_BACKGROUND_NAME))
-    for candidate in candidates:
-        candidate = os.path.normpath(candidate)
-        if os.path.isfile(candidate):
-            return candidate
-    return None
-
-
-def level_texture_dir(level_path: str | None) -> str:
-    """贴图目录：关卡文件夹下的 textures/。"""
-    return os.path.join(level_base_dir(level_path), LEVEL_TEXTURES_DIR)
-
-
-def resolve_texture(value: str, level_path: str | None) -> str | None:
-    """贴图路径解析成绝对路径；相对路径以关卡文件夹为基准，没有兜底。"""
+def resolve_level_path(value: str, level_path: str | None) -> str | None:
+    """相对 scene.json 的路径 → 绝对路径；没有兜底，找不到就 None。"""
     if not value:
         return None
     path = value.replace("/", os.sep)
@@ -98,3 +77,25 @@ def resolve_texture(value: str, level_path: str | None) -> str | None:
         path = os.path.join(level_base_dir(level_path), path)
     path = os.path.normpath(path)
     return path if os.path.isfile(path) else None
+
+
+def resolve_background(value: str, level_path: str | None) -> str | None:
+    """background 解析成绝对路径；scene.json 没写就退回文件夹里的 background.png。"""
+    found = resolve_level_path(value, level_path)
+    if found is not None:
+        return found
+    return resolve_level_path(LEVEL_BACKGROUND_NAME, level_path)
+
+
+def relative_level_path(path: str, level_path: str | None) -> str:
+    """绝对路径 → 相对 scene.json 所在目录的写法，一律用正斜杠。"""
+    try:
+        relative = os.path.relpath(path, level_base_dir(level_path))
+    except ValueError:
+        relative = path
+    return relative.replace(os.sep, "/")
+
+
+def resolve_texture(value: str, level_path: str | None) -> str | None:
+    """贴图路径解析成绝对路径；相对路径以关卡文件夹为基准，没有兜底。"""
+    return resolve_level_path(value, level_path)

@@ -163,19 +163,40 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         if editor.drag_start is not None and editor.drag_current is not None:
             x, y, w, h = normalize_drag(editor.drag_start, editor.drag_current)
             pygame.draw.rect(surface, color, layout.cell_rect(x, y, (w, h)), 2)
-    elif editor.hovered is not None and not editor.startup:
-        # 编辑状态：高亮光标下的整个对象；贴图额外画出四角的缩放把手
-        kind, entry = editor.hovered
-        if kind == KIND_TEXTURE:
-            rect = texture_rect(layout, entry)
-            pygame.draw.rect(surface, HIGHLIGHT, rect, 2)
+    elif not editor.startup:
+        # 选中的对象一直亮着，直到选了别的或者点空地取消
+        selected = editor.dialog
+        if selected is not None:
+            draw_object_outline(
+                surface, layout, selected["kind"], selected["entry"], HIGHLIGHT, 2, handles=True
+            )
+        # 光标下的另一个对象只是淡描边，避免和选中项抢视线
+        hovered = editor.hovered
+        if hovered is not None and (selected is None or hovered[1] is not selected["entry"]):
+            draw_object_outline(surface, layout, hovered[0], hovered[1], DIM_TEXT, 1)
+
+
+def draw_object_outline(
+    surface: pygame.Surface,
+    layout: Layout,
+    kind: str,
+    entry: dict,
+    color: tuple,
+    width: int = 2,
+    handles: bool = False,
+) -> None:
+    """给一个对象画描边；贴图可以顺便画出四角的缩放把手。"""
+    if kind == KIND_TEXTURE:
+        rect = texture_rect(layout, entry)
+        pygame.draw.rect(surface, color, rect, width)
+        if handles:
             for point in (rect.bottomleft, rect.bottomright, rect.topleft, rect.topright):
                 pygame.draw.rect(
                     surface, HANDLE_COLOR, pygame.Rect(point[0] - 4, point[1] - 4, 8, 8)
                 )
-        else:
-            box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
-            pygame.draw.rect(surface, HIGHLIGHT, layout.entry_rect(box), 2)
+        return
+    box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
+    pygame.draw.rect(surface, color, layout.entry_rect(box), width)
 
 
 def _dotted_line(
