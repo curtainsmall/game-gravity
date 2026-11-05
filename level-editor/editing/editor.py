@@ -12,6 +12,7 @@ from core.constants import (
     HEADER,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MIN,
+    FACE_LABELS,
     FACE_ORDER,
     KIND_BLOCK,
     KIND_BUTTON,
@@ -39,7 +40,6 @@ from core.constants import (
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_RANGE,
     NUMBER_TEXT_MAX_LENGTH,
-    PORTAL_DEFAULT_RANGE,
     PORTAL_SIZE,
     ROWS,
     TOOL_BLOCK,
@@ -57,6 +57,8 @@ from core.helpers import (
     clamp_float,
     clamp_int,
     display_path,
+    folder_is_empty,
+    folder_name_for,
     level_base_dir,
     normalize_rect,
     nozzle_box,
@@ -94,6 +96,7 @@ class Editor:
         self.pan_drag: tuple | None = None
         self.dialog: dict | None = None
         self.dialog_field = 0
+        self.dropdown_field: int | None = None   # 正在展开下拉列表的选择型字段
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer: str | None = None   # 正在键盘输入的数字字段，None 表示没在输入
@@ -270,7 +273,7 @@ class Editor:
         if self.tool == TOOL_BUTTON:
             level.buttons.append({"name": "", "pos": [x, y], "size": list(size), "face": ""})
         elif self.tool == TOOL_PORTAL:
-            # 门本身固定 1×0.3，触发区默认和门一样大，目标和朝向在面板里调
+            # 门本身固定 1×0.3，它就是触发区；目标和朝向在面板里调
             level.portals.append(
                 {
                     "name": "",
@@ -278,7 +281,6 @@ class Editor:
                     "size": list(PORTAL_SIZE),
                     "face": FACE_ORDER[0],
                     "target": "",
-                    "range": list(PORTAL_DEFAULT_RANGE),
                 }
             )
         elif self.tool == TOOL_ITEM:
@@ -298,6 +300,7 @@ class Editor:
         self.dirty = True
         self.remove_entry(kind, entry)
         self.dialog = None
+        self.dropdown_field = None
         self.selection = []
         self.hovered = None
         self.picking_offset = False
@@ -316,6 +319,7 @@ class Editor:
             return
         self.level = Level.from_definition(self.undo_stack.pop())
         self.dialog = None
+        self.dropdown_field = None
         self.selection = []
         self.marquee_start = None
         self.marquee_current = None
@@ -330,6 +334,7 @@ class Editor:
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
+        self.dropdown_field = None
         self.selection = []
         self.marquee_start = None
         self.marquee_current = None
@@ -341,6 +346,8 @@ class Editor:
         self.pan_x = self.pan_y = 0.0
         self.drag_start = self.drag_current = None
         self.status = "新建关卡（尚未保存）"
+        # 新建之后先把关卡设置摊开：名字、尺寸、跳高这些一上来就能填
+        self.open_settings()
 
     def open_level(self) -> None:
         folder = ask_level_folder("打开关卡文件夹")
@@ -365,6 +372,7 @@ class Editor:
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
+        self.dropdown_field = None
         self.selection = []                 # 上一个关卡的选中项不能带过来
         self.marquee_start = None
         self.marquee_current = None
@@ -381,9 +389,14 @@ class Editor:
         """保存到关卡文件夹：scene.json 放数据，背景与贴图复制进文件夹。"""
         folder = self.path
         if folder is None:
-            folder = ask_level_folder("选择关卡文件夹（文件夹名就是关卡名）")
+            folder = ask_level_folder(
+                "选一个空文件夹存进它，或者选上一级、按关卡名新建一个"
+            )
             if not folder:
                 self.status = "保存已取消"
+                return
+            folder = self.folder_for_new_level(folder)
+            if folder is None:
                 return
         folder = os.path.normpath(folder)
         if not self.level.name:
@@ -401,6 +414,22 @@ class Editor:
         self.path = folder
         self.dirty = False
         self.status = f"已保存 {display_path(folder)}"
+
+    def folder_for_new_level(self, chosen: str) -> str | None:
+        """新关卡存哪儿：选中的是空文件夹就直接用它，否则在里面按关卡名新建一层。
+
+        所以既可以先自己建个空文件夹再选它，也可以直接选 assets/levels，
+        编辑器会自己建出 assets/levels/<关卡名>。
+        """
+        folder = os.path.normpath(chosen)
+        if not folder_is_empty(folder):
+            folder = os.path.join(folder, folder_name_for(self.level.name))
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError as error:
+            self.status = f"新建关卡文件夹失败：{error}"
+            return None
+        return folder
 
     def normalize_media_paths(self, folder: str) -> None:
         """背景和贴图都只记相对 scene.json 的路径，一个文件都不复制。
@@ -595,6 +624,7 @@ class Editor:
         self.selection = [(kind, entry)]
         self.dialog = {"kind": kind, "entry": entry}
         self.dialog_field = 0
+        self.dropdown_field = None
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
@@ -609,6 +639,7 @@ class Editor:
             self.dialog_field = 0
         else:
             self.dialog = None
+        self.dropdown_field = None
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
@@ -750,6 +781,7 @@ class Editor:
 
     def close_dialog(self) -> None:
         self.dialog = None
+        self.dropdown_field = None
         self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
@@ -829,14 +861,11 @@ class Editor:
                 ("一次触发", "是" if entry.get("once") else "否"),
             ]
         elif kind == KIND_BUTTON:
-            rows.append(("朝向", entry.get("face") or "（空）"))
+            rows.append(("朝向", FACE_LABELS.get(entry.get("face", ""), "（空）")))
         elif kind == KIND_PORTAL:
-            trigger_range = entry.get("range", list(PORTAL_DEFAULT_RANGE))
             rows += [
-                ("朝向", entry.get("face") or FACE_ORDER[0]),
+                ("朝向", FACE_LABELS.get(entry.get("face", ""), FACE_LABELS[FACE_ORDER[0]])),
                 ("目标", entry.get("target") or "无"),
-                ("触发区宽", number_text(trigger_range[0])),
-                ("触发区高", number_text(trigger_range[1])),
             ]
         elif kind == KIND_ITEM:
             rows.append(("变重", "是" if entry.get("heavy") else "否"))
@@ -923,6 +952,78 @@ class Editor:
         elif kind == KIND_ITEM:
             entry["heavy"] = not entry.get("heavy", False)
 
+    # ---- 选择型字段的下拉列表 ---------------------------------------
+    def dialog_options(self, field: int) -> list | None:
+        """选择型字段的可选项 [(显示文字, 值)]；数字、开关字段返回 None。
+
+        朝向、传送门的目标、可移动方块的触发按钮都从这里出下拉列表。
+        """
+        if self.dialog is None:
+            return None
+        kind = self.dialog["kind"]
+        entry = self.dialog["entry"]
+        if kind in (KIND_BUTTON, KIND_PORTAL) and field == 4:
+            return [(FACE_LABELS[face], face) for face in FACE_ORDER]
+        if kind == KIND_PORTAL and field == 5:
+            names = [
+                portal.get("name", "")
+                for portal in self.level.portals
+                if portal.get("name") and portal is not entry
+            ]
+            return [("无", "")] + [(name, name) for name in names]
+        if kind == KIND_MOVABLE and field == 6:
+            names = [
+                button.get("name", "") for button in self.level.buttons if button.get("name")
+            ]
+            return [("无", None)] + [(name, name) for name in names]
+        return None
+
+    def dialog_option_value(self, field: int):
+        """选择型字段当前的值，用来在下拉列表里标出选中项。"""
+        if self.dialog is None:
+            return None
+        kind = self.dialog["kind"]
+        entry = self.dialog["entry"]
+        if kind == KIND_MOVABLE and field == 6:
+            return (entry.get("sources") or [None])[0]
+        if kind == KIND_PORTAL and field == 5:
+            return entry.get("target") or ""
+        return entry.get("face", FACE_ORDER[0])
+
+    def toggle_dropdown(self, field: int) -> bool:
+        """点选择型字段：没展开就展开，已经展开就收起。返回这个字段是不是选择型。"""
+        if self.dialog_options(field) is None:
+            return False
+        if self.dropdown_field == field:
+            self.dropdown_field = None
+            return True
+        self.dialog_field = field
+        self.dropdown_field = field
+        self.number_buffer = None
+        self.name_focused = False
+        return True
+
+    def close_dropdown(self) -> None:
+        self.dropdown_field = None
+
+    def choose_dropdown(self, value) -> None:
+        """在下拉列表里选了一项：写回字段并收起列表。"""
+        field = self.dropdown_field
+        if field is None or self.dialog is None:
+            return
+        kind = self.dialog["kind"]
+        entry = self.dialog["entry"]
+        self.push_undo()
+        if kind == KIND_MOVABLE and field == 6:
+            entry["sources"] = [value] if value else []
+        elif kind == KIND_PORTAL and field == 5:
+            entry["target"] = value or ""
+        else:
+            entry["face"] = value
+        self.dropdown_field = None
+        self.number_buffer = None
+        self.dirty = True
+
     # ---- 数字字段的键盘输入 -----------------------------------------
     def dialog_number_value(self, field: int):
         """字段是数字就返回当前值；朝向、触发按钮这类枚举返回 None。"""
@@ -942,8 +1043,6 @@ class Editor:
             return entry.get("power", NOZZLE_DEFAULT_POWER)
         if kind == KIND_NOZZLE and field == 3:
             return entry.get("range", NOZZLE_DEFAULT_RANGE)
-        if kind == KIND_PORTAL and field in (6, 7):
-            return entry.get("range", list(PORTAL_DEFAULT_RANGE))[field - 6]
         return None
 
     def set_dialog_number(self, field: int, value: float) -> None:
@@ -967,10 +1066,6 @@ class Editor:
             entry["power"] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
         elif kind == KIND_NOZZLE and field == 3:
             entry["range"] = round(clamp_float(value, 1.0, 8.0, 1.0), 2)
-        elif kind == KIND_PORTAL and field in (6, 7):
-            trigger_range = list(entry.get("range", list(PORTAL_DEFAULT_RANGE)))
-            trigger_range[field - 6] = max(MIN_SIZE, round(value, 2))
-            entry["range"] = trigger_range
 
     def type_dialog_number(self, char: str) -> bool:
         """数字字段键盘输入：第一次敲键起一个新值，之后追加，可以带一个小数点。

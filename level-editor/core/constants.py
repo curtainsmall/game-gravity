@@ -109,10 +109,10 @@ TOOL_COLORS = {
 # ---- 默认值 ----
 NOZZLE_DEFAULT_POWER = 7
 NOZZLE_DEFAULT_RANGE = 5
-# 传送门画出来的那块门：1 格宽、0.3 格高；触发区默认和它一样大
+# 传送门画出来的那块门：1 格宽、0.3 格高。门本身既是外观也是触发区，没有额外范围
 PORTAL_SIZE = (1.0, 0.3)
-PORTAL_DEFAULT_RANGE = (1.0, 0.3)
 FACE_ORDER = ("up", "right", "down", "left")   # 按钮和传送门的朝向循环顺序
+FACE_LABELS = {"up": "上", "right": "右", "down": "下", "left": "左"}  # 界面上显示的中文
 FACE_DIRECTIONS = {
     "up": (0.0, 1.0),
     "right": (1.0, 0.0),

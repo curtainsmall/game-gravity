@@ -21,7 +21,7 @@ from core.game_object import GameObject, GameObjectKind
 from nozzle.nozzle import Nozzle
 from item.item import Item
 from physics.body import Body
-from portal.portal import PORTAL_DEFAULT_RANGE, Portal
+from portal.portal import Portal
 from renderer.palette import color_for_kind
 from renderer.render_spec import PlaceholderFace, PlaceholderShape, RenderSpec
 from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
@@ -111,15 +111,6 @@ def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, floa
 def _read_size(entry: dict, default: tuple[float, float] = DEFAULT_SIZE) -> tuple[float, float]:
     width, height = entry.get("size", default)
     return float(width), float(height)
-
-
-def _read_portal_range(value) -> tuple[float, float]:
-    """传送门触发区的宽高：缺省、写坏了都退回默认值，太小的夹到 0.01。"""
-    try:
-        width, height = value
-        return (max(0.01, float(width)), max(0.01, float(height)))
-    except (TypeError, ValueError):
-        return PORTAL_DEFAULT_RANGE
 
 
 def _read_face(entry: dict) -> PlaceholderFace:
@@ -306,7 +297,6 @@ def build_portals(level_definition: LevelDefinition) -> list[GameObject]:
         game_object.portal = Portal(
             target=str(entry.get("target", "")),
             face=str(entry.get("face", PlaceholderFace.UP)),
-            range_size=_read_portal_range(entry.get("range")),
         )
         portals.append(game_object)
     return portals

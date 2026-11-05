@@ -17,6 +17,7 @@ from editing.editor import Editor
 from editing.handlers import (
     handle_create_menu,
     handle_detail_click,
+    handle_dropdown_click,
     handle_settings_click,
     handle_toolbar,
 )
@@ -174,6 +175,12 @@ def run() -> None:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button in (4, 5):
                     continue
+                if editor.dropdown_field is not None and event.button == 1:
+                    if handle_dropdown_click(screen, editor, event.pos):
+                        continue
+                    # 列表已经收起：点在面板里就继续走面板，点在画布上就只是收起列表
+                    if not (panel_open() and detail_panel_rect(screen).collidepoint(event.pos)):
+                        continue
                 if panel_open() and detail_panel_rect(screen).collidepoint(event.pos):
                     if event.button == 1:
                         handle_detail_click(screen, editor, event.pos)
@@ -223,7 +230,9 @@ def run() -> None:
                 elif ctrl and event.key == pygame.K_n:
                     editor.new_level()
                 elif event.key == pygame.K_ESCAPE:
-                    if editor.picking_offset:
+                    if editor.dropdown_field is not None:
+                        editor.close_dropdown()
+                    elif editor.picking_offset:
                         editor.cancel_pick_offset()
                     elif editor.name_focused:
                         editor.blur_name()

@@ -90,6 +90,45 @@ def detail_image_rect(surface: pygame.Surface, editor: Editor) -> pygame.Rect | 
     return detail_slot_rect(surface, editor, "image")
 
 
+def dropdown_rects(surface: pygame.Surface, editor: Editor) -> list:
+    """展开中的下拉列表：[(矩形, 显示文字, 值)]；没展开就是空列表。
+
+    优先往字段下面展开，下面放不下就往上面展开，再放不下就按能放下的条数截断。
+    """
+    field = editor.dropdown_field
+    if field is None:
+        return []
+    options = editor.dialog_options(field)
+    if not options:
+        return []
+    row_rect = None
+    for rect, index in detail_row_rects(surface, editor):
+        if index == field:
+            row_rect = rect
+            break
+    if row_rect is None:
+        return []
+
+    item_height = ROW_HEIGHT - 2
+    limit = surface.get_height() - FOOTER
+    below = max(0, (limit - row_rect.bottom - 2) // item_height)
+    above = max(0, (row_rect.top - HEADER - 2) // item_height)
+    if below >= len(options) or below >= above:
+        shown = min(len(options), max(1, below))
+        top = row_rect.bottom + 2
+    else:
+        shown = min(len(options), max(1, above))
+        top = row_rect.top - 2 - shown * item_height
+    return [
+        (
+            pygame.Rect(row_rect.left, top + index * item_height, row_rect.width, item_height),
+            label,
+            value,
+        )
+        for index, (label, value) in enumerate(options[:shown])
+    ]
+
+
 def detail_button_rects(surface: pygame.Surface) -> tuple:
     panel = detail_panel_rect(surface)
     y = panel.bottom - 32
@@ -160,8 +199,20 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
             (rect.left + 6, rect.centery - text.get_height() // 2),
             (0, 0, min(text.get_width(), clip), text.get_height()),
         )
-        draw_stepper(surface, left, -1)
-        draw_stepper(surface, right, 1)
+        if editor.dialog_options(index) is None:
+            draw_stepper(surface, left, -1)
+            draw_stepper(surface, right, 1)
+        else:
+            # 选择型字段：右边画个向下的小三角，点开是一列选项
+            pygame.draw.polygon(
+                surface,
+                HIGHLIGHT if selected else TEXT,
+                [
+                    (right.centerx - 4, right.centery - 2),
+                    (right.centerx + 4, right.centery - 2),
+                    (right.centerx, right.centery + 3),
+                ],
+            )
 
     pick_rect = detail_pick_rect(surface, editor)
     if pick_rect is not None:
@@ -202,3 +253,19 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
         pygame.draw.rect(surface, DIALOG_BORDER, image_rect, 1)
         text = font.render("选择图片", True, TEXT)
         surface.blit(text, (image_rect.left + 8, image_rect.centery - text.get_height() // 2))
+
+    # 展开的下拉列表画在最上面，盖住下面的行和按钮
+    if editor.dropdown_field is None:
+        return
+    current = editor.dialog_option_value(editor.dropdown_field)
+    for rect, label, value in dropdown_rects(surface, editor):
+        hovered = rect.collidepoint(pygame.mouse.get_pos())
+        pygame.draw.rect(surface, (100, 100, 110) if hovered else DIALOG_BG, rect)
+        pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
+        mark = "•" if value == current else " "
+        text = font.render(f"{mark} {label}", True, TEXT)
+        surface.blit(
+            text,
+            (rect.left + 6, rect.centery - text.get_height() // 2),
+            (0, 0, min(text.get_width(), rect.width - 10), text.get_height()),
+        )

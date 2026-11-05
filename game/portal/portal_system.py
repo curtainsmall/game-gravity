@@ -1,7 +1,7 @@
-"""PortalSystem：玩家踩进传送门的触发区就被送到目标门。
+"""PortalSystem：玩家踩到传送门本身就被送到目标门。
 
-刚从某个门出来时，那个门（以及玩家落点压着的门）在玩家离开触发区之前都不触发，
-所以走过去不会立刻被弹回来，得先走出去再进来。
+触发区就是门那块矩形，没有额外的范围。刚从某个门出来时，那个门（以及玩家落点压着
+的门）在玩家离开它之前都不触发，所以走过去不会立刻被弹回来，得先走出去再进来。
 """
 
 from core.game_object import GameObject
@@ -42,12 +42,13 @@ class PortalSystem:
 
     @staticmethod
     def _overlaps(portal: GameObject, body) -> bool:
-        left, bottom, right, top = portal.portal.trigger_bounds(portal.body)
+        """门的矩形和玩家是否相交：门的 body 就是触发区。"""
+        door = portal.body
         return (
-            body.left < right
-            and body.right > left
-            and body.bottom < top
-            and body.top > bottom
+            body.left < door.right
+            and body.right > door.left
+            and body.bottom < door.top
+            and body.top > door.bottom
         )
 
     @staticmethod

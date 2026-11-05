@@ -135,7 +135,12 @@ class Level:
         level.planks = copy.deepcopy(list(definition.get("planks", [])))
         level.movable_blocks = copy.deepcopy(list(definition.get("movable_blocks", [])))
         level.buttons = copy.deepcopy(list(definition.get("buttons", [])))
-        level.portals = copy.deepcopy(list(definition.get("portals", [])))
+        # 门本身就是触发区了：老数据里的 range 读进来就丢掉，省得存回去又冒出来
+        level.portals = [
+            {key: value for key, value in entry.items() if key != "range"}
+            for entry in copy.deepcopy(list(definition.get("portals", [])))
+            if isinstance(entry, dict)
+        ]
         level.items = copy.deepcopy(list(definition.get("items", [])))
         level.nozzles = copy.deepcopy(list(definition.get("nozzles", [])))
         level.textures = copy.deepcopy(list(definition.get("textures", [])))

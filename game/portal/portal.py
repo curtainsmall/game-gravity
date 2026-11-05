@@ -1,11 +1,10 @@
 """Portal：传送门数据。
 
-pos/size 是画出来的那块门，range 是触发区的宽高（以门的中心为中心），
-target 是另一个门的名字。玩家从目标门出来之后，目标门在玩家离开它的触发区
-之前不再触发，所以不会来回弹。
+pos/size 就是门本身，也是触发区：踩到这块矩形就传送，没有额外的范围。
+target 是另一个门的名字。玩家从目标门出来之后，目标门在玩家离开它之前不再触发，
+所以不会来回弹。
 """
 
-PORTAL_DEFAULT_RANGE = (1.0, 0.3)   # 没写 range 时：触发区就是画出来的那块门
 PORTAL_EXIT_DISTANCE = 0.5          # 从目标门出来时沿门的朝向挪开这么多格
 
 FACE_DIRECTIONS = {
@@ -23,19 +22,6 @@ def exit_offset(face: str) -> tuple[float, float]:
 
 
 class Portal:
-    def __init__(self, target: str = "", face: str = "up", range_size=PORTAL_DEFAULT_RANGE) -> None:
+    def __init__(self, target: str = "", face: str = "up") -> None:
         self.target: str = target          # 目标门的名字，空串表示不传送
         self.face: str = face              # 朝向：出来时沿这个方向挪一点
-        self.range_size: tuple[float, float] = (float(range_size[0]), float(range_size[1]))
-
-    def trigger_bounds(self, body) -> tuple[float, float, float, float]:
-        """触发区（left, bottom, right, top）：以门的中心为中心。"""
-        width, height = self.range_size
-        center_x = body.left + body.width / 2.0
-        center_y = body.bottom + body.height / 2.0
-        return (
-            center_x - width / 2.0,
-            center_y - height / 2.0,
-            center_x + width / 2.0,
-            center_y + height / 2.0,
-        )

@@ -12,6 +12,7 @@ from view.panel import (
     detail_pick_rect,
     detail_row_rects,
     detail_slot_rect,
+    dropdown_rects,
     selection_panel_buttons,
 )
 from view.widgets import stepper_rects
@@ -45,6 +46,24 @@ def handle_create_menu(editor: Editor, position: tuple, window_size: tuple, layo
         if rect.collidepoint(position):
             editor.start_creating(tool, layout)
             return True
+    return False
+
+
+def handle_dropdown_click(surface: pygame.Surface, editor: Editor, position: tuple) -> bool:
+    """下拉列表展开时的点击：点中某项就选它；再点同一个字段收起；点别处也收起。"""
+    field = editor.dropdown_field
+    if field is None:
+        return False
+    for rect, _, value in dropdown_rects(surface, editor):
+        if rect.collidepoint(position):
+            editor.choose_dropdown(value)
+            return True
+    # 再点一次同一个字段：收起，并且把这次点击吃掉，免得面板又把它展开
+    for rect, index in detail_row_rects(surface, editor):
+        if index == field and rect.collidepoint(position):
+            editor.close_dropdown()
+            return True
+    editor.close_dropdown()
     return False
 
 
@@ -87,6 +106,8 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         editor.blur_name()
         editor.blur_number()
         editor.dialog_field = index
+        if editor.toggle_dropdown(index):
+            return
         left, right = stepper_rects(rect)
         if left.collidepoint(position):
             editor.adjust_dialog(-1)

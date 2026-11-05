@@ -1,6 +1,7 @@
 """小工具：路径显示、格子判定、颜色与数字格式化。"""
 
 import os
+import re
 
 from core.constants import (
     LEVEL_BACKGROUND_NAME,
@@ -15,6 +16,21 @@ def entry_contains(entry: dict, point: tuple) -> bool:
     x, y = entry["pos"]
     w, h = entry.get("size", [1.0, 1.0])
     return x <= point[0] <= x + w and y <= point[1] <= y + h
+
+
+def folder_name_for(name: str) -> str:
+    """关卡名 → 文件夹名：去掉 Windows 不允许的字符，空的就退回默认名字。"""
+    cleaned = re.sub(r'[<>:"/\\|?*]', "", name or "").strip().strip(".")
+    return cleaned or "新关卡"
+
+
+def folder_is_empty(folder: str) -> bool:
+    """文件夹里没有东西（不能读也当作非空，别往不明底细的地方写）。"""
+    try:
+        with os.scandir(folder) as entries:
+            return next(entries, None) is None
+    except OSError:
+        return False
 
 
 def normalize_rect(a: tuple, b: tuple, minimum: float) -> tuple:

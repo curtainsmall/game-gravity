@@ -29,7 +29,6 @@ from core.constants import (
     PLANK_COLOR,
     PLAYER_COLOR,
     PORTAL_COLOR,
-    PORTAL_DEFAULT_RANGE,
     PREVIEW,
     RANGE_COLOR,
     RULER_STEP,
@@ -315,28 +314,11 @@ def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict) -> N
     _arrow_head(surface, (center_x, tip_y), direction, PIVOT_COLOR)
 
 
-def portal_trigger_rect(layout: Layout, entry: dict) -> pygame.Rect:
-    """触发区：以门为中心，宽高就是 range。"""
-    rect = layout.entry_rect(entry)
-    width, height = entry.get("range", list(PORTAL_DEFAULT_RANGE))
-    return layout.world_rect(
-        entry["pos"][0] + entry.get("size", [1.0, 1.0])[0] / 2.0 - width / 2.0,
-        entry["pos"][1] + entry.get("size", [1.0, 1.0])[1] / 2.0 - height / 2.0,
-        width,
-        height,
-    )
-
-
 def draw_portal(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
-    """传送门：1×0.3 的那块门 + 朝向箭头，触发区用虚线框标出来。"""
+    """传送门：1×0.3 的那块门就是触发区，再画一个朝向箭头。"""
     rect = layout.entry_rect(entry)
     pygame.draw.rect(surface, PORTAL_COLOR, rect)
     pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
-
-    trigger = portal_trigger_rect(layout, entry)
-    corners = [trigger.topleft, trigger.topright, trigger.bottomright, trigger.bottomleft]
-    for start, end in zip(corners, corners[1:] + corners[:1]):
-        _dotted_line(surface, start, end, RANGE_COLOR, dash=3.0, gap=3.0)
 
     # 朝向：从门的中心往朝的那一边画一小段箭头，出来时也是往这边挪
     step_x, step_y = FACE_DIRECTIONS.get(str(entry.get("face", FACE_ORDER[0])), (0.0, 1.0))
