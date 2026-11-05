@@ -96,9 +96,9 @@ def move_speed_of(level_definition: LevelDefinition) -> float:
 
 
 def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, float]:
-    """翻转区离关卡顶多少格：第一个是向上翻的起点，第二个是向下翻的起点。
+    """翻转带的两个高度：第一个贴着关卡顶（向上翻），第二个贴着关卡底（向下翻）。
 
-    没写、写坏了或写成负数都退回默认值，负数按 0 算（等于这一侧不设限）。
+    没写、写坏了或写成负数都退回默认值，负数按 0 算（等于这一侧翻不了）。
     """
     value = level_definition.get("flip_area_offsets", FLIP_AREA_OFFSETS_DEFAULT)
     try:

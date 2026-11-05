@@ -138,10 +138,11 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     draw_stepper(surface, left, -1)
     draw_stepper(surface, right, 1)
 
-    # 翻转区：玩家要做到区域里才翻得动，数值是「离关卡顶多少格」，0 表示不设限
+    # 翻转带：脚边落在带子里才翻得动。向上翻贴着关卡顶、向下翻贴着关卡底，
+    # 数字是带子的高度，0 表示这一侧翻不了
     for field, rect, label, key in (
-        (5, flip_up_rect, "向上翻起点（离顶）", "flip_up"),
-        (6, flip_down_rect, "向下翻起点（离顶）", "flip_down"),
+        (5, flip_up_rect, "向上翻带（贴顶）", "flip_up"),
+        (6, flip_down_rect, "向下翻带（贴底）", "flip_down"),
     ):
         selected = editor.settings_field == field
         _draw_settings_row(surface, font, rect, label, editor.settings[key], selected)
