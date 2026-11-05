@@ -5,6 +5,7 @@ import math
 import pygame
 
 from core.game_object import GameObject
+from renderer.background import draw_background
 from renderer.render_spec import PlaceholderFace, PlaceholderShape
 from renderer.viewport import ViewMode, Viewport
 from world.world import World
@@ -27,6 +28,7 @@ class RenderSystem:
         self.viewport.mode = view_mode
         self.viewport.fit(world, surface)
         self.viewport.follow(focus_x, world, surface)
+        draw_background(surface, world, self.viewport)
         for game_object in objects:
             body = game_object.body
             render = game_object.render

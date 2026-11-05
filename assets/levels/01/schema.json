@@ -2,7 +2,7 @@
   "name": "01",
   "width": 120,
   "height": 8,
-  "jump_height": 4,
+  "jump_height": 3,
   "blocks": [
     {
       "pos": [2, 0],
@@ -277,5 +277,6 @@
   },
   "destination": {
     "pos": [117, 3]
-  }
+  },
+  "background": "background.png"
 }

@@ -31,6 +31,7 @@ from core.constants import (
 )
 from core.helpers import nozzle_box, normalize_drag, readable_color
 from core.level import player_position
+from view.background import draw_background
 from view.layout import Layout
 
 if TYPE_CHECKING:
@@ -68,6 +69,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     level = editor.level
     tile = layout.tile
     pygame.draw.rect(surface, PANEL, (layout.left, layout.top, layout.width, layout.height))
+    draw_background(surface, layout, level.background, editor.path)
 
     for row in range(layout.rows + 2):
         top = layout.top + row * tile

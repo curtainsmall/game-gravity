@@ -3,9 +3,11 @@
 import copy
 import json
 import os
+import shutil
 from typing import TYPE_CHECKING
 
 from core.constants import (
+    BACKGROUND_MAX_LENGTH,
     COLS,
     HEADER,
     JUMP_HEIGHT_DEFAULT,
@@ -23,6 +25,8 @@ from core.constants import (
     KIND_TITLES,
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
+    LEVEL_BACKGROUND_NAME,
+    LEVEL_SCHEMA_NAME,
     LEVEL_WIDTH_MAX,
     LEVEL_WIDTH_MIN,
     MARGIN,
@@ -43,12 +47,14 @@ from core.helpers import (
     clamp_int,
     display_path,
     entry_contains,
+    level_base_dir,
     normalize_drag,
     nozzle_box,
     number_text,
+    resolve_background,
 )
-from core.level import Level
-from editing.files import ask_open_path, ask_save_path
+from core.level import Level, dump_level
+from editing.files import ask_background_path, ask_level_folder
 
 if TYPE_CHECKING:
     from view.layout import Layout
@@ -266,21 +272,25 @@ class Editor:
         self.status = "新建关卡（尚未保存）"
 
     def open_level(self) -> None:
-        path = ask_open_path()
-        if not path:
+        folder = ask_level_folder("打开关卡文件夹")
+        if not folder:
             self.status = "打开已取消"
             return
-        self.load(path)
+        self.load(folder)
 
-    def load(self, path: str) -> None:
+    def load(self, folder: str) -> None:
+        """打开一个关卡文件夹：数据在里面的 schema.json。"""
+        schema_path = os.path.join(folder, LEVEL_SCHEMA_NAME)
         try:
-            with open(path, encoding="utf-8") as file:
+            with open(schema_path, encoding="utf-8") as file:
                 definition = json.load(file)
         except (OSError, json.JSONDecodeError) as error:
             self.status = f"打开失败：{error}"
             return
         self.level = Level.from_definition(definition)
-        self.path = path
+        if not self.level.name:
+            self.level.name = os.path.basename(os.path.normpath(folder))
+        self.path = folder
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
@@ -288,27 +298,46 @@ class Editor:
         self.startup = False
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
-        self.status = f"已打开 {display_path(path)}"
+        self.status = f"已打开 {display_path(folder)}"
 
     def save(self) -> None:
-        path = self.path
-        if path is None:
-            path = ask_save_path()
-            if not path:
+        """保存到关卡文件夹：schema.json 放数据，背景图复制成 background.png。"""
+        folder = self.path
+        if folder is None:
+            folder = ask_level_folder("选择关卡文件夹（文件夹名就是关卡名）")
+            if not folder:
                 self.status = "保存已取消"
                 return
+        folder = os.path.normpath(folder)
         if not self.level.name:
-            self.level.name = os.path.splitext(os.path.basename(path))[0]
+            self.level.name = os.path.basename(folder)
         try:
-            with open(path, "w", encoding="utf-8", newline="\n") as file:
-                json.dump(self.level.to_definition(), file, ensure_ascii=False, indent=2)
-                file.write("\n")
+            os.makedirs(folder, exist_ok=True)
+            self.store_background(folder)
+            with open(
+                os.path.join(folder, LEVEL_SCHEMA_NAME), "w", encoding="utf-8", newline="\n"
+            ) as file:
+                file.write(dump_level(self.level.to_definition()))
         except OSError as error:
             self.status = f"保存失败：{error}"
             return
-        self.path = path
+        self.path = folder
         self.dirty = False
-        self.status = f"已保存 {display_path(path)}"
+        self.status = f"已保存 {display_path(folder)}"
+
+    def store_background(self, folder: str) -> None:
+        """背景图不链接而是复制：一律存成文件夹里的 background.png。"""
+        if not self.level.background:
+            return
+        target = os.path.join(folder, LEVEL_BACKGROUND_NAME)
+        source = resolve_background(self.level.background, folder)
+        if source is None:
+            # 找不到源图就沿用文件夹里已有的那张，没有就当作没背景
+            self.level.background = LEVEL_BACKGROUND_NAME if os.path.isfile(target) else ""
+            return
+        if os.path.abspath(source) != os.path.abspath(target):
+            shutil.copyfile(source, target)
+        self.level.background = LEVEL_BACKGROUND_NAME
 
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:
@@ -595,6 +624,7 @@ class Editor:
             "width": str(self.level.width),
             "height": str(self.level.height),
             "jump_height": str(self.level.jump_height),
+            "background": self.level.background,
         }
         self.settings_field = 0
         self.push_undo()
@@ -611,12 +641,27 @@ class Editor:
             self.level.jump_height = clamp_int(
                 self.settings["jump_height"], JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
             )
+            self.level.background = self.settings["background"]
             self.dirty = True
+            background = self.level.background or "无"
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
-                f"尺寸 {self.level.width}×{self.level.height}，跳高 {self.level.jump_height}"
+                f"尺寸 {self.level.width}×{self.level.height}，"
+                f"跳高 {self.level.jump_height}，背景 {background}"
             )
         self.settings = None
+
+    def pick_background(self) -> None:
+        """挑一张背景图：保存时才复制进关卡文件夹，复制后固定叫 background.png。"""
+        if self.settings is None:
+            return
+        path = ask_background_path(level_base_dir(self.path))
+        if not path:
+            self.status = "选择背景已取消"
+            return
+        self.settings["background"] = path.replace(os.sep, "/")
+        self.settings_field = 4
+        self.status = "背景已选：保存时复制到关卡文件夹并命名为 background.png"
 
     def adjust_settings(self, delta: int) -> None:
         if self.settings is None:
@@ -651,6 +696,10 @@ class Editor:
             key = {1: "width", 2: "height", 3: "jump_height"}[field]
             if char.isdigit() and len(str(self.settings[key])) < (4 if field == 1 else 2):
                 self.settings[key] = str(self.settings[key]) + char
+        elif field == 4:
+            # 背景是路径：可打印字符都能打
+            if char.isprintable() and len(self.settings["background"]) < BACKGROUND_MAX_LENGTH:
+                self.settings["background"] += char
 
     def erase_settings_char(self) -> None:
         if self.settings is None:
@@ -661,6 +710,8 @@ class Editor:
         elif field in (1, 2, 3):
             key = {1: "width", 2: "height", 3: "jump_height"}[field]
             self.settings[key] = str(self.settings[key])[:-1]
+        elif field == 4:
+            self.settings["background"] = self.settings["background"][:-1]
 
 
 # ---- 绘制 -----------------------------------------------------------

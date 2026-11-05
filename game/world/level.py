@@ -2,9 +2,16 @@
 
 每个条目都是 {"pos": [x, y], "size": [w, h]}，size 缺省为 1×1。
 按钮与可移动方块用 name 互相引用。
+
+一个关卡是一个文件夹，文件夹名就是关卡名：
+    <关卡名>/schema.json       关卡数据
+    <关卡名>/background.png    背景图（schema 里不写 background 时默认用它）
+background 如果写了，路径相对关卡文件夹；图片按可玩区的高度等比缩放后横向重复，
+ground/ceiling 那两行不在它的覆盖范围里。
 """
 
 import json
+from pathlib import Path
 
 from controller.controller import Controller
 from controller.input_source import InputSource
@@ -23,6 +30,7 @@ DEFAULT_SIZE = (1.0, 1.0)
 PLAYER_SIZE = (0.8, 1.0)   # 玩家比一格窄，过缝与贴墙时更宽容
 NOZZLE_DEFAULT_RANGE = 5   # 喷口没写 range 时的风区长度
 NOZZLE_DEFAULT_POWER = 7   # 喷口没写 power 时的目标偏移
+BACKGROUND_NAME = "background.png"  # 关卡文件夹里背景图的固定名字
 
 
 def load_level_file(path: str) -> LevelDefinition:
@@ -31,12 +39,28 @@ def load_level_file(path: str) -> LevelDefinition:
         return json.load(file)
 
 
-def build_world(level_definition: LevelDefinition) -> World:
+def build_world(level_definition: LevelDefinition, base_dir: str | Path | None = None) -> World:
     """重力不出现在关卡数据里，用全局常量。"""
     return World(
         width_in_blocks=int(level_definition.get("width", WIDTH_IN_BLOCKS)),
         height_in_blocks=int(level_definition.get("height", HEIGHT_IN_BLOCKS)),
+        background_path=resolve_background(level_definition.get("background"), base_dir),
     )
+
+
+def resolve_background(value, base_dir: str | Path | None) -> str | None:
+    """背景图：相对关卡文件夹解析；schema 没写就退回文件夹里的 background.png。"""
+    base = Path(base_dir) if base_dir is not None else None
+    candidates: list[Path] = []
+    if value:
+        path = Path(str(value))
+        candidates.append(path if path.is_absolute() or base is None else base / path)
+    if base is not None:
+        candidates.append(base / BACKGROUND_NAME)
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def _read_position(entry: dict) -> tuple[float, float]:

@@ -30,15 +30,31 @@ def startup_rects(surface: pygame.Surface) -> list:
 
 
 def settings_geometry(surface: pygame.Surface) -> tuple:
-    panel = place_panel(surface, pygame.Rect(0, 0, 440, 214))
+    panel = place_panel(surface, pygame.Rect(0, 0, 560, 248))
     name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
     width_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
     height_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT + 2)
     jump_rect = pygame.Rect(panel.left + 12, panel.top + 140, panel.width - 24, ROW_HEIGHT + 2)
+    background_rect = pygame.Rect(
+        panel.left + 12, panel.top + 174, panel.width - 24, ROW_HEIGHT + 2
+    )
+    browse_rect = pygame.Rect(
+        background_rect.right - 76, background_rect.top + 1, 76, background_rect.height - 2
+    )
     button_y = panel.bottom - BUTTON_HEIGHT - 8
     apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
     cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
-    return panel, name_rect, width_rect, height_rect, jump_rect, apply_rect, cancel_rect
+    return (
+        panel,
+        name_rect,
+        width_rect,
+        height_rect,
+        jump_rect,
+        background_rect,
+        browse_rect,
+        apply_rect,
+        cancel_rect,
+    )
 
 
 def _draw_settings_row(
@@ -56,9 +72,17 @@ def _draw_settings_row(
 
 
 def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    panel, name_rect, width_rect, height_rect, jump_rect, apply_rect, cancel_rect = (
-        settings_geometry(surface)
-    )
+    (
+        panel,
+        name_rect,
+        width_rect,
+        height_rect,
+        jump_rect,
+        background_rect,
+        browse_rect,
+        apply_rect,
+        cancel_rect,
+    ) = settings_geometry(surface)
     draw_panel(surface, panel)
 
     surface.blit(font.render("关卡设置", True, TEXT), (panel.left + 12, panel.top + 8))
@@ -97,6 +121,29 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     draw_stepper(surface, left, -1)
     draw_stepper(surface, right, 1)
 
+    # 背景：直接敲路径，或点右边「选择…」挑一张图；存的是相对关卡目录的路径
+    background_selected = editor.settings_field == 4
+    pygame.draw.rect(
+        surface, (62, 62, 72) if background_selected else (48, 48, 54), background_rect
+    )
+    pygame.draw.rect(
+        surface, HIGHLIGHT if background_selected else (86, 86, 94), background_rect, 1
+    )
+    path = editor.settings["background"]
+    caret = "|" if background_selected else ""
+    text = font.render(
+        f"背景: {path if path else '（无）'}{caret}",
+        True,
+        HIGHLIGHT if background_selected else TEXT,
+    )
+    clip = max(1, browse_rect.left - background_rect.left - 12)
+    surface.blit(
+        text,
+        (background_rect.left + 6, background_rect.centery - text.get_height() // 2),
+        (0, 0, min(text.get_width(), clip), text.get_height()),
+    )
+    draw_button(surface, font, browse_rect, "选择…")
+
     draw_button(surface, font, apply_rect, "应用")
     draw_button(surface, font, cancel_rect, "取消")
 
@@ -132,7 +179,7 @@ def draw_startup(surface: pygame.Surface, font: pygame.font.Font) -> None:
     draw_panel(surface, panel)
     title = font.render("关卡编辑器", True, TEXT)
     surface.blit(title, (panel.centerx - title.get_width() // 2, panel.top + 16))
-    sub = font.render("新建一个关卡，或打开已有关卡文件", True, DIM_TEXT)
+    sub = font.render("新建一个关卡，或打开已有关卡文件夹", True, DIM_TEXT)
     surface.blit(sub, (panel.centerx - sub.get_width() // 2, panel.top + 42))
     for rect, action in startup_rects(surface):
         pygame.draw.rect(surface, BUTTON_BG, rect)

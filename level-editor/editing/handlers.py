@@ -78,9 +78,17 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
 
 
 def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
-    panel, name_rect, width_rect, height_rect, jump_rect, apply_rect, cancel_rect = (
-        settings_geometry(surface)
-    )
+    (
+        panel,
+        name_rect,
+        width_rect,
+        height_rect,
+        jump_rect,
+        background_rect,
+        browse_rect,
+        apply_rect,
+        cancel_rect,
+    ) = settings_geometry(surface)
     if apply_rect.collidepoint(position):
         editor.close_settings(True)
         return
@@ -89,6 +97,12 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         return
     if name_rect.collidepoint(position):
         editor.settings_field = 0
+        return
+    if browse_rect.collidepoint(position):
+        editor.pick_background()
+        return
+    if background_rect.collidepoint(position):
+        editor.settings_field = 4
         return
     for field, rect in ((1, width_rect), (2, height_rect), (3, jump_rect)):
         if not rect.collidepoint(position):

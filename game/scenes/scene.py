@@ -1,5 +1,7 @@
 """Scene：流程单元，持有对象与世界，按固定顺序驱动系统。"""
 
+from pathlib import Path
+
 import pygame
 
 from controller.controller_system import ControllerSystem
@@ -48,9 +50,11 @@ class Scene:
         self.elapsed_seconds: float = 0.0
 
     @classmethod
-    def from_level(cls, level_definition: LevelDefinition) -> "Scene":
+    def from_level(
+        cls, level_definition: LevelDefinition, base_dir: str | Path | None = None
+    ) -> "Scene":
         """由关卡数据建场景：方块、机关与物件都成为 GameObject。"""
-        world = build_world(level_definition)
+        world = build_world(level_definition, base_dir)
         InputSource.set_jump_height(jump_height_of(level_definition))
         players = build_player(level_definition)
         buttons = build_buttons(level_definition)
@@ -71,7 +75,8 @@ class Scene:
 
     @classmethod
     def from_level_file(cls, path: str) -> "Scene":
-        return cls.from_level(load_level_file(path))
+        """背景这类资源按关卡文件所在目录解析。"""
+        return cls.from_level(load_level_file(path), Path(path).parent)
 
     def enter(self) -> None:
         """进入场景。"""

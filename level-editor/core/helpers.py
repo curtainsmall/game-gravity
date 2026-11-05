@@ -2,7 +2,7 @@
 
 import os
 
-from core.constants import NOZZLE_DEFAULT_POWER, ROOT
+from core.constants import LEVEL_BACKGROUND_NAME, LEVELS_DIR, NOZZLE_DEFAULT_POWER, ROOT
 
 
 def entry_contains(entry: dict, cell: tuple) -> bool:
@@ -54,3 +54,25 @@ def clamp_int(value, low: int, high: int, fallback: int) -> int:
     except (TypeError, ValueError):
         return fallback
     return max(low, min(high, number))
+
+
+def level_base_dir(level_path: str | None) -> str:
+    """关卡的文件夹（path 指向的就是它）；关卡还没保存时用关卡根目录。"""
+    if level_path:
+        return os.path.abspath(level_path)
+    return LEVELS_DIR
+
+
+def resolve_background(value: str, level_path: str | None) -> str | None:
+    """background 解析成绝对路径；schema 没写就退回文件夹里的 background.png。"""
+    base = level_base_dir(level_path)
+    candidates = []
+    if value:
+        path = value.replace("/", os.sep)
+        candidates.append(path if os.path.isabs(path) else os.path.join(base, path))
+    candidates.append(os.path.join(base, LEVEL_BACKGROUND_NAME))
+    for candidate in candidates:
+        candidate = os.path.normpath(candidate)
+        if os.path.isfile(candidate):
+            return candidate
+    return None

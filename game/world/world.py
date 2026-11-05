@@ -14,7 +14,9 @@ class World:
         gravity_acceleration_magnitude: float = GRAVITY_ACCELERATION,
         width_in_blocks: int = WIDTH_IN_BLOCKS,
         height_in_blocks: int = HEIGHT_IN_BLOCKS,
+        background_path: str | None = None,
     ) -> None:
         self.gravity_acceleration_magnitude: float = gravity_acceleration_magnitude  # 整关一个值
         self.width_in_blocks: int = width_in_blocks
         self.height_in_blocks: int = height_in_blocks
+        self.background_path: str | None = background_path  # 已解析成绝对路径，没有背景时为 None
