@@ -155,7 +155,7 @@ KIND_PLAYER = "player"
 KIND_DESTINATION = "destination"
 KIND_TEXTURE = "texture"
 MIN_SIZE = 0.05   # 对象最小宽高（格），防止拖成一条看不见的线
-HANDLE_PIXELS = 14  # 对象四角的缩放热区半径（像素）
+HANDLE_PIXELS = 7  # 缩放手柄的热区半径（像素）：比画出来的把手大一点点
 NUMBER_TEXT_MAX_LENGTH = 8  # 属性面板里数字字段最多敲几个字符（含负号和小数点）
 
 # 关卡数据里带 name 字段、会被别的对象引用的种类
