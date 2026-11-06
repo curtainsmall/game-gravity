@@ -191,17 +191,17 @@ LEVELS_DIR_NAME = "levels"
 LEVEL_SCENE_NAME = "scene.json"            # 关卡数据
 LEVEL_BACKGROUND_NAME = "background.png"   # 背景图进来后固定叫这个名字
 # 贴图没有专门的目录：image 只要求是相对 scene.json 的路径，放哪儿都行
-BACKGROUND_FILTERS = [("图片", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
-GAME_FILTERS = [("游戏设置", "*.json"), ("所有文件", "*.*")]
+BACKGROUND_FILTERS = [("图片文件", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
+GAME_FILTERS = [("游戏配置文件", "*.json"), ("所有文件", "*.*")]
 
 # ---- 界面尺寸 ----
 # (文字, 动作, 宽度, 什么时候显示)：
 #   always 一直在；game 打开了游戏就在（关卡的挑选、游戏设置）；level 只改当前这一关，
 #   视图里没有关卡时整个不画。
 TOOLBAR_ITEMS = [
-    ("打开游戏", "open_game", 88, "always"),
-    ("关卡", "levels", 56, "game"),    # 一直挂在工具栏上：浮层里列 levels/ 里的关卡
-    ("游戏设置", "game_settings", 88, "game"),
+    ("打开游戏配置", "open_game", 112, "always"),
+    ("选择关卡", "levels", 88, "game"),   # 一直挂在工具栏上：浮层里列 levels/ 里的关卡
+    ("游戏配置", "game_settings", 88, "game"),
     ("视图", "view", 56, "always"),
     ("保存", "save", 56, "level"),
     ("撤销", "undo", 56, "level"),

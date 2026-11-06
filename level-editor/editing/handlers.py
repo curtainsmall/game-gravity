@@ -217,7 +217,7 @@ def handle_player_settings_click(
 def handle_game_settings_click(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
-    """游戏设置浮层：点哪一格就编辑哪一格，改完点「应用」写进 game.json。"""
+    """游戏配置浮层：点哪一格就编辑哪一格，改完点「应用」写进 game.json。"""
     (
         panel,
         title_rect,

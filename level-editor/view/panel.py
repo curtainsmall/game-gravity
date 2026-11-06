@@ -144,7 +144,9 @@ def draw_selection_panel(surface: pygame.Surface, editor: Editor, font: pygame.f
     pygame.draw.rect(surface, DIALOG_BG, panel)
     pygame.draw.rect(surface, DIALOG_BORDER, panel, 1)
     count = len(editor.selection)
-    surface.blit(font.render(f"已选 {count} 个对象", True, TEXT), (panel.left + 10, panel.top + 8))
+    surface.blit(
+        font.render(f"已选择 {count} 个对象", True, TEXT), (panel.left + 10, panel.top + 8)
+    )
 
     top = panel.top + 34
     row = ROW_HEIGHT - 2
@@ -184,7 +186,7 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
         pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
         pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
         left, right = stepper_rects(rect)
-        text = font.render(f"{label}: {value}", True, HIGHLIGHT if selected else TEXT)
+        text = font.render(f"{label}：{value}", True, HIGHLIGHT if selected else TEXT)
         clip = max(1, left.left - rect.left - 8)
         surface.blit(
             text,
@@ -213,7 +215,7 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
         pygame.draw.rect(surface, HIGHLIGHT if focused else (86, 86, 94), name_rect, 1)
         name = editor.dialog["entry"].get("name", "")
         caret = "|" if focused else ""
-        text = font.render(f"名称: {name if name else '（空）'}{caret}", True, HIGHLIGHT if focused else TEXT)
+        text = font.render(f"名称：{name if name else '（空）'}{caret}", True, HIGHLIGHT if focused else TEXT)
         clip = max(1, name_rect.width - 12)
         surface.blit(
             text,

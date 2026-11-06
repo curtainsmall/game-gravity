@@ -15,7 +15,7 @@ def draw_title(surface: pygame.Surface, app) -> None:
     if not app.levels:
         ui.draw_text(
             surface,
-            "game/levels/ 里没有可用的关卡",
+            "game/levels/ 目录中暂无可用的关卡",
             18,
             center=(width // 2, int(height * 0.32)),
             color=ui.DIM_TEXT,
@@ -39,7 +39,9 @@ def draw_level_select(surface: pygame.Surface, app) -> None:
 
     area = ui.level_view_area(surface)
     if not app.levels:
-        ui.draw_text(surface, "game/levels/ 里没有可用的关卡", 18, center=area.center, color=ui.DIM_TEXT)
+        ui.draw_text(
+            surface, "game/levels/ 目录中暂无可用的关卡", 18, center=area.center, color=ui.DIM_TEXT
+        )
         return
 
     previous_clip = surface.get_clip()
@@ -64,16 +66,16 @@ def draw_level_select(surface: pygame.Surface, app) -> None:
     surface.set_clip(previous_clip)
 
     if ui.max_level_scroll(surface, len(app.levels)):
-        hint = ui.font(16).render("滚轮滚动", True, ui.DIM_TEXT)
+        hint = ui.font(16).render("可使用滚轮滚动列表", True, ui.DIM_TEXT)
         surface.blit(hint, (area.right - hint.get_width(), area.bottom + 6))
 
 
 def draw_ending(surface: pygame.Surface, app) -> None:
     surface.fill(ui.BACKGROUND)
     width, height = surface.get_size()
-    ui.draw_text(surface, "感谢游玩", 46, center=(width // 2, int(height * 0.16)))
+    ui.draw_text(surface, "感谢您的游玩", 46, center=(width // 2, int(height * 0.16)))
     ui.draw_text(
-        surface, "全部关卡已通过", 20, center=(width // 2, int(height * 0.25)), color=ui.DIM_TEXT
+        surface, "您已通过全部关卡", 20, center=(width // 2, int(height * 0.25)), color=ui.DIM_TEXT
     )
     # 版权信息来自 game.json：职位在左边（右对齐），名字在右边（左对齐）
     for index, (job, names) in enumerate(app.credits.items()):
@@ -81,7 +83,7 @@ def draw_ending(surface: pygame.Surface, app) -> None:
         _draw_credits_row(surface, width, y, job, names)
 
     rects = ui.ending_rects(surface)
-    ui.draw_button(surface, rects["title"], "返回标题")
+    ui.draw_button(surface, rects["title"], "返回标题界面")
     ui.draw_button(surface, rects["quit"], "退出")
 
 
@@ -91,7 +93,7 @@ def _draw_credits_row(
     """一行版权：职位（暗色）贴着中线右侧结束，名字从另一侧开始。"""
     label = ui.font(18).render(job, True, ui.DIM_TEXT)
     surface.blit(label, (width // 2 - 24 - label.get_width(), y - label.get_height() // 2))
-    text = ui.font(18).render("、".join(names), True, ui.TEXT)
+    text = ui.font(18).render(", ".join(names), True, ui.TEXT)
     surface.blit(text, (width // 2 + 24, y - text.get_height() // 2))
 
 
@@ -99,11 +101,11 @@ def draw_pause(surface: pygame.Surface) -> None:
     ui.draw_shade(surface)
     rects = ui.pause_rects(surface)
     ui.draw_panel(surface, rects["panel"])
-    ui.draw_text(surface, "已暂停", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
+    ui.draw_text(surface, "游戏已暂停", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
     ui.draw_button(surface, rects["resume"], "继续游戏")
     ui.draw_button(surface, rects["restart"], "重新开始")
     ui.draw_button(surface, rects["settings"], "设置")
-    ui.draw_button(surface, rects["title"], "返回标题")
+    ui.draw_button(surface, rects["title"], "返回标题界面")
 
 
 def draw_settings(surface: pygame.Surface, app) -> None:

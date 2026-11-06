@@ -1,10 +1,10 @@
-"""游戏设置：用户挑的 game.json，和它旁边的 levels/。
+"""游戏配置：用户挑的 game.json，和它旁边的 levels/。
 
 游戏根就是 game.json 所在的那个文件夹：
-    game.json    游戏自己的设置：title 是标题，credits 是版权信息（职位 → 名字数组）
+    game.json    游戏自己的配置：title 是标题，credits 是版权信息（职位 → 名字数组）
     levels/      一个文件夹是一关
 编辑器在启动时让用户打开或新建一份 game.json，之后关卡都从它的兄弟目录 levels/ 里找。
-设置里只改自己认识的键，别的键原样保留。
+配置里只改自己认识的键，别的键原样保留。
 """
 
 import json
@@ -13,7 +13,8 @@ import os
 from core.constants import LEVEL_SCENE_NAME, LEVELS_DIR_NAME
 
 DEFAULT_TITLE = "重力"      # game.json 丢了或没写标题时用它，编辑器照常能用
-NAME_SEPARATORS = "、,，;；"   # 一条版权里多个名字之间的分隔符，写回时统一成「、」
+NAME_SEPARATOR = ","        # 一条版权里多个名字之间的分隔符
+NAME_SEPARATORS = ",、，;；"   # 手写时也认这几种，写回时统一成「,」
 
 
 def new_settings() -> dict:
@@ -60,15 +61,18 @@ def credits_of(settings: dict) -> dict[str, list[str]]:
 
 
 def credits_to_rows(credits: dict[str, list[str]]) -> list[dict]:
-    """版权信息 → 面板里可编辑的行：每行是职位和名字文本（名字用「、」隔开）。"""
-    return [{"job": job, "names": "、".join(names)} for job, names in credits.items()]
+    """版权信息 → 面板里可编辑的行：每行是职位和名字文本（名字用「, 」隔开）。"""
+    return [
+        {"job": job, "names": f"{NAME_SEPARATOR} ".join(names)}
+        for job, names in credits.items()
+    ]
 
 
 def split_names(text: str) -> list[str]:
-    """把「张三、李四」这样的文本拆成名字数组。"""
+    """把「a,b」这样的文本拆成名字数组（也认、，；这几种分隔符）。"""
     for separator in NAME_SEPARATORS[1:]:
-        text = text.replace(separator, NAME_SEPARATORS[0])
-    return [name.strip() for name in text.split(NAME_SEPARATORS[0]) if name.strip()]
+        text = text.replace(separator, NAME_SEPARATOR)
+    return [name.strip() for name in text.split(NAME_SEPARATOR) if name.strip()]
 
 
 def rows_to_credits(rows: list[dict]) -> dict[str, list[str]]:

@@ -127,12 +127,12 @@ class Editor:
         self.pending_switch: tuple[str, str] | None = None  # 等确认的切换：("level"/"game"/"new", 目标)
         self.confirm_quit = False
         self.startup = True
-        self.status = "先打开或新建一个游戏（game.json）"
+        self.status = "请打开或新建游戏配置文件（game.json）。"
 
     # ---- 查询 -------------------------------------------------------
     @property
     def levels_dir(self) -> str | None:
-        """当前游戏的 levels/；还没打开游戏时是 None。"""
+        """当前游戏的 levels/；还没打开游戏配置时是 None。"""
         return game.levels_dir_of(self.game_path) if self.game_path else None
 
     @property
@@ -310,7 +310,7 @@ class Editor:
                 }
             )
         self.dirty = True
-        self.status = f"新增{TOOL_SPECS[self.tool][0]} ({x}, {y}) {w}×{h}"
+        self.status = f"已添加{TOOL_SPECS[self.tool][0]}（{x}, {y}）{w}×{h}。"
 
     def place_single(self, point: tuple) -> None:
         """按钮/道具/喷口/起点/终点：就地放下一个 1×1 的对象。"""
@@ -354,7 +354,7 @@ class Editor:
         elif self.tool == TOOL_DEST:
             # 终点也只有一份
             level.destination = {"pos": [x, y], "size": list(size)}
-        self.status = f"新增{TOOL_SPECS[self.tool][0]} ({x}, {y})"
+        self.status = f"已添加{TOOL_SPECS[self.tool][0]}（{x}, {y}）。"
 
     def delete_entry(self, kind: str, entry: dict) -> None:
         self.push_undo()
@@ -365,7 +365,7 @@ class Editor:
         self.selection = []
         self.hovered = None
         self.number_buffer = None
-        self.status = f"已删除{KIND_TITLES.get(kind, '对象')}"
+        self.status = f"已删除{KIND_TITLES.get(kind, '对象')}。"
 
     # ---- 撤销 -------------------------------------------------------
     def push_undo(self) -> None:
@@ -375,7 +375,7 @@ class Editor:
 
     def undo(self) -> None:
         if not self.undo_stack:
-            self.status = "没有可撤销的操作"
+            self.status = "当前没有可撤销的操作。"
             return
         self.level = Level.from_definition(self.undo_stack.pop())
         self.dialog = None
@@ -384,15 +384,15 @@ class Editor:
         self.marquee_start = None
         self.marquee_current = None
         self.dirty = True
-        self.status = "已撤销"
+        self.status = "已撤销上一步操作。"
 
     # ---- 文件：游戏（game.json） ------------------------------------
     def open_game(self, path: str | None = None) -> None:
         """打开一份 game.json：没给路径就弹选择框；打开后请用户挑关卡。"""
         if path is None:
-            path = ask_game_file("打开 game.json")
+            path = ask_game_file("打开游戏配置文件")
             if not path:
-                self.status = "打开游戏已取消"
+                self.status = "已取消打开游戏配置。"
                 return
         settings = game.load_settings(path)
         self.game_path = os.path.abspath(path)
@@ -415,34 +415,34 @@ class Editor:
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
         self.status = (
-            f"已打开游戏 {display_path(self.game_path)}"
-            f"（标题：{game.title_of(settings)}），选一关或新建一关"
+            f"已打开游戏配置 {display_path(self.game_path)}"
+            f"（标题：{game.title_of(settings)}），请选择关卡。"
         )
         # 打开游戏之后直接把关卡列表摊开：有就挑一关，没有就新建一关
         self.open_level_select()
 
     def create_game(self) -> None:
         """新建 game.json：选个保存位置，写一份默认设置，然后当成刚打开的游戏。"""
-        path = ask_game_file_to_create("新建 game.json")
+        path = ask_game_file_to_create("新建游戏配置文件")
         if not path:
-            self.status = "新建游戏已取消"
+            self.status = "已取消新建游戏配置。"
             return
         try:
             game.save_settings(game.new_settings(), path)
         except OSError as error:
-            self.status = f"写 game.json 失败：{error}"
+            self.status = f"无法写入 game.json：{error}。"
             return
         self.open_game(path)
 
     def request_open_game(self) -> None:
         """换一个游戏：先选 game.json，当前关卡有没保存的修改再问一句。"""
-        path = ask_game_file("打开 game.json")
+        path = ask_game_file("打开游戏配置文件")
         if not path:
-            self.status = "打开游戏已取消"
+            self.status = "已取消打开游戏配置。"
             return
         if self.dirty:
             self.pending_switch = ("game", os.path.abspath(path))
-            self.status = "当前关卡还没保存，要先存一下吗？"
+            self.status = "当前关卡尚未保存，是否先保存？"
             return
         self.open_game(path)
 
@@ -465,7 +465,7 @@ class Editor:
         self.pan_x = self.pan_y = 0.0
         self.drag_start = self.drag_current = None
         self.level_select_open = False
-        self.status = "新建关卡（尚未保存）"
+        self.status = "已新建关卡（尚未保存）。"
         # 新建之后先把关卡设置摊开：名字、尺寸、跳高这些一上来就能填
         self.open_settings()
 
@@ -474,7 +474,7 @@ class Editor:
         if self.dirty:
             self.level_select_open = False
             self.pending_switch = ("new", "")
-            self.status = "当前关卡还没保存，要先存一下吗？"
+            self.status = "当前关卡尚未保存，是否先保存？"
             return
         self.begin_new_level()
 
@@ -497,12 +497,12 @@ class Editor:
         """在列表里选一关：有没保存的修改就先问，别直接丢掉。"""
         if self.path is not None and os.path.normpath(folder) == os.path.normpath(self.path):
             self.level_select_open = False
-            self.status = f"已经是 {os.path.basename(folder)}"
+            self.status = f"当前已打开关卡「{os.path.basename(folder)}」。"
             return
         if self.dirty:
             self.pending_switch = ("level", folder)
             self.level_select_open = False
-            self.status = f"{os.path.basename(folder)}：当前关卡还没保存，要先存一下吗？"
+            self.status = f"「{os.path.basename(folder)}」：当前关卡尚未保存，是否先保存？"
             return
         self.load(folder)
 
@@ -513,7 +513,7 @@ class Editor:
         if action is None:
             return
         if save is None:
-            self.status = "已取消"
+            self.status = "已取消操作。"
             return
         if save:
             self.save()
@@ -528,14 +528,14 @@ class Editor:
             self.begin_new_level()
 
     def pending_switch_label(self) -> str:
-        """确认框里那个「要切到哪」的名字。"""
+        """确认框里那个「要切到哪」的名字（后面会接「之前是否保存」）。"""
         if self.pending_switch is None:
             return ""
         kind, value = self.pending_switch
         if kind == "level":
-            return f"切到 {os.path.basename(value)}"
+            return f"切换至「{os.path.basename(value)}」"
         if kind == "game":
-            return f"打开 {display_path(value)}"
+            return f"打开「{display_path(value)}」"
         return "新建关卡"
 
     def load(self, folder: str) -> None:
@@ -545,7 +545,7 @@ class Editor:
             with open(scene_path, encoding="utf-8") as file:
                 definition = json.load(file)
         except (OSError, json.JSONDecodeError) as error:
-            self.status = f"打开失败：{error}"
+            self.status = f"打开失败：{error}。"
             return
         self.level = Level.from_definition(definition)
         if not self.level.name:
@@ -566,16 +566,16 @@ class Editor:
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
         self.drag_start = self.drag_current = None
-        self.status = f"已打开 {display_path(folder)}"
+        self.status = f"已打开关卡 {display_path(folder)}。"
 
     def save(self) -> None:
         """保存当前关卡：写进游戏根里 levels/<关卡名>/scene.json，图片只记相对路径。"""
         if not self.level_in_view:
-            self.status = "视图里还没有关卡"
+            self.status = "当前视图中没有关卡。"
             return
         if self.path is None:
             if self.levels_dir is None:
-                self.status = "还没打开游戏，没地方存关卡"
+                self.status = "尚未打开游戏配置，无法保存关卡。"
                 return
             folder = game.unique_level_folder(self.levels_dir, folder_name_for(self.level.name))
             if not self.level.name:
@@ -590,11 +590,11 @@ class Editor:
             ) as file:
                 file.write(dump_level(self.level.to_definition()))
         except OSError as error:
-            self.status = f"保存失败：{error}"
+            self.status = f"保存失败：{error}。"
             return
         self.path = folder
         self.dirty = False
-        self.status = f"已保存 {display_path(folder)}"
+        self.status = f"已保存至 {display_path(folder)}。"
 
     def normalize_media_paths(self, folder: str) -> None:
         """背景和贴图都只记相对 scene.json 的路径，一个文件都不复制。
@@ -624,9 +624,9 @@ class Editor:
 
     # ---- 游戏设置（game.json） --------------------------------------
     def open_game_settings(self) -> None:
-        """打开游戏设置：标题 + 版权信息（职位 → 名字）。"""
+        """打开游戏配置：标题 + 版权信息（职位 → 名字）。"""
         if self.game_path is None:
-            self.status = "还没打开游戏"
+            self.status = "尚未打开游戏配置。"
             return
         settings = game.load_settings(self.game_path)
         settings["title"] = game.title_of(settings)
@@ -634,7 +634,7 @@ class Editor:
         self.game_rows = game.credits_to_rows(game.credits_of(settings))
         self.game_field = 0
         self.level_select_open = False
-        self.status = "游戏设置：标题和版权信息都写进 game.json"
+        self.status = "游戏配置：标题与版权信息将写入 game.json。"
 
     def close_game_settings(self, commit: bool) -> None:
         settings = self.game_settings
@@ -649,9 +649,9 @@ class Editor:
         try:
             game.save_settings(settings, self.game_path)
         except OSError as error:
-            self.status = f"保存 game.json 失败：{error}"
+            self.status = f"无法保存 game.json：{error}。"
             return
-        self.status = f"游戏设置已保存：{title}（版权信息 {len(settings['credits'])} 条）"
+        self.status = f"游戏配置已保存：{title}（版权信息 {len(settings['credits'])} 条）。"
 
     # 字段编号：0 是标题，之后每条版权占两格（职位、名字）
     @staticmethod
@@ -701,22 +701,22 @@ class Editor:
     def add_credit_row(self) -> None:
         """加一条版权信息：新的一行空着，光标落在它的职位上。"""
         if len(self.game_rows) >= GAME_CREDITS_MAX_ROWS:
-            self.status = f"版权信息最多 {GAME_CREDITS_MAX_ROWS} 条，先删一条再加"
+            self.status = f"版权信息最多 {GAME_CREDITS_MAX_ROWS} 条，请删除一条后再添加。"
             return
         self.game_rows.append({"job": "", "names": ""})
         self.game_field = 1 + 2 * (len(self.game_rows) - 1)
-        self.status = "已加一条版权信息：填职位和名字（名字用、分隔）"
+        self.status = "已添加一条版权信息，请填写职位与名字（多个名字以「,」分隔）。"
 
     def remove_credit_row(self) -> None:
         """删掉光标所在的那条版权信息。"""
         cell = self._credit_cell(self.game_field)
         if cell is None or cell[0] >= len(self.game_rows):
-            self.status = "先选一条版权信息再删"
+            self.status = "请先选择一条版权信息，再执行删除。"
             return
         index = cell[0]
         del self.game_rows[index]
         self.game_field = min(self.game_field, 2 * min(len(self.game_rows), GAME_CREDITS_MAX_ROWS))
-        self.status = "已删掉一条版权信息"
+        self.status = "已删除一条版权信息。"
 
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:
@@ -735,7 +735,7 @@ class Editor:
         self.creating = True
         self.menu_open = False
         action = "左键拖出矩形" if TOOL_SPECS[tool][1] == "rect" else "左键单击放置"
-        self.status = f"新建：{TOOL_SPECS[tool][0]}（{action}，右键退出）"
+        self.status = f"新建模式：{TOOL_SPECS[tool][0]}（{action}，右键退出）"
 
     # ---- 贴图 -------------------------------------------------------
     def import_texture(self, layout: Layout) -> None:
@@ -745,11 +745,11 @@ class Editor:
         """
         path = ask_image_path("导入贴图", self.media_base_dir)
         if not path:
-            self.status = "导入贴图已取消"
+            self.status = "已取消导入贴图。"
             return
         pixels = image_size(path)
         if pixels is None:
-            self.status = f"图片读不出来：{os.path.basename(path)}"
+            self.status = f"无法读取图片：{os.path.basename(path)}。"
             return
         tile = max(1.0, layout.game_tile)
         width = max(MIN_SIZE, round(pixels[0] / tile, 2))
@@ -767,7 +767,7 @@ class Editor:
                 "smooth": False,
             }
         )
-        self.status = f"已导入贴图 {os.path.basename(path)}（{width}×{height} 格）"
+        self.status = f"已导入贴图 {os.path.basename(path)}（{width}×{height} 格）。"
 
     # ---- 鼠标拖动 / 缩放（所有对象） --------------------------------
     def begin_object_grab(self, position: tuple, layout: Layout) -> bool:
@@ -924,7 +924,7 @@ class Editor:
                 self.select(kind, entry)
             return True
         size = entry.get("size")
-        text = f"{KIND_TITLES.get(kind, '对象')} ({entry['pos'][0]}, {entry['pos'][1]})"
+        text = f"{KIND_TITLES.get(kind, '对象')}（{entry['pos'][0]}, {entry['pos'][1]}）"
         if size:
             text += f" {size[0]}×{size[1]}"
         self.status = text
@@ -939,7 +939,7 @@ class Editor:
         self.dropdown_field = None
         self.name_focused = False
         self.number_buffer = None
-        self.status = f"已选中{KIND_TITLES.get(kind, '对象')}"
+        self.status = f"已选中{KIND_TITLES.get(kind, '对象')}。"
 
     def select_many(self, pairs: list) -> None:
         """多选：面板只列清单和数量，不给属性；正好一个时回到属性面板。"""
@@ -953,7 +953,7 @@ class Editor:
         self.dropdown_field = None
         self.name_focused = False
         self.number_buffer = None
-        self.status = f"已选中 {len(self.selection)} 个对象" if self.selection else "已取消选中"
+        self.status = f"已选中 {len(self.selection)} 个对象。" if self.selection else "已取消选择。"
 
     def clear_selection(self) -> None:
         self.select_many([])
@@ -981,12 +981,12 @@ class Editor:
     def label_of(self, kind: str, entry: dict) -> str:
         pos = entry["pos"]
         name = entry.get("name") or KIND_TITLES.get(kind, "对象")
-        return f"{name} ({pos[0]}, {pos[1]})"
+        return f"{name}（{pos[0]}, {pos[1]}）"
 
     def delete_selection(self) -> None:
         """删掉所有选中的对象，算一步撤销。"""
         if not self.selection:
-            self.status = "没有选中的对象"
+            self.status = "当前没有选中的对象。"
             return
         self.push_undo()
         count = len(self.selection)
@@ -995,7 +995,7 @@ class Editor:
         self.select_many([])
         self.hovered = None
         self.dirty = True
-        self.status = f"已删除 {count} 个对象"
+        self.status = f"已删除 {count} 个对象。"
 
     def remove_entry(self, kind: str, entry: dict) -> None:
         if kind == KIND_BLOCK:
@@ -1080,7 +1080,7 @@ class Editor:
 
     def stop_creating(self) -> None:
         self.creating = False
-        self.status = "已退出新建；左键 设置/框选，右键 新建"
+        self.status = "已退出新建模式；左键用于设置或框选，右键用于新建。"
 
     # ---- 退出确认 ---------------------------------------------------
     def request_quit(self) -> bool:
@@ -1104,7 +1104,7 @@ class Editor:
             self.push_undo()
         self.name_focused = True
         self.dialog_field = -1
-        self.status = "输入名称；Enter 或点别处结束"
+        self.status = "正在输入名称；按 Enter 或点击其他位置结束输入。"
 
     def blur_name(self) -> None:
         if self.dialog_field < 0:
@@ -1134,7 +1134,7 @@ class Editor:
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
         pos = entry["pos"]
-        rows = [("位置 x", number_text(pos[0])), ("位置 y", number_text(pos[1]))]
+        rows = [("横坐标", number_text(pos[0])), ("纵坐标", number_text(pos[1]))]
         size = entry.get("size", [1.0, 1.0])
         rows += [("宽度", number_text(size[0])), ("高度", number_text(size[1]))]
         if kind == KIND_MOVABLE:
@@ -1144,7 +1144,7 @@ class Editor:
                 ("横向偏移", number_text(offset[0])),
                 ("纵向偏移", number_text(offset[1])),
                 ("触发按钮", "、".join(sources) if sources else "无"),
-                ("一次触发", "是" if entry.get("once") else "否"),
+                ("仅触发一次", "是" if entry.get("once") else "否"),
             ]
         elif kind == KIND_BUTTON:
             rows.append(("朝向", FACE_LABELS.get(entry.get("face", ""), "（空）")))
@@ -1461,7 +1461,7 @@ class Editor:
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
                 f"尺寸 {self.level.width}×{self.level.height}，"
-                f"翻转带 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}"
+                f"翻转带 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}。"
             )
         self.settings = None
 
@@ -1471,11 +1471,11 @@ class Editor:
             return
         path = ask_image_path("选择背景图", self.media_base_dir)
         if not path:
-            self.status = "选择背景已取消"
+            self.status = "已取消选择背景。"
             return
         self.settings["background"] = relative_level_path(path, self.media_base_dir)
         self.settings_field = 5
-        self.status = "背景已选：只记相对 scene.json 的路径，不复制文件"
+        self.status = "已选择背景：仅记录相对 scene.json 的路径，不复制文件。"
 
     def pick_texture_image(self) -> None:
         """给当前贴图换一张图：只记相对 scene.json 的路径，不复制文件。"""
@@ -1483,13 +1483,13 @@ class Editor:
             return
         path = ask_image_path("选择贴图", self.media_base_dir)
         if not path:
-            self.status = "选择贴图已取消"
+            self.status = "已取消选择贴图。"
             return
         self.push_undo()
         self.dirty = True
         self.dialog["entry"]["image"] = relative_level_path(path, self.media_base_dir)
         self.number_buffer = None
-        self.status = "贴图已换：路径相对 scene.json"
+        self.status = "已更换贴图：路径相对 scene.json。"
 
     def adjust_settings(self, delta: int) -> None:
         if self.settings is None:
@@ -1581,7 +1581,7 @@ class Editor:
             )
             self.dirty = True
             self.status = (
-                f"玩家设置：跳高 {self.level.jump_height}，速度 {self.level.move_speed}"
+                f"玩家设置：跳高 {self.level.jump_height}，速度 {self.level.move_speed}。"
             )
         self.player_settings = None
 

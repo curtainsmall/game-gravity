@@ -182,16 +182,16 @@ class App:
 
     def start_level(self, index: int) -> None:
         if not self.levels:
-            self.show_toast("game/levels/ 里没有可用的关卡")
+            self.show_toast("game/levels/ 目录中暂无可用的关卡")
             self.screen = Screen.TITLE
             return
         if not 0 <= index < len(self.levels):
-            self.show_toast("没有这个关卡")
+            self.show_toast("该关卡不存在")
             self.screen = Screen.TITLE
             return
         scene = load_scene(self.levels[index])
         if scene is None:
-            self.show_toast(f"关卡读不出来：{self.levels[index].name}")
+            self.show_toast(f"无法读取关卡：{self.levels[index].name}")
             self.screen = Screen.TITLE
             return
         if self.scene is not None:

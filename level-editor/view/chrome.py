@@ -112,34 +112,34 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
 
     marker = " *" if editor.dirty else ""
     zoom_text = "游戏比例" if layout.zoom is None else f"{layout.tile:.1f}px/格"
-    game_text = display_path(editor.game_path) if editor.game_path else "（没有打开游戏）"
+    game_text = display_path(editor.game_path) if editor.game_path else "（尚未打开游戏配置）"
     if not editor.level_in_view:
-        level_text = "（视图里没有关卡）"
+        level_text = "（视图内没有关卡）"
     else:
         level_text = display_path(editor.path) if editor.path else "新关卡（未保存）"
-    head = f"游戏 {game_text}   关卡 {level_text}{marker}   缩放: {zoom_text}"
+    head = f"游戏 {game_text}   关卡 {level_text}{marker}   缩放：{zoom_text}"
     if editor.level_in_view:
         head += (
             f"   尺寸 {editor.level.width}×{editor.level.height}"
-            f"   跳高: {editor.level.jump_height}   速度: {editor.level.move_speed:g}"
+            f"   跳高：{editor.level.jump_height}   速度：{editor.level.move_speed:g}"
             f"   撤销 {len(editor.undo_stack)} 步"
         )
     surface.blit(font.render(head, True, TEXT), (MARGIN, 8))
 
     if editor.creating:
         mode = font.render(
-            f"新建中：{TOOL_SPECS[editor.tool][0]}   左键画，右键退出", True, HIGHLIGHT
+            f"新建模式：{TOOL_SPECS[editor.tool][0]}；左键绘制，右键退出。", True, HIGHLIGHT
         )
         surface.blit(mode, (surface.get_width() - MARGIN - mode.get_width(), 8))
-        hint = "左键拖出矩形 / 单击放置   右键 退出新建   滚轮缩放   中键平移"
+        hint = "左键拖出矩形或单击放置；右键退出新建；滚轮缩放；中键平移。"
     elif editor.game_path is None:
-        hint = "先打开或新建一个游戏（game.json）"
+        hint = "请打开或新建游戏配置文件（game.json）。"
     elif not editor.level_in_view:
-        hint = "从「关卡」里挑一关，或者新建一关"
+        hint = "请从「选择关卡」中打开关卡，或新建关卡。"
     else:
         hint = (
-            "右键 新建对象   左键 设置   Delete 删除   滚轮缩放   中键平移   "
-            "Shift 吸附   Ctrl 加选/等比   Alt 穿透"
+            "右键新建对象；左键设置；Delete 删除；滚轮缩放；中键平移；"
+            "Shift 吸附；Ctrl 加选或等比缩放；Alt 穿透。"
         )
     surface.blit(font.render(hint, True, DIM_TEXT), (MARGIN, 30))
 

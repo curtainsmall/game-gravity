@@ -1,4 +1,4 @@
-"""浮层：启动窗、关卡列表、关卡设置、玩家设置、游戏设置、切换确认、退出确认。"""
+"""浮层：启动窗、关卡列表、关卡设置、玩家设置、游戏配置、切换确认、退出确认。"""
 
 import os
 from typing import TYPE_CHECKING
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 def startup_rects(surface: pygame.Surface) -> list:
-    """启动窗：先问要哪份游戏设置（game.json）。"""
+    """启动窗：先问要哪份游戏配置（game.json）。"""
     panel = pygame.Rect(0, 0, 400, 156)
     panel.center = (surface.get_width() // 2, surface.get_height() // 2)
     return [
@@ -38,12 +38,12 @@ def draw_startup(surface: pygame.Surface, font: pygame.font.Font) -> None:
     draw_panel(surface, panel)
     title = font.render("关卡编辑器", True, TEXT)
     surface.blit(title, (panel.centerx - title.get_width() // 2, panel.top + 16))
-    hint = font.render("打开一份 game.json，或者新建一份", True, DIM_TEXT)
+    hint = font.render("请打开或新建游戏配置文件（game.json）。", True, DIM_TEXT)
     surface.blit(hint, (panel.centerx - hint.get_width() // 2, panel.top + 50))
     for rect, action in startup_rects(surface):
         pygame.draw.rect(surface, BUTTON_BG, rect)
         pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
-        label = "新建游戏" if action == "create" else "打开游戏"
+        label = "新建游戏配置" if action == "create" else "打开游戏配置"
         text = font.render(label, True, TEXT)
         surface.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
 
@@ -82,7 +82,7 @@ def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font
     surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 10))
 
     if not folders:
-        text = font.render("levels/ 里还没有关卡，点「新建关卡」开一关", True, DIM_TEXT)
+        text = font.render("levels/ 目录中暂无关卡，请点击「新建关卡」创建。", True, DIM_TEXT)
         surface.blit(text, (area.left + 6, area.top + 6))
     else:
         # 列表超出窗口时按 scroll 翻页，只画能看见的几行
@@ -105,7 +105,7 @@ def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font
         surface.set_clip(previous)
         if len(folders) > rows_visible:
             more = font.render(
-                f"{scroll + 1}-{min(scroll + rows_visible, len(folders))} / {len(folders)}（滚轮翻）",
+                f"{scroll + 1}-{min(scroll + rows_visible, len(folders))} / {len(folders)}（滚轮翻页）",
                 True,
                 DIM_TEXT,
             )
@@ -188,7 +188,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     draw_panel(surface, panel)
 
     surface.blit(font.render("关卡设置", True, TEXT), (panel.left + 12, panel.top + 8))
-    hint = font.render("点击面板外取消", True, DIM_TEXT)
+    hint = font.render("点击面板外区域即取消", True, DIM_TEXT)
     surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
 
     name = editor.settings["name"]
@@ -196,7 +196,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     pygame.draw.rect(surface, (62, 62, 72) if name_selected else (48, 48, 54), name_rect)
     pygame.draw.rect(surface, HIGHLIGHT if name_selected else (86, 86, 94), name_rect, 1)
     caret = "|" if name_selected else ""
-    text = font.render(f"名称: {name if name else '（空）'}{caret}", True, HIGHLIGHT if name_selected else TEXT)
+    text = font.render(f"名称：{name if name else '（空）'}{caret}", True, HIGHLIGHT if name_selected else TEXT)
     clip = max(1, name_rect.width - 12)
     surface.blit(
         text,
@@ -238,7 +238,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     path = editor.settings["background"]
     caret = "|" if background_selected else ""
     text = font.render(
-        f"背景: {path if path else '（无）'}{caret}",
+        f"背景：{path if path else '（无）'}{caret}",
         True,
         HIGHLIGHT if background_selected else TEXT,
     )
@@ -248,7 +248,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         (background_rect.left + 6, background_rect.centery - text.get_height() // 2),
         (0, 0, min(text.get_width(), clip), text.get_height()),
     )
-    draw_button(surface, font, browse_rect, "选择…")
+    draw_button(surface, font, browse_rect, "浏览…")
 
     draw_button(surface, font, apply_rect, "应用")
     draw_button(surface, font, cancel_rect, "取消")
@@ -262,7 +262,7 @@ def draw_player_settings(surface: pygame.Surface, editor: Editor, font: pygame.f
     draw_panel(surface, panel)
 
     surface.blit(font.render("玩家设置", True, TEXT), (panel.left + 12, panel.top + 8))
-    hint = font.render("点击面板外取消", True, DIM_TEXT)
+    hint = font.render("点击面板外区域即取消", True, DIM_TEXT)
     surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
 
     for field, rect, label, key in (
@@ -277,7 +277,7 @@ def draw_player_settings(surface: pygame.Surface, editor: Editor, font: pygame.f
 
     # 没有起点时这几项存不进去，提醒一句
     if editor.level.player is None:
-        tip = font.render("关卡里还没有起点：这几项只在有起点时才写进 scene.json", True, HIGHLIGHT)
+        tip = font.render("关卡中尚未设置起点，这几项仅在设置起点后写入 scene.json", True, HIGHLIGHT)
         surface.blit(tip, (hint_rect.left + 6, hint_rect.centery - tip.get_height() // 2))
 
     draw_button(surface, font, apply_rect, "应用")
@@ -285,7 +285,7 @@ def draw_player_settings(surface: pygame.Surface, editor: Editor, font: pygame.f
 
 
 def game_settings_geometry(surface: pygame.Surface, row_count: int) -> tuple:
-    """游戏设置：标题 + 版权信息若干行（职位、名字两格）+ 加/删 + 应用/取消。
+    """游戏配置：标题 + 版权信息若干行（职位、名字两格）+ 加/删 + 应用/取消。
 
     行数由 game.json 里的版权信息条数决定，最多摊 GAME_CREDITS_MAX_ROWS 行。
     """
@@ -355,8 +355,8 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     ) = game_settings_geometry(surface, len(rows))
     draw_panel(surface, panel)
 
-    surface.blit(font.render("游戏设置", True, TEXT), (panel.left + 12, panel.top + 8))
-    hint = font.render("点击面板外取消", True, DIM_TEXT)
+    surface.blit(font.render("游戏配置", True, TEXT), (panel.left + 12, panel.top + 8))
+    hint = font.render("点击面板外区域即取消", True, DIM_TEXT)
     surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
 
     _draw_cell(
@@ -368,12 +368,12 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     )
 
     # 版权信息：字段名是职位、值是名字数组，面板上一行一条
-    label = "版权信息（职位 → 名字，多个名字用、分隔）"
+    label = "版权信息（职位 → 名字，多个名字以「,」分隔）"
     if len(rows) > GAME_CREDITS_MAX_ROWS:
         label += f"   只显示前 {GAME_CREDITS_MAX_ROWS} 条（共 {len(rows)} 条）"
     surface.blit(font.render(label, True, DIM_TEXT), (section_rect.left, section_rect.top + 2))
     if not rows:
-        text = font.render("还没有版权信息：点「加一条」写职位和名字", True, DIM_TEXT)
+        text = font.render("尚无版权信息，请点击「添加一条」填写职位与名字", True, DIM_TEXT)
         surface.blit(text, (section_rect.left + 6, section_rect.top + ROW_HEIGHT + 8))
     for index, rect in enumerate(job_rects):
         _draw_cell(
@@ -400,8 +400,8 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     )
     surface.blit(note, (section_rect.left, panel.bottom - BUTTON_HEIGHT - 36))
 
-    draw_button(surface, font, add_rect, "加一条")
-    draw_button(surface, font, remove_rect, "删这条")
+    draw_button(surface, font, add_rect, "添加一条")
+    draw_button(surface, font, remove_rect, "删除本条")
     draw_button(surface, font, apply_rect, "应用")
     draw_button(surface, font, cancel_rect, "取消")
 
@@ -420,7 +420,7 @@ def draw_switch_confirm(surface: pygame.Surface, editor: Editor, font: pygame.fo
     panel, save_rect, discard_rect, cancel_rect = switch_geometry(surface)
     draw_panel(surface, panel)
 
-    surface.blit(font.render("关卡还没保存", True, HIGHLIGHT), (panel.left + 14, panel.top + 12))
+    surface.blit(font.render("关卡尚未保存", True, HIGHLIGHT), (panel.left + 14, panel.top + 12))
     surface.blit(
         font.render(
             display_path(editor.path) if editor.path else "新关卡（未保存）", True, DIM_TEXT
@@ -428,14 +428,14 @@ def draw_switch_confirm(surface: pygame.Surface, editor: Editor, font: pygame.fo
         (panel.left + 14, panel.top + 40),
     )
     surface.blit(
-        font.render(f"有未保存的修改，{editor.pending_switch_label()} 之前要保存吗？", True, TEXT),
+        font.render(f"存在未保存的修改，{editor.pending_switch_label()}之前是否保存？", True, TEXT),
         (panel.left + 14, panel.top + 62),
     )
-    hint = font.render("Y 保存并切换    N 不保存切换    Esc 取消", True, DIM_TEXT)
+    hint = font.render("Y 保存并切换；N 不保存并切换；Esc 取消", True, DIM_TEXT)
     surface.blit(hint, (panel.left + 14, panel.top + 88))
 
     draw_button(surface, font, save_rect, "保存并切换")
-    draw_button(surface, font, discard_rect, "不保存切换")
+    draw_button(surface, font, discard_rect, "不保存并切换")
     draw_button(surface, font, cancel_rect, "取消")
 
 
@@ -450,7 +450,7 @@ def draw_quit_confirm(surface: pygame.Surface, editor: Editor, font: pygame.font
     panel, quit_rect, cancel_rect = quit_geometry(surface)
     draw_panel(surface, panel)
 
-    surface.blit(font.render("关卡还没保存", True, HIGHLIGHT), (panel.left + 14, panel.top + 12))
+    surface.blit(font.render("关卡尚未保存", True, HIGHLIGHT), (panel.left + 14, panel.top + 12))
     surface.blit(
         font.render(
             display_path(editor.path) if editor.path else "新关卡（未保存）", True, DIM_TEXT
@@ -458,10 +458,10 @@ def draw_quit_confirm(surface: pygame.Surface, editor: Editor, font: pygame.font
         (panel.left + 14, panel.top + 40),
     )
     surface.blit(
-        font.render("有未保存的修改，确定要退出吗？", True, TEXT), (panel.left + 14, panel.top + 62)
+        font.render("存在未保存的修改，确定要退出吗？", True, TEXT), (panel.left + 14, panel.top + 62)
     )
-    hint = font.render("Enter 退出    Esc 取消", True, DIM_TEXT)
+    hint = font.render("Enter 退出；Esc 取消", True, DIM_TEXT)
     surface.blit(hint, (panel.left + 14, panel.top + 88))
 
-    draw_button(surface, font, quit_rect, "退出不保存")
+    draw_button(surface, font, quit_rect, "不保存并退出")
     draw_button(surface, font, cancel_rect, "取消")
