@@ -1,4 +1,4 @@
-"""浮层：启动窗、关卡列表、关卡设置、玩家设置、游戏配置、切换确认、退出确认。"""
+"""浮层：启动窗、关卡列表、关卡设置、游戏配置、切换确认、退出确认。"""
 
 import os
 from typing import TYPE_CHECKING
@@ -116,8 +116,8 @@ def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font
 
 
 def settings_geometry(surface: pygame.Surface) -> tuple:
-    """关卡设置：名称、宽高、翻转带、背景。"""
-    panel = place_panel(surface, pygame.Rect(0, 0, 560, 282))
+    """关卡设置：名称、宽高、翻转带、背景，以及玩家参数的本关覆盖。"""
+    panel = place_panel(surface, pygame.Rect(0, 0, 560, 368))
     name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
     width_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
     height_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT + 2)
@@ -129,6 +129,11 @@ def settings_geometry(surface: pygame.Surface) -> tuple:
     browse_rect = pygame.Rect(
         background_rect.right - 76, background_rect.top + 1, 76, background_rect.height - 2
     )
+    player_hint_rect = pygame.Rect(
+        panel.left + 12, panel.top + 242, panel.width - 24, ROW_HEIGHT
+    )
+    jump_rect = pygame.Rect(panel.left + 12, panel.top + 264, panel.width - 24, ROW_HEIGHT + 2)
+    speed_rect = pygame.Rect(panel.left + 12, panel.top + 298, panel.width - 24, ROW_HEIGHT + 2)
     button_y = panel.bottom - BUTTON_HEIGHT - 8
     apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
     cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
@@ -141,21 +146,12 @@ def settings_geometry(surface: pygame.Surface) -> tuple:
         flip_down_rect,
         background_rect,
         browse_rect,
+        player_hint_rect,
+        jump_rect,
+        speed_rect,
         apply_rect,
         cancel_rect,
     )
-
-
-def player_settings_geometry(surface: pygame.Surface) -> tuple:
-    """玩家设置：初始跳高、移动速度（以后还有动画）。"""
-    panel = place_panel(surface, pygame.Rect(0, 0, 460, 196))
-    jump_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
-    speed_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
-    hint_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT)
-    button_y = panel.bottom - BUTTON_HEIGHT - 8
-    apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
-    cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
-    return panel, jump_rect, speed_rect, hint_rect, apply_rect, cancel_rect
 
 
 def _draw_settings_row(
@@ -182,6 +178,9 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         flip_down_rect,
         background_rect,
         browse_rect,
+        player_hint_rect,
+        jump_rect,
+        speed_rect,
         apply_rect,
         cancel_rect,
     ) = settings_geometry(surface)
@@ -250,54 +249,48 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     )
     draw_button(surface, font, browse_rect, "浏览…")
 
-    draw_button(surface, font, apply_rect, "应用")
-    draw_button(surface, font, cancel_rect, "取消")
-
-
-def draw_player_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    """玩家设置：初始跳高、移动速度，以后动画也放这儿。"""
-    panel, jump_rect, speed_rect, hint_rect, apply_rect, cancel_rect = player_settings_geometry(
-        surface
+    # 玩家参数默认来自游戏配置；这两格填了就是本关的覆盖值，空着跟随游戏配置
+    surface.blit(
+        font.render("玩家（留空跟随游戏配置，填了就覆盖本关）", True, DIM_TEXT),
+        (player_hint_rect.left, player_hint_rect.top + 2),
     )
-    draw_panel(surface, panel)
-
-    surface.blit(font.render("玩家设置", True, TEXT), (panel.left + 12, panel.top + 8))
-    hint = font.render("点击面板外区域即取消", True, DIM_TEXT)
-    surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
-
-    for field, rect, label, key in (
-        (0, jump_rect, "初始跳高（格）", "jump_height"),
-        (1, speed_rect, "移动速度（格/秒）", "move_speed"),
+    for field, rect, label, key, fallback, unit in (
+        (6, jump_rect, "跳高", "jump_height", editor.player_stats()[0], "格"),
+        (7, speed_rect, "速度", "move_speed", editor.player_stats()[1], "格/秒"),
     ):
-        selected = editor.player_settings_field == field
-        _draw_settings_row(surface, font, rect, label, editor.player_settings[key], selected)
+        selected = editor.settings_field == field
+        raw = editor.settings[key]
+        value = raw if raw else f"跟随（{fallback:g}）"
+        _draw_settings_row(surface, font, rect, f"{label}（{unit}）", value, selected)
         left, right = stepper_rects(rect)
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
-
-    # 没有起点时这几项存不进去，提醒一句
-    if editor.level.player is None:
-        tip = font.render("关卡中尚未设置起点，这几项仅在设置起点后写入 scene.json", True, HIGHLIGHT)
-        surface.blit(tip, (hint_rect.left + 6, hint_rect.centery - tip.get_height() // 2))
 
     draw_button(surface, font, apply_rect, "应用")
     draw_button(surface, font, cancel_rect, "取消")
 
 
 def game_settings_geometry(surface: pygame.Surface, row_count: int) -> tuple:
-    """游戏配置：标题 + 版权信息若干行（职位、名字两格）+ 加/删 + 应用/取消。
+    """游戏配置：标题、玩家的跳高与速度、版权信息若干行，再加应用/取消。
 
-    行数由 game.json 里的版权信息条数决定，最多摊 GAME_CREDITS_MAX_ROWS 行。
+    版权行数由 game.json 里的条数决定，最多摊 GAME_CREDITS_MAX_ROWS 行。
     """
     shown = min(max(0, row_count), GAME_CREDITS_MAX_ROWS)
     slots = max(1, shown)                       # 一条都没有时留一行提示的位置
-    panel = place_panel(surface, pygame.Rect(0, 0, 560, 88 + slots * (ROW_HEIGHT + 4) + 62))
+    panel = place_panel(
+        surface, pygame.Rect(0, 0, 560, 178 + slots * (ROW_HEIGHT + 4) + 62)
+    )
     title_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
-    section_rect = pygame.Rect(panel.left + 12, panel.top + 66, panel.width - 24, ROW_HEIGHT)
+    player_section_rect = pygame.Rect(panel.left + 12, panel.top + 66, panel.width - 24, ROW_HEIGHT)
+    jump_rect = pygame.Rect(panel.left + 12, panel.top + 88, panel.width - 24, ROW_HEIGHT)
+    speed_rect = pygame.Rect(
+        panel.left + 12, panel.top + 92 + ROW_HEIGHT, panel.width - 24, ROW_HEIGHT
+    )
+    section_rect = pygame.Rect(panel.left + 12, panel.top + 120 + ROW_HEIGHT, panel.width - 24, ROW_HEIGHT)
     job_rects = []
     name_rects = []
     for index in range(shown):
-        y = panel.top + 88 + index * (ROW_HEIGHT + 4)
+        y = panel.top + 142 + ROW_HEIGHT + index * (ROW_HEIGHT + 4)
         job_rects.append(pygame.Rect(panel.left + 12, y, 150, ROW_HEIGHT))
         name_rects.append(
             pygame.Rect(panel.left + 12 + 158, y, panel.width - 24 - 158, ROW_HEIGHT)
@@ -310,6 +303,9 @@ def game_settings_geometry(surface: pygame.Surface, row_count: int) -> tuple:
     return (
         panel,
         title_rect,
+        player_section_rect,
+        jump_rect,
+        speed_rect,
         section_rect,
         job_rects,
         name_rects,
@@ -345,6 +341,9 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     (
         panel,
         title_rect,
+        player_section_rect,
+        jump_rect,
+        speed_rect,
         section_rect,
         job_rects,
         name_rects,
@@ -367,6 +366,31 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         editor.game_field == 0,
     )
 
+    # 玩家参数属于整个游戏，这一关的 player 里写同名键就会覆盖它
+    label = "玩家（全游戏共用，关卡里的 player 写了就覆盖它）"
+    surface.blit(
+        font.render(label, True, DIM_TEXT), (player_section_rect.left, player_section_rect.top + 2)
+    )
+    for field, rect, title, key, unit in (
+        (1, jump_rect, "跳高", "jump_height", "格"),
+        (2, speed_rect, "速度", "move_speed", "格/秒"),
+    ):
+        selected = editor.game_field == field
+        pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
+        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
+        value = editor.game_numbers.get(key, "")
+        caret = "|" if selected else ""
+        text = font.render(f"{title}（{unit}）：{value}{caret}", True, HIGHLIGHT if selected else TEXT)
+        clip = max(1, rect.width - 12)
+        surface.blit(
+            text,
+            (rect.left + 6, rect.centery - text.get_height() // 2),
+            (0, 0, min(text.get_width(), clip), text.get_height()),
+        )
+        left, right = stepper_rects(rect)
+        draw_stepper(surface, left, -1)
+        draw_stepper(surface, right, 1)
+
     # 版权信息：字段名是职位、值是名字数组，面板上一行一条
     label = "版权信息（职位 → 名字，多个名字以「,」分隔）"
     if len(rows) > GAME_CREDITS_MAX_ROWS:
@@ -381,20 +405,20 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
             font,
             rect,
             str(rows[index].get("job") or ""),
-            editor.game_field == 1 + 2 * index,
+            editor.game_field == 3 + 2 * index,
         )
         _draw_cell(
             surface,
             font,
             name_rects[index],
             str(rows[index].get("names") or ""),
-            editor.game_field == 2 + 2 * index,
+            editor.game_field == 4 + 2 * index,
         )
 
-    # 这几项写的是游戏自己的设置，不属于任何一关
+    # 这几项写的是游戏自己的配置，不属于任何一关
     note = font.render(
         f"{display_path(editor.game_path) if editor.game_path else 'game.json'}："
-        "标题给标题画面，版权信息给结算画面",
+        "标题用于标题画面，玩家参数用于每一关，版权信息用于结算画面",
         True,
         DIM_TEXT,
     )

@@ -17,7 +17,7 @@ scene.json 的键：
     nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的），
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
     textures                 贴图：浮点矩形 + image（相对 scene.json 的路径）
-    player                   起点，同时带着玩家的跳高、速度和动画
+    player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖
     destination              终点
     background               背景图，相对 scene.json 的路径；不写就用文件夹里的 background.png
 
@@ -25,8 +25,10 @@ scene.json 的键：
 （传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是
 「底面」的中点、size 是没转过的宽高，face（up/right/down/left）决定从底面往哪边
 长出去，左右朝向时屏幕上的宽高是对调的。
-player 除了 pos/size 还写着 jump_height（格）、move_speed（格/秒）和 animation
-（动作名 → 该动作的图片路径，动作名不预设；动画系统还没接，先读出来放着）。
+玩家参数一般写在 game.json 的 player 里（jump_height 格、move_speed 格/秒、
+animation 动作名 → 图片路径，动作名不预设；动画系统还没接，先读出来放着）；
+scene.json 的 player 里写同名键就是这一关的覆盖值，它的图片路径相对关卡文件夹，
+game.json 里写的相对游戏根。
 """
 
 import json
@@ -105,32 +107,70 @@ def _read_position(entry: dict) -> tuple[float, float]:
 
 
 def player_settings(level_definition: LevelDefinition) -> dict:
-    """玩家自己的那几项（跳高、速度、动画）都写在 player 里，没有就是空表。"""
+    """关卡自己的 player 条目：位置，外加可以覆盖游戏默认的跳高、速度、动画。"""
     entry = level_definition.get("player")
     return entry if isinstance(entry, dict) else {}
 
 
-def jump_height_of(level_definition: LevelDefinition) -> int:
-    """玩家初始跳高（格），写在 player 里；缺省用默认值。"""
-    value = player_settings(level_definition).get("jump_height")
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return InputSource.JUMP_HEIGHT_DEFAULT
+def _player_value(
+    level_definition: LevelDefinition,
+    game_player: dict | None,
+    key: str,
+    default,
+    cast,
+):
+    """玩家的某一项：关卡 player 覆盖 → game.json 的 player → 内置默认，写坏了往下退。"""
+    for source in (player_settings(level_definition), game_player or {}):
+        if key in source:
+            try:
+                return cast(source[key])
+            except (TypeError, ValueError):
+                continue
+    return default
 
 
-def move_speed_of(level_definition: LevelDefinition) -> float:
-    """玩家水平移动速度（方块/秒），写在 player 里；缺省用默认值。"""
-    try:
-        return float(player_settings(level_definition).get("move_speed"))
-    except (TypeError, ValueError):
-        return InputSource.MOVE_SPEED_DEFAULT
+def jump_height_of(level_definition: LevelDefinition, game_player: dict | None = None) -> int:
+    """玩家初始跳高（格）：再按关卡高度夹一下，矮关卡里一蹦不会穿过天花板。"""
+    value = _player_value(
+        level_definition, game_player, "jump_height", InputSource.JUMP_HEIGHT_DEFAULT, int
+    )
+    level_height = int(level_definition.get("height", HEIGHT_IN_BLOCKS))
+    return max(InputSource.JUMP_HEIGHT_MIN, min(value, level_height - 1))
 
 
-def animation_of(level_definition: LevelDefinition) -> dict:
-    """玩家动画：动作名 → 图（相对 scene.json 的路径），还没接动画系统，先读出来。"""
-    value = player_settings(level_definition).get("animation")
-    return value if isinstance(value, dict) else {}
+def move_speed_of(level_definition: LevelDefinition, game_player: dict | None = None) -> float:
+    """玩家水平移动速度（方块/秒）：关卡覆盖 → game.json → 默认值，不给负的。"""
+    value = _player_value(
+        level_definition, game_player, "move_speed", InputSource.MOVE_SPEED_DEFAULT, float
+    )
+    return max(0.0, value)
+
+
+def animation_of(
+    level_definition: LevelDefinition,
+    game_player: dict | None = None,
+    base_dir: str | Path | None = None,
+    game_base_dir: str | Path | None = None,
+) -> dict:
+    """玩家动画：动作名 → 图的绝对路径（动画系统还没接，先读出来放着）。
+
+    用哪一份就看它写在哪：关卡 player 里的相对关卡文件夹解析，game.json 里的相对
+    游戏根解析；找不到的图直接跳过。
+    """
+    for source, base in (
+        (player_settings(level_definition), base_dir),
+        (game_player or {}, game_base_dir),
+    ):
+        value = source.get("animation")
+        if not isinstance(value, dict):
+            continue
+        animation = {}
+        for action, path in value.items():
+            found = resolve_texture(path, base)
+            if found is not None:
+                animation[str(action)] = found
+        return animation
+    return {}
 
 
 def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, float]:

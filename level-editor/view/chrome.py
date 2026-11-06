@@ -119,9 +119,11 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
         level_text = display_path(editor.path) if editor.path else "新关卡（未保存）"
     head = f"游戏 {game_text}   关卡 {level_text}{marker}   缩放：{zoom_text}"
     if editor.level_in_view:
+        jump, speed, overridden = editor.player_stats()
+        suffix = "（关卡覆盖）" if overridden else ""
         head += (
             f"   尺寸 {editor.level.width}×{editor.level.height}"
-            f"   跳高：{editor.level.jump_height}   速度：{editor.level.move_speed:g}"
+            f"   跳高：{jump}{suffix}   速度：{speed:g}{suffix}"
             f"   撤销 {len(editor.undo_stack)} 步"
         )
     surface.blit(font.render(head, True, TEXT), (MARGIN, 8))

@@ -8,6 +8,7 @@ from controller.controller_system import ControllerSystem
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
 from core.game_object import GameObjectKind
+from game_settings import game_root, load_game_settings, player_of
 from item.pickup_system import PickupSystem
 from physics.physics_system import PhysicsSystem
 from portal.portal_system import PortalSystem
@@ -64,12 +65,20 @@ class Scene:
 
     @classmethod
     def from_level(
-        cls, level_definition: LevelDefinition, base_dir: str | Path | None = None
+        cls,
+        level_definition: LevelDefinition,
+        base_dir: str | Path | None = None,
+        game_settings: dict | None = None,
     ) -> "Scene":
-        """由关卡数据建场景：方块、机关与物件都成为 GameObject。"""
+        """由关卡数据建场景：方块、机关与物件都成为 GameObject。
+
+        玩家的跳高、速度、动画以 game.json 为准，关卡里的 player 写了就覆盖它——
+        两份 json 各按自己所在的文件夹解析路径。
+        """
+        game_player = player_of(game_settings or {})
         world = build_world(level_definition, base_dir)
-        InputSource.set_jump_height(jump_height_of(level_definition))
-        InputSource.set_move_speed(move_speed_of(level_definition))
+        InputSource.set_jump_height(jump_height_of(level_definition, game_player))
+        InputSource.set_move_speed(move_speed_of(level_definition, game_player))
         InputSource.set_flip_area(
             flip_area_offsets_of(level_definition), world.height_in_blocks
         )
@@ -92,13 +101,17 @@ class Scene:
         scene.player = players[0] if players else None
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
         # 玩家动画先读出来放着：还没有动画系统拿去用
-        scene.player_animation = animation_of(level_definition)
+        scene.player_animation = animation_of(
+            level_definition, game_player, base_dir, game_root()
+        )
         return scene
 
     @classmethod
     def from_level_file(cls, path: str) -> "Scene":
-        """背景这类资源按关卡文件所在目录解析。"""
-        return cls.from_level(load_level_file(path), Path(path).parent)
+        """背景这类资源按关卡文件所在目录解析；玩家参数来自 game.json。"""
+        return cls.from_level(
+            load_level_file(path), Path(path).parent, load_game_settings()
+        )
 
     def enter(self) -> None:
         """进入场景。"""

@@ -1,9 +1,11 @@
 """游戏设置：assets/game/ 里的 game.json，和它旁边的 levels/。
 
 游戏根就是 assets/game 这个文件夹：
-    game.json    游戏自己的设置：title 是标题，credits 是版权信息（职位 → 名字数组）
+    game.json    游戏自己的设置：title 是标题，credits 是版权信息（职位 → 名字数组），
+                 player 是玩家默认的跳高、速度与动画
     levels/      一个文件夹是一关，内容和以前完全一样
-打包后 game/ 必须和 exe 放在一起，关卡和设置都从那里读。
+game.json 里写的相对路径都相对它自己所在的文件夹（也就是游戏根），scene.json 里的
+相对路径都相对那一关的文件夹。打包后 game/ 必须和 exe 放在一起。
 """
 
 import json
@@ -55,3 +57,14 @@ def credits_of(settings: dict) -> dict[str, list[str]]:
         if cleaned:
             credits[str(job)] = cleaned
     return credits
+
+
+def player_of(settings: dict) -> dict:
+    """玩家的默认参数：跳高、速度、动画；没写就是空表（关卡也能各自覆盖）。"""
+    value = settings.get("player")
+    return value if isinstance(value, dict) else {}
+
+
+def game_root() -> Path:
+    """game.json 所在的文件夹：game.json 里的相对路径都相对它。"""
+    return GAME_DIR

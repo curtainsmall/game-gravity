@@ -45,6 +45,12 @@ def title_of(settings: dict) -> str:
     return str(settings.get("title") or DEFAULT_TITLE)
 
 
+def player_of(settings: dict) -> dict:
+    """玩家的默认参数：跳高、速度、动画；没写就是空表（关卡里的 player 可以覆盖）。"""
+    value = settings.get("player")
+    return value if isinstance(value, dict) else {}
+
+
 def credits_of(settings: dict) -> dict[str, list[str]]:
     """版权信息：职位 → 名字数组。写坏了的条目跳过，名字全是空白的职位也留着。"""
     value = settings.get("credits")

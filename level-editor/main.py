@@ -10,7 +10,6 @@ from core.constants import (
     HEADER,
     MARGIN,
     MIN_WINDOW,
-    PLAYER_SETTINGS_FIELD_COUNT,
     SETTINGS_FIELD_COUNT,
     ZOOM_STEP,
 )
@@ -21,7 +20,6 @@ from editing.handlers import (
     handle_dropdown_click,
     handle_game_settings_click,
     handle_level_select_click,
-    handle_player_settings_click,
     handle_settings_click,
     handle_switch_click,
     handle_toolbar,
@@ -146,32 +144,8 @@ def run() -> None:
                         editor.type_settings(event.unicode)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
-            elif editor.player_settings is not None:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        editor.close_player_settings(False)
-                    elif event.key == pygame.K_RETURN:
-                        editor.close_player_settings(True)
-                    elif event.key == pygame.K_UP:
-                        editor.player_settings_field = (
-                            editor.player_settings_field - 1
-                        ) % PLAYER_SETTINGS_FIELD_COUNT
-                    elif event.key == pygame.K_DOWN:
-                        editor.player_settings_field = (
-                            editor.player_settings_field + 1
-                        ) % PLAYER_SETTINGS_FIELD_COUNT
-                    elif event.key == pygame.K_LEFT:
-                        editor.adjust_player_settings(-1)
-                    elif event.key == pygame.K_RIGHT:
-                        editor.adjust_player_settings(1)
-                    elif event.key == pygame.K_BACKSPACE:
-                        editor.erase_player_settings_char()
-                    else:
-                        editor.type_player_settings(event.unicode)
-                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    handle_player_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
-                # 游戏设置：标题和版权信息（职位/名字），敲字直接改，Enter/点「应用」写盘
+                # 游戏配置：标题、玩家参数、版权信息，敲字直接改，Enter/点「应用」写盘
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_game_settings(False)
@@ -181,6 +155,10 @@ def run() -> None:
                         editor.move_game_field(-1)
                     elif event.key == pygame.K_DOWN:
                         editor.move_game_field(1)
+                    elif event.key == pygame.K_LEFT:
+                        editor.adjust_game_number(-1)
+                    elif event.key == pygame.K_RIGHT:
+                        editor.adjust_game_number(1)
                     elif event.key == pygame.K_BACKSPACE:
                         editor.erase_game_settings_char()
                     elif event.unicode and event.unicode.isprintable():

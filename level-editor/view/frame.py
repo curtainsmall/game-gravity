@@ -11,7 +11,6 @@ from view.layout import Layout
 from view.modals import (
     draw_game_settings,
     draw_level_select,
-    draw_player_settings,
     draw_quit_confirm,
     draw_settings,
     draw_startup,
@@ -42,8 +41,6 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_selection_panel(surface, editor, font)
     if editor.settings is not None:
         draw_settings(surface, editor, font)
-    if editor.player_settings is not None:
-        draw_player_settings(surface, editor, font)
     if editor.game_settings is not None:
         draw_game_settings(surface, editor, font)
     if editor.startup:

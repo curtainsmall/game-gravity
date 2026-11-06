@@ -10,5 +10,10 @@
     "引擎": [
       "pygame-ce"
     ]
+  },
+  "player": {
+    "jump_height": 8,
+    "move_speed": 8,
+    "animation": {}
   }
 }

@@ -291,12 +291,22 @@
       "size": [1.0, 5]
     }
   ],
-  "textures": [],
+  "textures": [
+    {
+      "pos": [24.62, 2.03],
+      "size": [4.26, 3.58],
+      "image": "textures/障碍物和前景.png",
+      "smooth": false
+    },
+    {
+      "pos": [30.66, 4.05],
+      "size": [3.46, 3.69],
+      "image": "textures/障碍物和前景.png",
+      "smooth": false
+    }
+  ],
   "player": {
-    "pos": [0, 0],
-    "jump_height": 8,
-    "move_speed": 8.0,
-    "animation": {}
+    "pos": [0, 0]
   },
   "destination": {
     "pos": [117, 3]

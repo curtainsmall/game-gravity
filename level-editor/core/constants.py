@@ -128,19 +128,19 @@ FACE_DIRECTIONS = {
     "left": (-1.0, 0.0),
 }
 JUMP_HEIGHT_DEFAULT = 2
-JUMP_HEIGHT_MIN = 0   # 上限不是常数：最多到「关卡高度 - 1」，见 Editor._jump_height_limit
+JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX = 0, 99   # 输入上限；实际还要看关卡高度
 
-# 水平移动速度（方块/秒）：关卡可以覆盖
+# 水平移动速度（方块/秒）
 MOVE_SPEED_DEFAULT = 8.0
 MOVE_SPEED_MIN, MOVE_SPEED_MAX = 0.5, 40.0
 
 # 翻转带高度：第一个贴着关卡顶（向上翻），第二个贴着关卡底（向下翻）；0 表示翻不了
 FLIP_AREA_OFFSETS_DEFAULT = (0.0, 0.0)
 
-# 关卡设置里的字段数：名称、宽度、高度、翻转带上下、背景
-SETTINGS_FIELD_COUNT = 6
-# 玩家设置里的字段数：初始跳高、移动速度（以后还有动画）
-PLAYER_SETTINGS_FIELD_COUNT = 2
+# 关卡设置里的字段数：名称、宽度、高度、翻转带上下、背景、跳高与速度的覆盖
+SETTINGS_FIELD_COUNT = 8
+# 游戏配置里「玩家」那两项：初始跳高、移动速度（动画以后再加）
+GAME_PLAYER_FIELD_COUNT = 2
 BACKGROUND_MAX_LENGTH = 120
 
 # ---- 对象种类 ----
@@ -206,7 +206,6 @@ TOOLBAR_ITEMS = [
     ("保存", "save", 56, "level"),
     ("撤销", "undo", 56, "level"),
     ("关卡设置", "settings", 88, "level"),
-    ("玩家设置", "player_settings", 88, "level"),
 ]
 
 TOOLBAR_HEIGHT = 24
