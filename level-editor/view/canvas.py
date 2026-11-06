@@ -124,13 +124,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for entry in level.movable_blocks:
             pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
-    # 贴图压在所有方块之上（方块、木板、可移动方块）；缺图时调试显示里铺黑紫棋盘格。
-    # 「视图 → 显示贴图」关掉时整层都不画，连描边也一起藏起来
-    show_textures = editor.show_textures()
-    if show_textures:
-        draw_textures(surface, layout, level, editor.media_base_dir, debug)
-
-    if debug:
+        # 按钮、道具、喷口的标记画在贴图下面：这几样的外观通常由美术图盖着
         for entry in level.buttons:
             pygame.draw.polygon(
                 surface,
@@ -156,12 +150,19 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
                 ],
             )
 
-        for entry in level.portals:
-            draw_portal(surface, layout, entry)
-
         selected_ids = {id(entry) for _, entry in editor.selection}
         for entry in level.nozzles:
             draw_nozzle(surface, layout, entry, selected=id(entry) in selected_ids)
+
+    # 贴图压在方块、按钮、道具、喷口上面；传送门、起点、终点的标记再压在贴图上。
+    # 缺图时调试显示里铺黑紫棋盘格；「视图 → 显示贴图」关掉时整层都不画，连描边也一起藏起来
+    show_textures = editor.show_textures()
+    if show_textures:
+        draw_textures(surface, layout, level, editor.media_base_dir, debug)
+
+    if debug:
+        for entry in level.portals:
+            draw_portal(surface, layout, entry)
 
         # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
         if level.player is not None:

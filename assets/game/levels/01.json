@@ -13,7 +13,8 @@
       "triggers": [
         {
           "source": "b1",
-          "behavior": "move"
+          "behavior": "move",
+          "once": false
         }
       ]
     }
@@ -51,5 +52,23 @@
     "pos": [34.757571813784566, 0.5619834710743845],
     "size": [1.0, 1.0]
   },
-  "background": "textures/level1/background.png"
+  "background": "textures/level1/background.png",
+  "cutscene": {
+    "pictures": [
+      {
+        "path": "textures/QQ图片20261106201340.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "textures/QQ图片20261106201355(1).jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      }
+    ],
+    "cascade": true,
+    "sound": true
+  }
 }

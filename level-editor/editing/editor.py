@@ -197,9 +197,10 @@ class Editor:
         """视图菜单里的「显示贴图」：关掉时贴图不画、也点不中（像被藏起来一样）。"""
         return bool(self.view_settings.get("textures", True))
 
-    def all_entries(self) -> list:
-        """所有有矩形的对象，按绘制顺序（先画的在前）：(kind, entry)。
+    def stacked_entries(self) -> list:
+        """所有能点选的对象，按绘制顺序从下到上：(kind, entry)。
 
+        和画布一致：按钮、道具、喷口画在贴图下面，传送门、起点、终点画在贴图上面。
         贴图被视图开关藏起来时不算在内：看不见的图不该抢点击，也不该被框选中。
         """
         pairs = []
@@ -207,10 +208,11 @@ class Editor:
             (self.level.blocks, KIND_BLOCK),
             (self.level.planks, KIND_PLANK),
             (self.level.movable_blocks, KIND_MOVABLE),
-            (self.level.textures, KIND_TEXTURE),
             (self.level.buttons, KIND_BUTTON),
-            (self.level.portals, KIND_PORTAL),
             (self.level.items, KIND_ITEM),
+            (self.level.nozzles, KIND_NOZZLE),
+            (self.level.textures, KIND_TEXTURE),
+            (self.level.portals, KIND_PORTAL),
         ):
             if kind == KIND_TEXTURE and not self.show_textures():
                 continue
@@ -228,22 +230,11 @@ class Editor:
         看得见、不管它延伸到关卡外面还是顶到底部状态栏，都点得到。选中只认最上层那个：
         不能隔着另一个对象点到它后面的东西。
         """
-        stack = []
-        if self.level.destination is not None and self._hit(
-            position, layout, KIND_DESTINATION, self.level.destination
-        ):
-            stack.append((KIND_DESTINATION, self.level.destination))
-        if self.level.player is not None and self._hit(
-            position, layout, KIND_PLAYER, self.level.player
-        ):
-            stack.append((KIND_PLAYER, self.level.player))
-        for entry in reversed(self.level.nozzles):
-            if self._hit(position, layout, KIND_NOZZLE, entry):
-                stack.append((KIND_NOZZLE, entry))
-        for kind, entry in reversed(self.all_entries()):
-            if self._hit(position, layout, kind, entry):
-                stack.append((kind, entry))
-        return stack
+        return [
+            (kind, entry)
+            for kind, entry in reversed(self.stacked_entries())
+            if self._hit(position, layout, kind, entry)
+        ]
 
     @staticmethod
     def _hit(position: tuple, layout: Layout, kind: str, entry: dict) -> bool:
@@ -1743,12 +1734,9 @@ class Editor:
         y0, y1 = sorted((start[1], current[1]))
         picked = [
             (kind, entry)
-            for kind, entry in self.all_entries()
+            for kind, entry in self.stacked_entries()
             if self._in_marquee(kind, entry, x0, y0, x1, y1)
         ]
-        for entry in self.level.nozzles:
-            if self._in_marquee(KIND_NOZZLE, entry, x0, y0, x1, y1):
-                picked.append((KIND_NOZZLE, entry))
         if getattr(self, "marquee_additive", False):
             # 加选：把已选的和框里的一起保留（同一对象只算一次）
             merged = list(self.selection)

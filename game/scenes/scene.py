@@ -96,13 +96,14 @@ class Scene:
             build_blocks(level_definition)                 # 方块与木板
             + build_movable_blocks(level_definition)
             + build_boundaries(world)                      # 地面/天花板/墙
-            + build_textures(level_definition, base_dir)   # 贴图压在所有方块之上
+            # 贴图由渲染先铺一层，调试显示再整层压上来；列表顺序只影响占位之间的先后
+            + build_textures(level_definition, base_dir)
             + build_items(level_definition)
             + buttons
             + build_portals(level_definition)
             + build_nozzles(level_definition)
             + build_destination(level_definition)
-            + players                                      # 玩家在最上面
+            + players
         )
         scene = cls(world=world, objects=objects)
         scene.player = players[0] if players else None

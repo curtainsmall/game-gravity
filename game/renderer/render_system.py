@@ -35,26 +35,32 @@ class RenderSystem:
         self.viewport.fit(world, surface)
         self.viewport.follow(focus_x, world, surface)
         draw_background(surface, world, self.viewport)
-        # 翻转带画在对象下面：标出区域，但不盖住方块和玩家
-        if debug:
-            self._debug_flip_area(surface, world, flip_area_offsets)
         playable = self.viewport.playable_rect(world)
+        # 先铺一层美术：调试显示整层压在贴图上面，开着调试时占位和翻转带都看得见
         for game_object in objects:
+            if game_object.kind != GameObjectKind.TEXTURE:
+                continue
+            body = game_object.body
+            render = game_object.render
+            if body is None or render is None or not self._visible(game_object):
+                continue
+            rect = self.viewport.to_screen_rect(body, world)
+            # 图找不到时在调试显示里铺黑紫棋盘格
+            if not self._texture(surface, rect, render, playable) and debug:
+                draw_missing_texture(surface, rect.clip(playable))
+
+        # 调试显示：翻转带（半透明）铺在美术上面，其余对象的占位几何体再压上来
+        if not debug:
+            return
+        self._debug_flip_area(surface, world, flip_area_offsets)
+        for game_object in objects:
+            if game_object.kind == GameObjectKind.TEXTURE:
+                continue
             body = game_object.body
             render = game_object.render
             if body is None or render is None:
                 continue
             rect = self.viewport.to_screen_rect(body, world)
-            if game_object.kind == GameObjectKind.TEXTURE:
-                # 贴图是美术，任何时候都画（隐藏的除外）；图找不到时在调试显示里铺黑紫棋盘格
-                if not self._visible(game_object):
-                    continue
-                if not self._texture(surface, rect, render, playable) and debug:
-                    draw_missing_texture(surface, rect.clip(playable))
-                continue
-            # 其余对象只有占位几何体可画，那就是调试显示：没勾就什么都不画
-            if not debug:
-                continue
             if render.placeholder_has_axis:
                 self._dotted_axis(surface, rect, render.placeholder_color)
             self._shape(surface, rect, render)
