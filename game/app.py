@@ -2,7 +2,7 @@
 
 界面有标题、选关、游玩、结算四个，暂停和设置是两个浮层：暂停只盖在游玩上，
 设置可以盖在任何界面上。游玩本身不存档，退出标题就算放弃进度。
-音乐跟着界面走：标题和选关共用标题音乐，每一关放关卡自己的曲子，结算放结局音乐。
+音乐跟着界面走：标题和选关共用标题音乐，每一关放关卡自己的曲子，结算画面放制作名单音乐。
 """
 
 from enum import StrEnum
@@ -17,7 +17,7 @@ from game_settings import credits_of, game_root, load_game_settings, title_of
 from levels import discover_levels, load_scene
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
-from sound.bgm import ENDING_KEY, TITLE_KEY, game_bgm
+from sound.bgm import CREDITS_KEY, TITLE_KEY, game_bgm
 from sound.sound_system import SoundSystem
 
 PHYSICS_STEP_SECONDS = 1.0 / 60.0
@@ -51,13 +51,14 @@ class App:
         # 玩家自己的设置（exe 旁边的 .game/setting.json）：只有音量，改一次写一次
         self.user_settings = user_settings.load_settings()
         self.sound = SoundSystem(user_settings.volume_of(self.user_settings))
-        # 游戏设置（game.json）：标题和版权信息，标题给窗口和标题画面，版权给结算画面
+        # 游戏设置（game.json）：标题和制作名单，标题给窗口和标题画面，制作名单给结算画面
         self.game_settings = load_game_settings()
         self.title = title_of(self.game_settings)
         self.credits = credits_of(self.game_settings)
-        # 标题、结局的音乐在 game.json 里；每一关的音乐跟着关卡文件走（Scene.bgm）
+        # 标题、制作名单的音乐在 game.json 里；每一关的音乐跟着关卡文件走（Scene.bgm）
+        # 结算画面显示的就是制作名单，所以这一幕的音乐叫制作名单音乐
         self.title_bgm = game_bgm(self.game_settings, TITLE_KEY, game_root())
-        self.ending_bgm = game_bgm(self.game_settings, ENDING_KEY, game_root())
+        self.credits_bgm = game_bgm(self.game_settings, CREDITS_KEY, game_root())
         self.sound.start()
         self.sound.play(self.title_bgm)
         self.levels = discover_levels()
@@ -281,8 +282,9 @@ class App:
     def advance_level(self) -> None:
         index = self.next_playable_index(self.level_index + 1)
         if index is None:
+            # 结算画面显示制作名单，放的是制作名单音乐
             self.screen = Screen.ENDING
-            self.sound.play(self.ending_bgm)
+            self.sound.play(self.credits_bgm)
             return
         self.start_level(index)
 

@@ -4,8 +4,8 @@
 编辑器自己关心的事：玩家的跳高、速度、动画属于整个游戏（game.json，见 core.game），
 不归 Level 管；关卡 json 的 player 里如果还留着这几个键，原样保留当这一关的覆盖值。
 关卡名就是文件名（levels/<名字>.json），json 里不再写 name。
-这一关的背景音乐（sound）跟着关卡文件走，归 Level 管；标题和结局的音乐在 game.json 里，
-由声音浮层直接读写（见 core.sound）。
+这一关的背景音乐（sound）跟着关卡文件走，归 Level 管；标题和制作名单的音乐在 game.json 的
+sounds 里，由「游戏配置」的声音页改（见 core.sound）。
 """
 
 import copy

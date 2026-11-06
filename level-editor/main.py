@@ -20,7 +20,6 @@ from editing.handlers import (
     handle_game_settings_click,
     handle_level_select_click,
     handle_settings_click,
-    handle_sound_click,
     handle_switch_click,
     handle_toolbar,
 )
@@ -155,12 +154,15 @@ def run() -> None:
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
-                # 游戏配置：标题、玩家参数、版权卡片，敲字直接改，Enter/点「应用」写盘
+                # 游戏配置：Tab 切常规/制作名单/声音，↑↓ 选格子，←→ 调值，敲字直接改
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_game_settings(False)
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                         editor.close_game_settings(True)
+                    elif event.key == pygame.K_TAB:
+                        step = -1 if event.mod & pygame.KMOD_SHIFT else 1
+                        editor.switch_game_tab(step)
                     elif event.key == pygame.K_UP:
                         editor.move_game_field(-1)
                     elif event.key == pygame.K_DOWN:
@@ -177,33 +179,6 @@ def run() -> None:
                     editor.scroll_game_cards(-event.y)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_game_settings_click(screen, editor, event.pos)
-            elif editor.sound_tabs is not None:
-                # 声音：Tab 切页，↑↓ 选字段，←→ 调循环或淡入淡出，敲字改路径，Enter 应用
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        editor.close_sound(False)
-                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        editor.close_sound(True)
-                    elif event.key == pygame.K_TAB:
-                        if editor.sound_tabs:
-                            step = -1 if event.mod & pygame.KMOD_SHIFT else 1
-                            editor.select_sound_tab(
-                                (editor.sound_index + step) % len(editor.sound_tabs)
-                            )
-                    elif event.key == pygame.K_UP:
-                        editor.move_sound_focus(-1)
-                    elif event.key == pygame.K_DOWN:
-                        editor.move_sound_focus(1)
-                    elif event.key == pygame.K_LEFT:
-                        editor.adjust_sound_value(-1)
-                    elif event.key == pygame.K_RIGHT:
-                        editor.adjust_sound_value(1)
-                    elif event.key == pygame.K_BACKSPACE:
-                        editor.erase_sound_char()
-                    elif event.unicode and event.unicode.isprintable():
-                        editor.type_sound_char(event.unicode)
-                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    handle_sound_click(screen, editor, event.pos)
             elif editor.pending_switch is not None:
                 # 有没保存的修改时走开：Y 保存并切换，N 不保存切换，Esc 取消
                 if event.type == pygame.KEYDOWN:

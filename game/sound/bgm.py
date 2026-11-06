@@ -1,6 +1,6 @@
 """一幕的背景音乐：放哪首曲子、怎么放。
 
-音乐写在两处：标题和结局在 game.json 的 sounds 里（sounds.title、sounds.ending），
+音乐写在两处：标题和制作名单在 game.json 的 sounds 里（sounds.title、sounds.credits），
 每一关在它自己的关卡 json 的 sound 里——曲子跟着关卡文件走，改名、删关都不牵连别人。
 一首 BGM 的键：
     bgm       曲子文件，和别的路径一样相对 game.json 所在的文件夹
@@ -13,10 +13,10 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-GAME_SOUNDS_KEY = "sounds"     # game.json：一幕一首，标题、结局都在里面
+GAME_SOUNDS_KEY = "sounds"     # game.json：一幕一首，标题、制作名单都在里面
 LEVEL_SOUND_KEY = "sound"      # 关卡 json：这一关自己的那一首
 TITLE_KEY = "title"
-ENDING_KEY = "ending"
+CREDITS_KEY = "credits"        # 结算画面（制作名单）
 
 DEFAULT_LOOP = True
 DEFAULT_FADE_IN = 0.5
@@ -35,7 +35,7 @@ class Bgm:
 
 
 def game_bgm(game_settings: dict, key: str, base_dir: str | Path | None) -> Bgm | None:
-    """game.json 里 sounds.<key> 那一首：标题用 title，结局用 ending。"""
+    """game.json 里 sounds.<key> 那一首：标题用 title，结算画面用 credits。"""
     value = game_settings.get(GAME_SOUNDS_KEY) if isinstance(game_settings, dict) else None
     if not isinstance(value, dict):
         return None

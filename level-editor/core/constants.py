@@ -148,6 +148,8 @@ SETTINGS_TABS = (
     ("玩家", (6, 7)),
     ("声音", (8, 9, 10, 11)),
 )
+# 游戏配置分三页：常规、制作名单、声音。每页有哪些格子由 editor.game_cells 按页给。
+GAME_SETTINGS_TABS = ("常规", "制作名单", "声音")
 BACKGROUND_MAX_LENGTH = 120
 
 # ---- 对象种类 ----
@@ -217,7 +219,6 @@ TOOLBAR_ITEMS = [
     ("保存", "save", 56, "level", "left"),
     ("撤销", "undo", 56, "level", "left"),
     ("关卡设置", "settings", 88, "level", "right"),
-    ("声音", "sound", 56, "game", "right"),
     ("游戏配置", "game_settings", 88, "game", "right"),
 ]
 

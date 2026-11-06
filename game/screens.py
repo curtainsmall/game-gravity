@@ -88,7 +88,7 @@ def draw_ending(surface: pygame.Surface, app) -> None:
     ui.draw_text(
         surface, "您已通过全部关卡", 20, center=(width // 2, int(height * 0.25)), color=ui.DIM_TEXT
     )
-    # 版权信息来自 game.json：职位在左边（右对齐），名字在右边（左对齐）
+    # 制作名单来自 game.json：职位在左边（右对齐），名字在右边（左对齐）
     for index, (job, names) in enumerate(app.credits.items()):
         y = int(height * 0.36) + index * 30
         _draw_credits_row(surface, width, y, job, names)
@@ -101,7 +101,7 @@ def draw_ending(surface: pygame.Surface, app) -> None:
 def _draw_credits_row(
     surface: pygame.Surface, width: int, y: int, job: str, names: list[str]
 ) -> None:
-    """一行版权：职位（暗色）贴着中线右侧结束，名字从另一侧开始。"""
+    """一行制作名单：职位（暗色）贴着中线右侧结束，名字从另一侧开始。"""
     label = ui.font(18).render(job, True, ui.DIM_TEXT)
     surface.blit(label, (width // 2 - 24 - label.get_width(), y - label.get_height() // 2))
     text = ui.font(18).render(", ".join(names), True, ui.TEXT)

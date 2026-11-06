@@ -14,7 +14,6 @@ from view.modals import (
     draw_quit_confirm,
     draw_save_notice,
     draw_settings,
-    draw_sound,
     draw_startup,
     draw_switch_confirm,
 )
@@ -47,8 +46,6 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_settings(surface, editor, font)
     if editor.game_settings is not None:
         draw_game_settings(surface, editor, font)
-    if editor.sound_tabs is not None:
-        draw_sound(surface, editor, font)
     if editor.startup:
         draw_startup(surface, font)
     if editor.level_select_open:

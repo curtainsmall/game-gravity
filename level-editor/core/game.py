@@ -1,7 +1,7 @@
 """游戏配置：用户挑的 game.json，和它旁边的 levels/。
 
 游戏根就是 game.json 所在的那个文件夹：
-    game.json    游戏自己的配置：title 是标题，credits 是版权信息（职位 → 名字数组）
+    game.json    游戏自己的配置：title 是标题，credits 是制作名单（职位 → 名字数组）
     levels/      一个 <名字>.json 是一关
 编辑器在启动时让用户打开或新建一份 game.json，之后关卡都从它的兄弟目录 levels/ 里找。
 配置里只改自己认识的键，别的键原样保留。
@@ -50,7 +50,7 @@ def player_of(settings: dict) -> dict:
 
 
 def credits_of(settings: dict) -> dict[str, list[str]]:
-    """版权信息：职位 → 名字数组。
+    """制作名单：职位 → 名字数组。
 
     数组可以是空的；数组里的空字符串也是合法的一项（编辑器里就是一行空名字）。
     写坏了的条目（不是数组）跳过，手写成一个字符串的当成只有一个名字。
@@ -69,12 +69,12 @@ def credits_of(settings: dict) -> dict[str, list[str]]:
 
 
 def credit_cards(credits: dict[str, list[str]]) -> list[dict]:
-    """版权信息 → 面板里的卡片：每张卡片是一个职位和它的名字列表。"""
+    """制作名单 → 面板里的卡片：每张卡片是一个职位和它的名字列表。"""
     return [{"job": job, "names": list(names)} for job, names in credits.items()]
 
 
 def cards_to_credits(cards: list[dict]) -> dict[str, list[str]]:
-    """面板里的卡片 → 版权信息对象：职位空的卡片丢掉，同名职位合并。"""
+    """面板里的卡片 → 制作名单对象：职位空的卡片丢掉，同名职位合并。"""
     credits: dict[str, list[str]] = {}
     for card in cards:
         job = str(card.get("job") or "").strip()

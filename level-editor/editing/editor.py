@@ -17,6 +17,7 @@ from core.constants import (
     JUMP_HEIGHT_MIN,
     FACE_LABELS,
     FACE_ORDER,
+    GAME_SETTINGS_TABS,
     KIND_BLOCK,
     KIND_BUTTON,
     KIND_DESTINATION,
@@ -125,13 +126,11 @@ class Editor:
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
-        self.game_cards: list = []                 # 浮层里的版权卡片：{job, names: [名字…]}
+        self.game_cards: list = []                 # 浮层里的制作名单卡片：{job, names: [名字…]}
         self.game_card_scroll = 0                  # 卡片列表滚到第几张
         self.game_field = 0                        # 浮层里选中的格：标题、跳高、速度、职位、名字…
-        self.sound_tabs: list | None = None        # 声音浮层：每一页是某份 json 里的一幕
-        self.sound_values: list = []               # 每一页编辑中的四项（数字是字符串）
-        self.sound_index = 0                       # 声音浮层当前页
-        self.sound_focus = 0                       # 当前页选中的项：路径、循环、淡入、淡出
+        self.game_tab = 0                          # 游戏配置停在哪一页：常规/制作名单/声音
+        self.game_sound: dict = {}                 # 声音页：键 → {bgm, loop, fade_in, fade_out}
         self.preview = sound.Preview()             # 试听（和游戏共用一个混音器）
         self.level_select_open = False             # 关卡列表浮层
         self.level_select_scroll = 0               # 列表滚到第几行
@@ -702,7 +701,7 @@ class Editor:
 
     # ---- 游戏配置（game.json） --------------------------------------
     def open_game_settings(self) -> None:
-        """打开游戏配置：标题、玩家的跳高与速度、版权信息。"""
+        """打开游戏配置：常规（标题、玩家参数）、制作名单、声音（标题与制作名单）。"""
         if self.game_path is None:
             self.status = "尚未打开游戏配置。"
             return
@@ -719,18 +718,28 @@ class Editor:
             ):g}",
         }
         self.game_cards = game.credit_cards(game.credits_of(settings))
+        block = settings.get(sound.GAME_SOUNDS_KEY)
+        block = block if isinstance(block, dict) else {}
+        self.game_sound = {
+            key: sound.fields_of(block.get(key)) for key, _ in sound.SCENE_KEYS
+        }
         self.game_card_scroll = 0
+        self.game_tab = 0
         self.game_field = 0
+        self.preview.stop()
         self.level_select_open = False
-        self.status = "游戏配置：标题、玩家参数与版权信息将写入 game.json。"
+        self.status = "游戏配置：常规、制作名单与音乐将写入 game.json。"
 
     def close_game_settings(self, commit: bool) -> None:
         settings = self.game_settings
         cards = self.game_cards
         numbers = self.game_numbers
+        sounds = self.game_sound
         self.game_settings = None
         self.game_cards = []
         self.game_numbers = {}
+        self.game_sound = {}
+        self.preview.stop()                # 试听只在面板开着的时候有意义
         if settings is None or not commit or self.game_path is None:
             return
         title = str(settings.get("title") or "").strip() or game.DEFAULT_TITLE
@@ -747,6 +756,16 @@ class Editor:
             2,
         )
         settings["player"] = player
+        # 声音：填了曲子的一幕才写进 sounds，一幕都没有就把这个键删掉
+        block = {}
+        for key, _ in sound.SCENE_KEYS:
+            spec = sound.to_object(self._rebase_sound(sounds.get(key) or {}))
+            if spec is not None:
+                block[key] = spec
+        if block:
+            settings[sound.GAME_SOUNDS_KEY] = block
+        else:
+            settings.pop(sound.GAME_SOUNDS_KEY, None)
         try:
             game.save_settings(settings, self.game_path)
         except OSError as error:
@@ -757,16 +776,38 @@ class Editor:
         names = sum(len(names) for names in settings["credits"].values())
         self.status = (
             f"游戏配置已保存：{title}，跳高 {player['jump_height']}，"
-            f"速度 {player['move_speed']:g}，版权信息 {len(settings['credits'])} 个职位、{names} 个名字。"
+            f"速度 {player['move_speed']:g}，制作名单 {len(settings['credits'])} 个职位、"
+            f"{names} 个名字，音乐 {len(block)} 幕。"
         )
 
-    # 游戏配置里的格子：0 标题，1 跳高，2 速度，之后每张卡片的职位、每个名字各占一格
+    # ---- 游戏配置的分页 ---------------------------------------------
+    def select_game_tab(self, index: int) -> None:
+        """点页签切页；换页时把试听停下，选中格回到这一页的第一格。"""
+        if not 0 <= index < len(GAME_SETTINGS_TABS) or index == self.game_tab:
+            return
+        self.preview.stop()
+        self.game_tab = index
+        self.game_field = 0
+
+    def switch_game_tab(self, delta: int) -> None:
+        """Tab / Shift+Tab：在常规、制作名单、声音之间转。"""
+        self.select_game_tab((self.game_tab + delta) % len(GAME_SETTINGS_TABS))
+
+    # 每一页的格子：常规是标题与两个玩家参数；制作名单是每张卡片的职位、每个名字；
+    # 声音是标题和制作名单各四项（路径、循环、淡入、淡出）。
     def game_cells(self) -> list[tuple]:
-        cells: list[tuple] = [("title",), ("jump",), ("speed",)]
-        for index, card in enumerate(self.game_cards):
-            cells.append(("job", index))
-            for name_index in range(len(card["names"])):
-                cells.append(("name", index, name_index))
+        if self.game_tab == 0:
+            return [("title",), ("jump",), ("speed",)]
+        if self.game_tab == 1:
+            cells: list[tuple] = []
+            for index, card in enumerate(self.game_cards):
+                cells.append(("job", index))
+                for name_index in range(len(card["names"])):
+                    cells.append(("name", index, name_index))
+            return cells
+        cells = []
+        for key, _ in sound.SCENE_KEYS:
+            cells += [("bgm", key), ("loop", key), ("fade_in", key), ("fade_out", key)]
         return cells
 
     def current_game_cell(self) -> tuple:
@@ -776,7 +817,7 @@ class Editor:
         return cells[max(0, min(self.game_field, len(cells) - 1))]
 
     def game_card_index(self) -> int | None:
-        """光标所在卡片的下标；光标在标题或玩家参数上时返回 None。"""
+        """光标所在卡片的下标；光标不在制作名单卡片上时返回 None。"""
         cell = self.current_game_cell()
         return cell[1] if cell[0] in ("job", "name") else None
 
@@ -785,17 +826,22 @@ class Editor:
         if self.game_settings is None:
             return ""
         cell = self.current_game_cell()
-        if cell[0] == "title":
+        kind = cell[0]
+        if kind == "title":
             return str(self.game_settings.get("title") or "")
-        if cell[0] == "jump":
+        if kind == "jump":
             return str(self.game_numbers.get("jump_height") or "")
-        if cell[0] == "speed":
+        if kind == "speed":
             return str(self.game_numbers.get("move_speed") or "")
+        if kind in ("bgm", "fade_in", "fade_out"):
+            return str(self.game_sound.get(cell[1], {}).get(kind, ""))
+        if kind == "loop":
+            return ""
         index = cell[1]
         if index >= len(self.game_cards):
             return ""
         card = self.game_cards[index]
-        if cell[0] == "job":
+        if kind == "job":
             return str(card["job"])
         if cell[2] >= len(card["names"]):
             return ""
@@ -805,27 +851,42 @@ class Editor:
         if self.game_settings is None:
             return
         cell = self.current_game_cell()
-        if cell[0] == "title":
+        kind = cell[0]
+        if kind == "title":
             self.game_settings["title"] = text
-        elif cell[0] in ("jump", "speed"):
-            key = "jump_height" if cell[0] == "jump" else "move_speed"
+        elif kind in ("jump", "speed"):
+            key = "jump_height" if kind == "jump" else "move_speed"
             self.game_numbers[key] = text
-        elif cell[0] == "job" and cell[1] < len(self.game_cards):
+        elif kind in ("bgm", "fade_in", "fade_out"):
+            if cell[1] in self.game_sound:
+                self.game_sound[cell[1]][kind] = text
+        elif kind == "job" and cell[1] < len(self.game_cards):
             self.game_cards[cell[1]]["job"] = text
-        elif cell[0] == "name" and cell[1] < len(self.game_cards):
+        elif kind == "name" and cell[1] < len(self.game_cards):
             card = self.game_cards[cell[1]]
             if cell[2] < len(card["names"]):
                 card["names"][cell[2]] = text
 
     def type_game_settings(self, char: str) -> None:
-        """键盘输入：跳高只吃数字，速度吃数字和小数点，标题和名字什么都能打。"""
+        """键盘输入：跳高只吃数字，速度、淡入淡出吃数字和小数点，路径与文字什么都能打。"""
         cell = self.current_game_cell()
         text = self.game_field_text()
-        if cell[0] == "jump":
+        kind = cell[0]
+        if kind == "loop":
+            return
+        if kind == "jump":
             if char.isdigit() and len(text) < 2:
                 self.set_game_field_text(text + char)
             return
-        if cell[0] == "speed":
+        if kind == "speed":
+            if (char.isdigit() or char == ".") and len(text) < 5:
+                self.set_game_field_text(text + char)
+            return
+        if kind == "bgm":
+            if char.isprintable() and len(text) < sound.BGM_PATH_MAX_LENGTH:
+                self.set_game_field_text(text + char)
+            return
+        if kind in ("fade_in", "fade_out"):
             if (char.isdigit() or char == ".") and len(text) < 5:
                 self.set_game_field_text(text + char)
             return
@@ -836,9 +897,28 @@ class Editor:
         self.set_game_field_text(self.game_field_text()[:-1])
 
     def adjust_game_number(self, delta: int) -> None:
-        """跳高按 1 格、速度按 0.5 一格加减（面板上的加减按钮和左右键）。"""
+        """跳高按 1 格、速度和高低音淡入淡出按 0.5 一格，循环是开关。"""
         cell = self.current_game_cell()
-        if cell[0] == "jump":
+        kind = cell[0]
+        if kind == "loop":
+            fields = self.game_sound.get(cell[1])
+            if fields is not None:
+                fields["loop"] = not bool(fields["loop"])
+            return
+        if kind in ("fade_in", "fade_out"):
+            fields = self.game_sound.get(cell[1])
+            if fields is None:
+                return
+            fallback = (
+                sound.DEFAULT_FADE_IN if kind == "fade_in" else sound.DEFAULT_FADE_OUT
+            )
+            current = clamp_float(fields[kind], 0.0, sound.MAX_FADE_SECONDS, fallback)
+            stepped = max(
+                0.0, min(sound.MAX_FADE_SECONDS, current + sound.FADE_STEP * delta)
+            )
+            fields[kind] = f"{stepped:g}"
+            return
+        if kind == "jump":
             current = clamp_int(
                 self.game_numbers.get("jump_height"),
                 JUMP_HEIGHT_MIN,
@@ -849,7 +929,7 @@ class Editor:
                 max(JUMP_HEIGHT_MIN, min(JUMP_HEIGHT_MAX, current + delta))
             )
             return
-        if cell[0] == "speed":
+        if kind == "speed":
             current = clamp_float(
                 self.game_numbers.get("move_speed"),
                 MOVE_SPEED_MIN,
@@ -860,12 +940,12 @@ class Editor:
             self.game_numbers["move_speed"] = f"{stepped:g}"
 
     def move_game_field(self, delta: int) -> None:
-        """上下键在标题、两个玩家参数、卡片里的职位和名字之间走。"""
+        """上下键只在当前这一页的格子之间走。"""
         cells = self.game_cells()
         self.game_field = max(0, min(self.game_field + delta, len(cells) - 1))
 
     def scroll_game_cards(self, delta: int, visible: int | None = None) -> None:
-        """滚轮翻版权卡片；visible 是当前能看到的张数，用来夹住上界。"""
+        """滚轮翻制作名单卡片；visible 是当前能看到的张数，用来夹住上界。"""
         last = max(0, len(self.game_cards) - (visible or 1))
         self.game_card_scroll = max(0, min(self.game_card_scroll + delta, last))
 
@@ -905,83 +985,34 @@ class Editor:
         self.game_field = min(self.game_field, len(self.game_cells()) - 1)
         self.status = "已删除一个名字。"
 
-    # ---- 声音（标题与结局） -----------------------------------------
-    def open_sound(self) -> None:
-        """声音浮层：标题、结局、玩家三页。
-
-        每一关自己的音乐不在这里，在「关卡设置」的声音页里——那一页只改当前打开的关卡。
-        """
-        if self.game_path is None:
-            self.status = "尚未打开游戏配置，无法编辑声音。"
+    # ---- 游戏配置的声音页 -------------------------------------------
+    def pick_game_audio(self, key: str) -> None:
+        """给标题或制作名单挑一首 BGM：只记路径，不复制文件。"""
+        if key not in self.game_sound:
             return
-        tabs = [
-            {"key": sound.TITLE_KEY, "label": "标题", "kind": "game"},
-            {"key": sound.ENDING_KEY, "label": "结局", "kind": "game"},
-            {"key": sound.PLAYER_KEY, "label": "玩家", "kind": "player"},
-        ]
-        self.sound_tabs = tabs
-        self.sound_values = self._read_sound_values(tabs)
-        self.sound_index = 0
-        self.sound_focus = 0
-        self.level_select_open = False
-        self.file_menu_open = False
-        self.view_menu_open = False
-        self.status = "声音：标题与结局写进 game.json；每一关的音乐在「关卡设置」的声音页里。"
-
-    def _read_sound_values(self, tabs: list) -> list:
-        """每一页现在的值：标题、结局在 game.json 里，玩家音效还没有内容。"""
-        settings = game.load_settings(self.game_path) if self.game_path else {}
-        block = settings.get(sound.GAME_SOUNDS_KEY)
-        block = block if isinstance(block, dict) else {}
-        values = []
-        for tab in tabs:
-            if tab["kind"] == "game":
-                values.append(sound.fields_of(block.get(tab["key"])))
-            else:
-                values.append(sound.fields_of(None))
-        return values
-
-    def close_sound(self, commit: bool) -> None:
-        """关掉声音浮层；commit 时把标题与结局写回 game.json。"""
-        tabs, values = self.sound_tabs, self.sound_values
-        self.sound_tabs = None
-        self.sound_values = []
-        self.sound_index = 0
-        self.sound_focus = 0
-        self.preview.stop()
-        if tabs is None or not commit or self.game_path is None:
+        path = ask_audio_path("选择背景音乐", self.media_base_dir)
+        if not path:
+            self.status = "已取消选择曲子。"
             return
+        self.game_sound[key]["bgm"] = relative_level_path(path, self.media_base_dir)
+        self.game_field = self.game_cells().index(("bgm", key))
+        self.status = "已选择曲子：仅记录相对 game.json 的路径，不复制文件。"
 
-        # 和原来一样就不重写 game.json
-        settings = game.load_settings(self.game_path)
-        original = settings.get(sound.GAME_SOUNDS_KEY)
-        original_block = dict(original) if isinstance(original, dict) else {}
-        block = dict(original_block)
-        for index, tab in enumerate(tabs):
-            if tab["kind"] != "game":
-                continue
-            spec = sound.to_object(self._rebase_sound(values[index]))
-            if spec is None:
-                block.pop(tab["key"], None)
-            else:
-                block[tab["key"]] = spec
-        if block != original_block:
-            if block:
-                settings[sound.GAME_SOUNDS_KEY] = block
-            else:
-                settings.pop(sound.GAME_SOUNDS_KEY, None)
-            try:
-                game.save_settings(settings, self.game_path)
-            except OSError as error:
-                self.status = f"声音：game.json 保存失败：{error}。"
-                return
-        self.status = f"声音已保存：标题与结局在 {display_path(self.game_path)}。"
-
-    def sound_available(self) -> bool:
-        """当前这一页能不能编辑：玩家音效还没有内容，那一页是空的。"""
-        if not self.sound_tabs:
-            return False
-        return self.sound_tabs[self.sound_index]["kind"] != "player"
+    def preview_game_audio(self, key: str) -> None:
+        """试听标题或制作名单：按这一页的循环与淡入放，再点一次停。"""
+        fields = self.game_sound.get(key)
+        if fields is None:
+            return
+        path = resolve_level_path(fields["bgm"], self.media_base_dir)
+        if path is None:
+            self.preview.stop()
+            self.status = f"找不到这首曲子：{fields['bgm'] or '（未填写）'}。"
+            return
+        self.status = self.preview.toggle(
+            path,
+            bool(fields["loop"]),
+            clamp_float(fields["fade_in"], 0.0, sound.MAX_FADE_SECONDS, sound.DEFAULT_FADE_IN),
+        )
 
     def _rebase_sound(self, fields: dict) -> dict:
         """曲子能解析到就改成相对 game.json 的正斜杠写法，和背景、贴图一样。"""
@@ -991,108 +1022,6 @@ class Editor:
         rebased = dict(fields)
         rebased["bgm"] = relative_level_path(path, self.media_base_dir)
         return rebased
-
-    def current_sound(self) -> dict:
-        """当前这一页编辑中的四项。"""
-        if not self.sound_tabs or not self.sound_values:
-            return sound.fields_of(None)
-        return self.sound_values[self.sound_index]
-
-    def select_sound_tab(self, index: int) -> None:
-        """切到另一页：停下试听，选中项回到 BGM 路径。"""
-        if not self.sound_tabs or not 0 <= index < len(self.sound_tabs):
-            return
-        if index == self.sound_index:
-            return
-        self.preview.stop()
-        self.sound_index = index
-        self.sound_focus = 0
-
-    def move_sound_focus(self, delta: int) -> None:
-        """上下键在 BGM 路径、循环、淡入、淡出之间走。"""
-        if not self.sound_available():
-            return
-        self.sound_focus = max(0, min(self.sound_focus + delta, 3))
-
-    def toggle_sound_loop(self) -> None:
-        """循环在「是 / 否」之间切。"""
-        if not self.sound_available():
-            return
-        values = self.current_sound()
-        values["loop"] = not bool(values["loop"])
-        self.sound_focus = 1
-
-    def adjust_sound_value(self, delta: int) -> None:
-        """左右键和面板上的加减：循环切是/否，淡入淡出按 0.5 秒一格。"""
-        if not self.sound_available() or not delta:
-            return
-        if self.sound_focus == 1:
-            self.toggle_sound_loop()
-            return
-        if self.sound_focus not in (2, 3):
-            return
-        key = "fade_in" if self.sound_focus == 2 else "fade_out"
-        fallback = sound.DEFAULT_FADE_IN if key == "fade_in" else sound.DEFAULT_FADE_OUT
-        values = self.current_sound()
-        current = clamp_float(values[key], 0.0, sound.MAX_FADE_SECONDS, fallback)
-        stepped = max(0.0, min(sound.MAX_FADE_SECONDS, current + sound.FADE_STEP * delta))
-        values[key] = f"{stepped:g}"
-
-    def type_sound_char(self, char: str) -> None:
-        """键盘输入：路径什么都能打，淡入淡出只吃数字和小数点。"""
-        if not self.sound_available():
-            return
-        values = self.current_sound()
-        if self.sound_focus == 0:
-            if char.isprintable() and len(values["bgm"]) < sound.BGM_PATH_MAX_LENGTH:
-                values["bgm"] += char
-        elif self.sound_focus in (2, 3):
-            key = "fade_in" if self.sound_focus == 2 else "fade_out"
-            if (char.isdigit() or char == ".") and len(str(values[key])) < 5:
-                values[key] = str(values[key]) + char
-
-    def erase_sound_char(self) -> None:
-        if not self.sound_available():
-            return
-        values = self.current_sound()
-        if self.sound_focus == 0:
-            values["bgm"] = values["bgm"][:-1]
-        elif self.sound_focus in (2, 3):
-            key = "fade_in" if self.sound_focus == 2 else "fade_out"
-            values[key] = str(values[key])[:-1]
-
-    def pick_audio(self) -> None:
-        """给当前这一页挑一首曲子：只记路径，不复制文件。"""
-        if not self.sound_available():
-            self.status = "玩家音效还没有内容，暂时不能选曲子。"
-            return
-        path = ask_audio_path("选择背景音乐", self.media_base_dir)
-        if not path:
-            self.status = "已取消选择曲子。"
-            return
-        self.current_sound()["bgm"] = relative_level_path(path, self.media_base_dir)
-        self.sound_focus = 0
-        self.status = "已选择曲子：只记录相对 game.json 的路径，不复制文件。"
-
-    def preview_sound(self) -> None:
-        """试听当前这一页：按这一页的循环与淡入放，再点一次停。"""
-        if not self.sound_available():
-            self.status = "玩家音效还没有内容，无法试听。"
-            return
-        values = self.current_sound()
-        path = resolve_level_path(values["bgm"], self.media_base_dir)
-        if path is None:
-            self.preview.stop()
-            self.status = f"找不到这首曲子：{values['bgm'] or '（未填写）'}。"
-            return
-        self.status = self.preview.toggle(
-            path,
-            bool(values["loop"]),
-            clamp_float(
-                values["fade_in"], 0.0, sound.MAX_FADE_SECONDS, sound.DEFAULT_FADE_IN
-            ),
-        )
-
 
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:

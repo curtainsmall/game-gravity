@@ -10,7 +10,6 @@ from view.modals import (
     game_settings_geometry,
     level_select_geometry,
     settings_geometry,
-    sound_geometry,
     switch_geometry,
 )
 from view.panel import (
@@ -42,8 +41,6 @@ def handle_toolbar(editor: Editor, position: tuple, window_width: int) -> str | 
             editor.undo()
         elif action == "settings":
             editor.open_settings()
-        elif action == "sound":
-            editor.open_sound()
         elif action == "view":
             editor.view_menu_open = not editor.view_menu_open
             editor.file_menu_open = False
@@ -188,113 +185,95 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
 def handle_game_settings_click(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
-    """游戏配置浮层：点哪一格就编辑哪一格，改完点「应用」写进 game.json。
+    """游戏配置浮层：切页签、点格子、浏览/试听、增删职位，最后应用或取消。
 
-    版权卡片上，名字行尾的「−」删掉那个名字，卡片底下的「＋」加一个空名字。
+    制作名单卡片上，名字行尾的「−」删掉那个名字，卡片底下的「＋」加一个空名字。
     """
-    (
-        panel,
-        title_rect,
-        _,
-        jump_rect,
-        speed_rect,
-        _,
-        _,
-        layouts,
-        _,
-        add_rect,
-        remove_rect,
-        apply_rect,
-        cancel_rect,
-    ) = game_settings_geometry(surface, editor.game_cards, editor.game_card_scroll)
-    if apply_rect.collidepoint(position):
-        editor.close_game_settings(True)
-        return
-    if cancel_rect.collidepoint(position):
-        editor.close_game_settings(False)
-        return
-    if add_rect.collidepoint(position):
-        editor.add_credit_card()
-        return
-    if remove_rect.collidepoint(position):
-        editor.remove_credit_card()
-        return
-    if title_rect.collidepoint(position):
-        editor.game_field = 0
-        return
-    for field, rect in ((1, jump_rect), (2, speed_rect)):
-        if not rect.collidepoint(position):
-            continue
-        editor.game_field = field
-        left, right = stepper_rects(rect)
-        if left.collidepoint(position):
-            editor.adjust_game_number(-1)
-        elif right.collidepoint(position):
-            editor.adjust_game_number(1)
-        return
-    cells = editor.game_cells()
-    for layout in layouts:
-        index = layout["index"]
-        for line, rect in enumerate(layout["minus"]):
-            if rect.collidepoint(position):
-                editor.remove_credit_name(index, line)
-                return
-        if layout["plus"].collidepoint(position):
-            editor.add_credit_name(index)
-            return
-        if layout["job"].collidepoint(position):
-            editor.game_field = cells.index(("job", index))
-            return
-        for line, rect in enumerate(layout["names"]):
-            if rect.collidepoint(position):
-                editor.game_field = cells.index(("name", index, line))
-                return
-    if not panel.collidepoint(position):
-        editor.close_game_settings(False)
-
-
-def handle_sound_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
-    """声音浮层：切页签、改这一页的字段、浏览、试听、应用/取消。
-
-    玩家那一页还没有内容，点它只有页签和按钮有用。
-    """
-    geometry = sound_geometry(surface, editor.sound_tabs or [], editor.sound_index)
+    geometry = game_settings_geometry(
+        surface, editor.game_cards, editor.game_card_scroll, editor.game_tab
+    )
     panel = geometry["panel"]
     if geometry["apply"].collidepoint(position):
-        editor.close_sound(True)
+        editor.close_game_settings(True)
         return
     if geometry["cancel"].collidepoint(position):
-        editor.close_sound(False)
+        editor.close_game_settings(False)
         return
     for rect, index in geometry["tabs"]:
         if rect.collidepoint(position):
-            editor.select_sound_tab(index)
+            editor.select_game_tab(index)
             return
-    if editor.sound_available():
-        if geometry["path"].collidepoint(position):
-            editor.sound_focus = 0
-            return
-        if geometry["browse"].collidepoint(position):
-            editor.pick_audio()
-            return
-        if geometry["preview"].collidepoint(position):
-            editor.preview_sound()
-            return
-        if geometry["loop"].collidepoint(position):
-            editor.toggle_sound_loop()
-            return
-        for field, rect in ((2, geometry["fade_in"]), (3, geometry["fade_out"])):
+
+    cells = editor.game_cells()
+    if editor.game_tab == 0:
+        for cell, rect in (
+            (("title",), geometry["rows"]["title"]),
+            (("jump",), geometry["rows"]["jump"]),
+            (("speed",), geometry["rows"]["speed"]),
+        ):
             if not rect.collidepoint(position):
                 continue
-            editor.sound_focus = field
+            editor.game_field = cells.index(cell)
             left, right = stepper_rects(rect)
             if left.collidepoint(position):
-                editor.adjust_sound_value(-1)
+                editor.adjust_game_number(-1)
             elif right.collidepoint(position):
-                editor.adjust_sound_value(1)
+                editor.adjust_game_number(1)
             return
+    elif editor.game_tab == 1:
+        if geometry["add"].collidepoint(position):
+            editor.add_credit_card()
+            return
+        if geometry["remove"].collidepoint(position):
+            editor.remove_credit_card()
+            return
+        for layout in geometry["layouts"]:
+            index = layout["index"]
+            for line, rect in enumerate(layout["minus"]):
+                if rect.collidepoint(position):
+                    editor.remove_credit_name(index, line)
+                    return
+            if layout["plus"].collidepoint(position):
+                editor.add_credit_name(index)
+                return
+            if layout["job"].collidepoint(position):
+                editor.game_field = cells.index(("job", index))
+                return
+            for line, rect in enumerate(layout["names"]):
+                if rect.collidepoint(position):
+                    editor.game_field = cells.index(("name", index, line))
+                    return
+    else:
+        for scene in geometry["scenes"]:
+            key = scene["key"]
+            if scene["browse"].collidepoint(position):
+                editor.pick_game_audio(key)
+                return
+            if scene["preview"].collidepoint(position):
+                editor.preview_game_audio(key)
+                return
+            if scene["path"].collidepoint(position):
+                editor.game_field = cells.index(("bgm", key))
+                return
+            if scene["loop"].collidepoint(position):
+                editor.game_field = cells.index(("loop", key))
+                editor.adjust_game_number(1)
+                return
+            for field, rect in (
+                ("fade_in", scene["fade_in"]),
+                ("fade_out", scene["fade_out"]),
+            ):
+                if not rect.collidepoint(position):
+                    continue
+                editor.game_field = cells.index((field, key))
+                left, right = stepper_rects(rect)
+                if left.collidepoint(position):
+                    editor.adjust_game_number(-1)
+                elif right.collidepoint(position):
+                    editor.adjust_game_number(1)
+                return
     if not panel.collidepoint(position):
-        editor.close_sound(False)
+        editor.close_game_settings(False)
 
 
 def handle_switch_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:

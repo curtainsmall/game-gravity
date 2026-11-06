@@ -11,6 +11,7 @@ from core.constants import (
     DIALOG_BORDER,
     DIM_TEXT,
     FOOTER,
+    GAME_SETTINGS_TABS,
     HEADER,
     HIGHLIGHT,
     LEVEL_SELECT_WIDTH,
@@ -20,6 +21,7 @@ from core.constants import (
     TEXT,
 )
 from core.helpers import display_path, level_name_of
+from core.sound import SCENE_KEYS
 from view.widgets import (
     draw_button,
     draw_checkbox,
@@ -125,7 +127,7 @@ def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font
     draw_button(surface, font, close_rect, "关闭")
 
 
-# ---- 页签（关卡设置和声音浮层共用） --------------------------------
+# ---- 页签（关卡设置和游戏配置共用） --------------------------------
 TAB_HEIGHT = 24
 TAB_GAP = 4
 TAB_PADDING = 12
@@ -423,119 +425,197 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
 
 
 GAME_PANEL_WIDTH = 620
-GAME_HEADER_HEIGHT = 166        # 面板顶部到版权卡片区之前的固定高度
-GAME_FOOTER_HEIGHT = 74         # 卡片区之后：说明、按钮
+GAME_TAB_TOP = 30               # 标题下面这一行是页签
+GAME_CONTENT_TOP = 64           # 页签下面开始排内容
+GAME_GENERAL_HEIGHT = 250       # 常规页：标题、玩家参数、说明
+GAME_SOUND_HEIGHT = 380         # 声音页：标题与制作名单两块
+GAME_FOOTER_HEIGHT = 74         # 制作名单页：卡片区之后：说明、按钮
 CREDIT_CARD_PAD = 6
 CREDIT_CARD_GAP = 6
 CREDIT_LINE_HEIGHT = ROW_HEIGHT
 CREDIT_JOB_WIDTH = 150
 CREDIT_ICON = 16                # 名字行尾的「−」和下边「＋」的边长
+SCENE_STEP = 112                # 声音页里一块占多高：小标题、路径、循环、淡入淡出
 
 
 def _credit_card_height(card: dict) -> int:
-    """一张版权卡片的高度：职位一格、每个名字一行，底下再加一行「＋」。"""
+    """一张制作名单卡片的高度：职位一格、每个名字一行，底下再加一行「＋」。"""
     lines = max(1, len(card["names"]))
     return CREDIT_CARD_PAD * 2 + lines * CREDIT_LINE_HEIGHT + CREDIT_LINE_HEIGHT
 
 
-def game_settings_geometry(surface: pygame.Surface, cards: list, scroll: int = 0) -> tuple:
-    """游戏配置：标题、玩家的跳高与速度、每个职位一张版权卡片，再加应用/取消。
+def game_settings_geometry(
+    surface: pygame.Surface, cards: list, scroll: int = 0, tab: int = 0
+) -> dict:
+    """游戏配置：常规 / 制作名单 / 声音三页，底下是应用和取消。
 
-    卡片一张一张往下排，装不下就用滚轮翻（scroll 是编辑器上的 game_card_scroll）。
+    常规页是标题与玩家参数；制作名单页每个职位一张卡片，装不下就用滚轮翻（scroll 是
+    编辑器上的 game_card_scroll）；声音页把标题与制作名单两块上下排开，每块是路径、
+    循环和淡入淡出。只有当前页的那些矩形有值。
     """
-    card_heights = [_credit_card_height(card) for card in cards]
-    content = sum(height + CREDIT_CARD_GAP for height in card_heights)
-    # 面板最高顶到信息栏下面、状态栏上面，剩下的靠滚轮翻
-    max_height = max(360, surface.get_height() - HEADER - FOOTER - 8)
-    wanted = GAME_HEADER_HEIGHT + max(120, content) + GAME_FOOTER_HEIGHT
-    panel = place_panel(
-        surface, pygame.Rect(0, 0, GAME_PANEL_WIDTH, min(wanted, max_height))
-    )
-    title_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
-    player_section_rect = pygame.Rect(panel.left + 12, panel.top + 66, panel.width - 24, ROW_HEIGHT)
-    jump_rect = pygame.Rect(panel.left + 12, panel.top + 88, panel.width - 24, ROW_HEIGHT)
-    speed_rect = pygame.Rect(
-        panel.left + 12, panel.top + 92 + ROW_HEIGHT, panel.width - 24, ROW_HEIGHT
-    )
-    section_rect = pygame.Rect(
-        panel.left + 12, panel.top + 120 + ROW_HEIGHT, panel.width - 24, ROW_HEIGHT
-    )
-    cards_area = pygame.Rect(
-        panel.left + 12,
-        panel.top + GAME_HEADER_HEIGHT,
-        panel.width - 24,
-        max(0, panel.height - GAME_HEADER_HEIGHT - GAME_FOOTER_HEIGHT),
-    )
+    if tab == 0:
+        height = GAME_GENERAL_HEIGHT
+    elif tab == 1:
+        card_heights = [_credit_card_height(card) for card in cards]
+        content = sum(card_height + CREDIT_CARD_GAP for card_height in card_heights)
+        # 面板最高顶到信息栏下面、状态栏上面，剩下的靠滚轮翻
+        max_height = max(360, surface.get_height() - HEADER - FOOTER - 8)
+        wanted = GAME_CONTENT_TOP + 26 + max(120, content) + GAME_FOOTER_HEIGHT
+        height = min(wanted, max_height)
+    else:
+        height = GAME_SOUND_HEIGHT
+    panel = place_panel(surface, pygame.Rect(0, 0, GAME_PANEL_WIDTH, height))
 
-    # 从滚动位置开始往下摆，装不下的卡片先不画（内容还在，应用时照样写回）
-    layouts = []
-    scroll = max(0, min(scroll, max(0, len(cards) - 1)))
-    y = cards_area.top
-    for index in range(scroll, len(cards)):
-        height = card_heights[index]
-        if y + height > cards_area.bottom:
-            break
-        card_rect = pygame.Rect(cards_area.left, y, cards_area.width, height)
-        job_rect = pygame.Rect(
-            card_rect.left + CREDIT_CARD_PAD,
-            card_rect.top + CREDIT_CARD_PAD,
-            CREDIT_JOB_WIDTH,
-            CREDIT_LINE_HEIGHT,
+    tab_rects = []
+    x = panel.left + MARGIN
+    for index, label in enumerate(GAME_SETTINGS_TABS):
+        width = _tab_width(label)
+        tab_rects.append((pygame.Rect(x, panel.top + GAME_TAB_TOP, width, TAB_HEIGHT), index))
+        x += width + TAB_GAP
+    content_top = panel.top + GAME_CONTENT_TOP
+    row_width = panel.width - 2 * MARGIN
+
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    geometry = {
+        "panel": panel,
+        "tabs": tab_rects,
+        "tab": tab,
+        "rows": {},
+        "scenes": [],
+        "hint": None,
+        "cards_area": None,
+        "layouts": [],
+        "visible": 0,
+        "add": None,
+        "remove": None,
+        "note_top": content_top,
+        "apply": pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT),
+        "cancel": pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT),
+    }
+
+    if tab == 0:
+        rows = geometry["rows"]
+        rows["title"] = pygame.Rect(panel.left + MARGIN, content_top, row_width, ROW_HEIGHT + 2)
+        rows["player_label"] = pygame.Rect(
+            panel.left + MARGIN, content_top + 30, row_width, ROW_HEIGHT
         )
-        name_left = job_rect.right + 8
-        name_width = card_rect.right - CREDIT_CARD_PAD - name_left - CREDIT_ICON - 4
-        name_rects = []
-        minus_rects = []
-        for line in range(len(cards[index]["names"])):
-            line_top = card_rect.top + CREDIT_CARD_PAD + line * CREDIT_LINE_HEIGHT
-            name_rects.append(pygame.Rect(name_left, line_top, name_width, CREDIT_LINE_HEIGHT))
-            minus_rects.append(
-                pygame.Rect(
-                    name_left + name_width + 4,
-                    line_top + (CREDIT_LINE_HEIGHT - CREDIT_ICON) // 2,
-                    CREDIT_ICON,
-                    CREDIT_ICON,
-                )
+        rows["jump"] = pygame.Rect(
+            panel.left + MARGIN, content_top + 52, row_width, ROW_HEIGHT + 2
+        )
+        rows["speed"] = pygame.Rect(
+            panel.left + MARGIN, content_top + 84, row_width, ROW_HEIGHT + 2
+        )
+        geometry["note_top"] = content_top + 118
+    elif tab == 1:
+        geometry["section"] = pygame.Rect(
+            panel.left + MARGIN, content_top, row_width, ROW_HEIGHT
+        )
+        cards_top = content_top + 26
+        cards_area = pygame.Rect(
+            panel.left + MARGIN,
+            cards_top,
+            row_width,
+            max(0, panel.height - (cards_top - panel.top) - GAME_FOOTER_HEIGHT),
+        )
+        geometry["cards_area"] = cards_area
+
+        # 从滚动位置开始往下摆，装不下的卡片先不画（内容还在，应用时照样写回）
+        layouts = []
+        scroll = max(0, min(scroll, max(0, len(cards) - 1)))
+        y = cards_area.top
+        for index in range(scroll, len(cards)):
+            card_height = _credit_card_height(cards[index])
+            if y + card_height > cards_area.bottom:
+                break
+            card_rect = pygame.Rect(cards_area.left, y, cards_area.width, card_height)
+            job_rect = pygame.Rect(
+                card_rect.left + CREDIT_CARD_PAD,
+                card_rect.top + CREDIT_CARD_PAD,
+                CREDIT_JOB_WIDTH,
+                CREDIT_LINE_HEIGHT,
             )
-        plus_rect = pygame.Rect(
-            name_left,
-            card_rect.top + CREDIT_CARD_PAD + max(1, len(cards[index]["names"])) * CREDIT_LINE_HEIGHT,
-            CREDIT_ICON,
-            CREDIT_ICON,
+            name_left = job_rect.right + 8
+            name_width = card_rect.right - CREDIT_CARD_PAD - name_left - CREDIT_ICON - 4
+            name_rects = []
+            minus_rects = []
+            for line in range(len(cards[index]["names"])):
+                line_top = card_rect.top + CREDIT_CARD_PAD + line * CREDIT_LINE_HEIGHT
+                name_rects.append(
+                    pygame.Rect(name_left, line_top, name_width, CREDIT_LINE_HEIGHT)
+                )
+                minus_rects.append(
+                    pygame.Rect(
+                        name_left + name_width + 4,
+                        line_top + (CREDIT_LINE_HEIGHT - CREDIT_ICON) // 2,
+                        CREDIT_ICON,
+                        CREDIT_ICON,
+                    )
+                )
+            plus_rect = pygame.Rect(
+                name_left,
+                card_rect.top
+                + CREDIT_CARD_PAD
+                + max(1, len(cards[index]["names"])) * CREDIT_LINE_HEIGHT,
+                CREDIT_ICON,
+                CREDIT_ICON,
+            )
+            layouts.append(
+                {
+                    "index": index,
+                    "rect": card_rect,
+                    "job": job_rect,
+                    "names": name_rects,
+                    "minus": minus_rects,
+                    "plus": plus_rect,
+                }
+            )
+            y += card_height + CREDIT_CARD_GAP
+        geometry["layouts"] = layouts
+        geometry["visible"] = len(layouts)
+        geometry["add"] = pygame.Rect(panel.left + MARGIN, button_y, 110, BUTTON_HEIGHT)
+        geometry["remove"] = pygame.Rect(
+            geometry["add"].right + 8, button_y, 110, BUTTON_HEIGHT
         )
-        layouts.append(
-            {
-                "index": index,
-                "rect": card_rect,
-                "job": job_rect,
-                "names": name_rects,
-                "minus": minus_rects,
-                "plus": plus_rect,
-            }
+        geometry["note_top"] = panel.bottom - BUTTON_HEIGHT - 36
+    else:
+        for scene_index, (key, label) in enumerate(SCENE_KEYS):
+            top = content_top + scene_index * SCENE_STEP
+            path_row = pygame.Rect(
+                panel.left + MARGIN, top + 22, row_width, ROW_HEIGHT + 2
+            )
+            preview = pygame.Rect(path_row.right - 76, path_row.top, 76, path_row.height)
+            browse = pygame.Rect(preview.left - 6 - 76, path_row.top, 76, path_row.height)
+            path = pygame.Rect(
+                path_row.left, path_row.top, browse.left - 6 - path_row.left, path_row.height
+            )
+            fade_width = min(260, (row_width - 16) // 2)
+            fades_top = top + 78
+            geometry["scenes"].append(
+                {
+                    "key": key,
+                    "label": label,
+                    "label_top": top,
+                    "path": path,
+                    "browse": browse,
+                    "preview": preview,
+                    "loop": pygame.Rect(
+                        panel.left + MARGIN, top + 50, 260, ROW_HEIGHT + 2
+                    ),
+                    "fade_in": pygame.Rect(
+                        panel.left + MARGIN, fades_top, fade_width, ROW_HEIGHT + 2
+                    ),
+                    "fade_out": pygame.Rect(
+                        panel.left + MARGIN + fade_width + 16,
+                        fades_top,
+                        fade_width,
+                        ROW_HEIGHT + 2,
+                    ),
+                }
+            )
+        geometry["hint"] = pygame.Rect(
+            panel.left + MARGIN, content_top + 224, row_width, 44
         )
-        y += height + CREDIT_CARD_GAP
-    visible = len(layouts)
-
-    button_y = panel.bottom - BUTTON_HEIGHT - 10
-    add_rect = pygame.Rect(panel.left + 12, button_y, 110, BUTTON_HEIGHT)
-    remove_rect = pygame.Rect(add_rect.right + 8, button_y, 110, BUTTON_HEIGHT)
-    apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
-    cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
-    return (
-        panel,
-        title_rect,
-        player_section_rect,
-        jump_rect,
-        speed_rect,
-        section_rect,
-        cards_area,
-        layouts,
-        visible,
-        add_rect,
-        remove_rect,
-        apply_rect,
-        cancel_rect,
-    )
+    return geometry
 
 
 def draw_icon_button(
@@ -568,56 +648,42 @@ def _draw_cell(
     )
 
 
-def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    cards = editor.game_cards
+def _cell_selected(editor: Editor, cell: tuple) -> bool:
+    """光标是不是停在 game.json 的这一格上。"""
     cells = editor.game_cells()
-    (
-        panel,
-        title_rect,
-        player_section_rect,
-        jump_rect,
-        speed_rect,
-        section_rect,
-        cards_area,
-        layouts,
-        visible,
-        add_rect,
-        remove_rect,
-        apply_rect,
-        cancel_rect,
-    ) = game_settings_geometry(surface, cards, editor.game_card_scroll)
-    draw_panel(surface, panel)
+    return editor.game_field < len(cells) and cells[editor.game_field] == cell
 
-    surface.blit(font.render("游戏配置", True, TEXT), (panel.left + 12, panel.top + 8))
-    hint = font.render("点击面板外区域即取消", True, DIM_TEXT)
-    surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
 
-    def selected_index(cell: tuple) -> bool:
-        return cells[editor.game_field] == cell if editor.game_field < len(cells) else False
-
+def _draw_game_general(
+    surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
+) -> None:
+    """常规页：标题，以及玩家共用的跳高与速度。"""
+    rows = geometry["rows"]
     _draw_cell(
         surface,
         font,
-        title_rect,
+        rows["title"],
         str((editor.game_settings or {}).get("title") or ""),
-        selected_index(("title",)),
+        _cell_selected(editor, ("title",)),
     )
 
-    # 玩家参数属于整个游戏，这一关的 player 里写同名键就会覆盖它
-    label = "玩家（全游戏共用，关卡里的 player 写了就覆盖它）"
     surface.blit(
-        font.render(label, True, DIM_TEXT), (player_section_rect.left, player_section_rect.top + 2)
+        font.render("玩家（全游戏共用，关卡里的 player 写了就覆盖它）", True, DIM_TEXT),
+        (rows["player_label"].left, rows["player_label"].top + 2),
     )
-    for field, cell, rect, title, key, unit in (
-        (1, ("jump",), jump_rect, "跳高", "jump_height", "格"),
-        (2, ("speed",), speed_rect, "速度", "move_speed", "格/秒"),
+    for key, cell, title, unit in (
+        ("jump_height", ("jump",), "跳高", "格"),
+        ("move_speed", ("speed",), "速度", "格/秒"),
     ):
-        selected = selected_index(cell)
+        rect = rows["jump" if key == "jump_height" else "speed"]
+        selected = _cell_selected(editor, cell)
         pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
         pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
         value = editor.game_numbers.get(key, "")
         caret = "|" if selected else ""
-        text = font.render(f"{title}（{unit}）：{value}{caret}", True, HIGHLIGHT if selected else TEXT)
+        text = font.render(
+            f"{title}（{unit}）：{value}{caret}", True, HIGHLIGHT if selected else TEXT
+        )
         clip = max(1, rect.width - 12)
         surface.blit(
             text,
@@ -628,17 +694,34 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
 
-    # 版权信息：每个职位一张卡片，左边写职位、右边一行一个名字
-    label = "版权信息（每个职位一张卡片；名字为空也行，一个名字都没有就是空数组）"
-    if len(cards) > visible:
-        label += f"   滚轮翻卡片（{visible} / {len(cards)} 张可见）"
-    surface.blit(font.render(label, True, DIM_TEXT), (section_rect.left, section_rect.top + 2))
+    note = font.render(
+        f"{display_path(editor.game_path) if editor.game_path else 'game.json'}："
+        "标题用于标题画面和窗口标题，玩家参数用于每一关。",
+        True,
+        DIM_TEXT,
+    )
+    surface.blit(note, (geometry["panel"].left + MARGIN, geometry["note_top"]))
+
+
+def _draw_game_credits(
+    surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
+) -> None:
+    """制作名单页：每个职位一张卡片，左边写职位、右边一行一个名字。"""
+    cards = editor.game_cards
+    cards_area = geometry["cards_area"]
+    label = "制作名单（每个职位一张卡片；名字为空也行，一个名字都没有就是空数组）"
+    if len(cards) > geometry["visible"]:
+        label += f"   滚轮翻卡片（{geometry['visible']} / {len(cards)} 张可见）"
+    surface.blit(
+        font.render(label, True, DIM_TEXT),
+        (geometry["section"].left, geometry["section"].top + 2),
+    )
     if not cards:
         text = font.render("还没有职位，请点击「添加职位」", True, DIM_TEXT)
         surface.blit(text, (cards_area.left + 6, cards_area.top + 6))
     previous_clip = surface.get_clip()
     surface.set_clip(cards_area)
-    for layout in layouts:
+    for layout in geometry["layouts"]:
         card = cards[layout["index"]]
         pygame.draw.rect(surface, (58, 58, 66), layout["rect"])
         pygame.draw.rect(surface, (110, 110, 120), layout["rect"], 1)
@@ -647,7 +730,7 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
             font,
             layout["job"],
             str(card.get("job") or ""),
-            selected_index(("job", layout["index"])),
+            _cell_selected(editor, ("job", layout["index"])),
         )
         for line, rect in enumerate(layout["names"]):
             _draw_cell(
@@ -655,171 +738,115 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
                 font,
                 rect,
                 str(card["names"][line]),
-                selected_index(("name", layout["index"], line)),
+                _cell_selected(editor, ("name", layout["index"], line)),
             )
             draw_icon_button(surface, layout["minus"][line], "−", font)
         draw_icon_button(surface, layout["plus"], "＋", font)
     surface.set_clip(previous_clip)
 
-    # 这几项写的是游戏自己的配置，不属于任何一关
     note = font.render(
         f"{display_path(editor.game_path) if editor.game_path else 'game.json'}："
-        "标题用于标题画面，玩家参数用于每一关，版权信息用于结算画面",
+        "制作名单用于结算画面。",
         True,
         DIM_TEXT,
     )
-    surface.blit(note, (section_rect.left, panel.bottom - BUTTON_HEIGHT - 36))
-
-    draw_button(surface, font, add_rect, "添加职位")
-    draw_button(surface, font, remove_rect, "删除职位")
-    draw_button(surface, font, apply_rect, "应用")
-    draw_button(surface, font, cancel_rect, "取消")
+    surface.blit(note, (cards_area.left, geometry["note_top"]))
+    draw_button(surface, font, geometry["add"], "添加职位")
+    draw_button(surface, font, geometry["remove"], "删除职位")
 
 
-SOUND_PANEL_WIDTH = 620       # 和游戏配置面板同宽：最小窗口下按钮也够得着
-SOUND_FIELD_HEIGHT = ROW_HEIGHT + 2
-SOUND_ROW_STEP = 32            # 一页里两行字段之间的行距
-SOUND_CONTENT_HEIGHT = 178     # 一页内容的固定高度：路径、循环、淡入淡出、三行说明
-SOUND_FOOTER_HEIGHT = 40
-
-
-def sound_geometry(surface: pygame.Surface, tabs: list, index: int) -> dict:
-    """声音浮层：标题、结局、玩家三页，下面是当前页的四个字段。
-
-    页签按文字宽度排，一行放不下就换行，面板高度跟着行数长。
-    """
-    rows = _pack_tabs(
-        [_tab_width(tab["label"]) for tab in tabs], SOUND_PANEL_WIDTH - 2 * MARGIN
-    )
-    header = 32 + len(rows) * (TAB_HEIGHT + TAB_GAP) + 8
-    panel = place_panel(
-        surface,
-        pygame.Rect(
-            0, 0, SOUND_PANEL_WIDTH, header + SOUND_CONTENT_HEIGHT + SOUND_FOOTER_HEIGHT
-        ),
-    )
-
-    tabs_top = panel.top + 32
-    tab_rects = []
-    for row_index, row in enumerate(rows):
-        x = panel.left + MARGIN
-        y = tabs_top + row_index * (TAB_HEIGHT + TAB_GAP)
-        for tab_index in row:
-            width = _tab_width(tabs[tab_index]["label"])
-            tab_rects.append((pygame.Rect(x, y, width, TAB_HEIGHT), tab_index))
-            x += width + TAB_GAP
-    content_top = tabs_top + len(rows) * (TAB_HEIGHT + TAB_GAP) + 8
-
-    row = pygame.Rect(
-        panel.left + MARGIN, content_top, panel.width - 2 * MARGIN, SOUND_FIELD_HEIGHT
-    )
-    preview_rect = pygame.Rect(row.right - 76, row.top, 76, row.height)
-    browse_rect = pygame.Rect(preview_rect.left - 6 - 76, row.top, 76, row.height)
-    path_rect = pygame.Rect(row.left, row.top, browse_rect.left - 6 - row.left, row.height)
-
-    loop_rect = pygame.Rect(row.left, row.top + SOUND_ROW_STEP, 260, SOUND_FIELD_HEIGHT)
-
-    fades_top = row.top + SOUND_ROW_STEP * 2
-    fade_width = min(280, (row.width - 16) // 2)
-    fade_in_rect = pygame.Rect(row.left, fades_top, fade_width, SOUND_FIELD_HEIGHT)
-    fade_out_rect = pygame.Rect(
-        row.left + fade_width + 16, fades_top, fade_width, SOUND_FIELD_HEIGHT
-    )
-
-    hint_rect = pygame.Rect(row.left, fades_top + SOUND_FIELD_HEIGHT + 10, row.width, 66)
-
-    button_y = panel.bottom - 10 - BUTTON_HEIGHT
-    apply_rect = pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT)
-    cancel_rect = pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT)
-    return {
-        "panel": panel,
-        "tabs": tab_rects,
-        "path": path_rect,
-        "browse": browse_rect,
-        "preview": preview_rect,
-        "loop": loop_rect,
-        "fade_in": fade_in_rect,
-        "fade_out": fade_out_rect,
-        "hint": hint_rect,
-        "apply": apply_rect,
-        "cancel": cancel_rect,
-    }
-
-
-def draw_sound(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    tabs = editor.sound_tabs or []
-    geometry = sound_geometry(surface, tabs, editor.sound_index)
-    panel = geometry["panel"]
-    draw_panel(surface, panel)
-
-    surface.blit(font.render("声音", True, TEXT), (panel.left + MARGIN, panel.top + 8))
-    hint = font.render("每一幕一首背景音乐，曲子路径相对 game.json", True, DIM_TEXT)
-    surface.blit(hint, (panel.right - MARGIN - hint.get_width(), panel.top + 8))
-
-    # 页签：标题、结局、玩家，然后每个关卡文件一页（按文件名排序）
-    for rect, index in geometry["tabs"]:
-        selected = index == editor.sound_index
-        pygame.draw.rect(surface, (80, 80, 90) if selected else BUTTON_BG, rect)
-        pygame.draw.rect(surface, HIGHLIGHT if selected else DIALOG_BORDER, rect, 1)
-        label = font.render(tabs[index]["label"], True, HIGHLIGHT if selected else TEXT)
-        clip = pygame.Rect(rect.left + 8, rect.top, max(1, rect.width - 16), rect.height)
-        previous = surface.get_clip()
-        surface.set_clip(clip)
-        surface.blit(label, (clip.left, rect.centery - label.get_height() // 2))
-        surface.set_clip(previous)
-
-    if not editor.sound_available():
-        text = font.render(
-            "玩家音效还没有定义内容，这一页先空着；音量在游戏内的设置里调。", True, DIM_TEXT
-        )
+def _draw_game_sound(
+    surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
+) -> None:
+    """声音页：标题与制作名单两块，每块是路径、循环和淡入淡出。"""
+    for scene in geometry["scenes"]:
+        key = scene["key"]
+        values = editor.game_sound.get(key, {})
         surface.blit(
-            text,
-            (
-                geometry["path"].left + 6,
-                geometry["path"].centery - text.get_height() // 2,
-            ),
+            font.render(f"{scene['label']}音乐", True, DIM_TEXT),
+            (scene["path"].left, scene["label_top"]),
         )
-    else:
-        values = editor.current_sound()
-        focus = editor.sound_focus
         _draw_cell(
             surface,
             font,
-            geometry["path"],
-            f"BGM 路径：{values['bgm'] or '（无）'}",
-            focus == 0,
+            scene["path"],
+            f"BGM 路径：{values.get('bgm') or '（无）'}",
+            _cell_selected(editor, ("bgm", key)),
         )
-        draw_button(surface, font, geometry["browse"], "浏览…")
-        draw_button(surface, font, geometry["preview"], "试听")
+        draw_button(surface, font, scene["browse"], "浏览…")
+        draw_button(surface, font, scene["preview"], "试听")
 
+        selected = _cell_selected(editor, ("loop", key))
+        pygame.draw.rect(surface, (48, 48, 54), scene["loop"])
+        pygame.draw.rect(
+            surface, HIGHLIGHT if selected else (86, 86, 94), scene["loop"], 1
+        )
         draw_checkbox(
             surface,
             font,
-            geometry["loop"],
+            scene["loop"],
             "循环播放",
-            bool(values["loop"]),
-            focus == 1,
+            bool(values.get("loop", True)),
+            selected,
+            inset=6,
         )
-        for field, rect, label, key in (
-            (2, geometry["fade_in"], "淡入", "fade_in"),
-            (3, geometry["fade_out"], "淡出", "fade_out"),
+
+        for field, rect, title in (
+            ("fade_in", scene["fade_in"], "淡入（秒）"),
+            ("fade_out", scene["fade_out"], "淡出（秒）"),
         ):
-            _draw_cell(surface, font, rect, f"{label}（秒）：{values[key]}", focus == field)
+            _draw_settings_row(
+                surface,
+                font,
+                rect,
+                title,
+                values.get(field, ""),
+                _cell_selected(editor, (field, key)),
+            )
             left, right = stepper_rects(rect)
             draw_stepper(surface, left, -1)
             draw_stepper(surface, right, 1)
 
     for line_index, line in enumerate(
         (
-            "循环关闭时只放一遍；没有 BGM 的一幕就不写进去。",
-            "「应用」把标题与结局写进 game.json 的 sounds；每一关的音乐在「关卡设置」的声音页里。",
-            "Tab 切换分页；Enter 应用；Esc 取消。",
+            "曲子路径相对 game.json；「应用」把标题与制作名单写进 sounds。",
+            "循环关闭只放一遍；没有填曲子的一幕就不写进去。",
         )
     ):
         surface.blit(
             font.render(line, True, DIM_TEXT),
             (geometry["hint"].left, geometry["hint"].top + line_index * 22),
         )
+
+
+def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    geometry = game_settings_geometry(
+        surface, editor.game_cards, editor.game_card_scroll, editor.game_tab
+    )
+    panel = geometry["panel"]
+    draw_panel(surface, panel)
+
+    surface.blit(font.render("游戏配置", True, TEXT), (panel.left + MARGIN, panel.top + 8))
+    hint = font.render("Tab 切换分页；点击面板外区域即取消", True, DIM_TEXT)
+    surface.blit(hint, (panel.right - MARGIN - hint.get_width(), panel.top + 8))
+
+    # 页签：常规 / 制作名单 / 声音
+    for rect, index in geometry["tabs"]:
+        selected = index == editor.game_tab
+        pygame.draw.rect(surface, (80, 80, 90) if selected else BUTTON_BG, rect)
+        pygame.draw.rect(surface, HIGHLIGHT if selected else DIALOG_BORDER, rect, 1)
+        label = font.render(GAME_SETTINGS_TABS[index], True, HIGHLIGHT if selected else TEXT)
+        surface.blit(
+            label,
+            (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2),
+        )
+
+    if editor.game_tab == 0:
+        _draw_game_general(surface, editor, font, geometry)
+    elif editor.game_tab == 1:
+        _draw_game_credits(surface, editor, font, geometry)
+    else:
+        _draw_game_sound(surface, editor, font, geometry)
 
     draw_button(surface, font, geometry["apply"], "应用")
     draw_button(surface, font, geometry["cancel"], "取消")

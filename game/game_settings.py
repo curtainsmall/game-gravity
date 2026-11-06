@@ -1,8 +1,8 @@
 """游戏设置：assets/game/ 里的 game.json，和它旁边的 levels/。
 
 游戏根就是 assets/game 这个文件夹：
-    game.json          游戏自己的设置：title 是标题，credits 是版权信息（职位 → 名字数组），
-                       player 是玩家默认的跳高、速度与动画，sounds 是标题与结局的音乐
+    game.json          游戏自己的设置：title 是标题，credits 是制作名单（职位 → 名字数组），
+                       player 是玩家默认的跳高、速度与动画，sounds 是标题与制作名单的音乐
     levels/<名字>.json 一个文件是一关，文件名（去掉 .json）就是关卡名
 game.json 和 levels/*.json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
 图片、曲目放哪儿都行，只要能按相对路径找到。打包后 game/ 必须和 exe 放在一起。
@@ -42,7 +42,7 @@ def title_of(settings: dict) -> str:
 
 
 def credits_of(settings: dict) -> dict[str, list[str]]:
-    """版权信息：职位 → 名字数组，结算画面按这个顺序列出来。
+    """制作名单：职位 → 名字数组，结算画面按这个顺序列出来。
 
     credits 是一个对象，字段名是职位、值是名字的数组；数组可以是空的，空数组的
     职位不列出来。数组里的空字符串照样留着并显示（名字位置就是空白）。

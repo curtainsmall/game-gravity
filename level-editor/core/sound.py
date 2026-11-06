@@ -1,14 +1,14 @@
 """声音：每一幕一首背景音乐。
 
 写法和游戏端一致（见 game/sound/bgm.py）：
-    标题、结局   game.json 的 sounds.title / sounds.ending，在工具栏「声音」里改
+    标题、制作名单   game.json 的 sounds.title / sounds.credits，在「游戏配置」的声音页里改
     每一关       关卡 json 的 sound：曲子跟着关卡文件走，在「关卡设置」的声音页里改
 一首 BGM 的键：
     bgm       曲子文件，相对 game.json 的路径
     loop      是否循环，缺省 true
     fade_in   切入时淡入几秒，缺省 0.5
     fade_out  离开这一幕时淡出几秒，缺省 1.0
-没有 bgm 的这一幕就不写这一项。玩家音效还没有内容，玩家那一页先空着。
+没有 bgm 的这一幕就不写这一项。
 """
 
 import json
@@ -19,10 +19,11 @@ import pygame
 from core.constants import ROOT, SETTING_DIR_NAME, SETTING_FILE_NAME
 from core.helpers import clamp_float
 
-GAME_SOUNDS_KEY = "sounds"   # game.json：一幕一首，标题、结局都在里面
+GAME_SOUNDS_KEY = "sounds"   # game.json：一幕一首，标题、制作名单都在里面
 TITLE_KEY = "title"
-ENDING_KEY = "ending"
-PLAYER_KEY = "player"        # 玩家音效：还没定义内容，先占一页
+CREDITS_KEY = "credits"      # 结算画面（制作名单）
+# game.json 里的两幕（也是编辑器里两个声音板块的顺序）：(键, 界面上叫它什么)
+SCENE_KEYS = ((TITLE_KEY, "标题"), (CREDITS_KEY, "制作名单"))
 
 DEFAULT_LOOP = True
 DEFAULT_FADE_IN = 0.5

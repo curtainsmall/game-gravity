@@ -1,7 +1,7 @@
 """玩家自己的设置：exe 旁边的 .game/setting.json。
 
 它和 assets/game 里的游戏配置分工不同：
-    assets/game/game.json   游戏的内容：标题、版权信息、玩家与关卡的参数
+    assets/game/game.json   游戏的内容：标题、制作名单、玩家与关卡的参数
     .game/setting.json      这台机器上的偏好：总音量、音乐音量、音效音量
     .game/saves/            以后的存档（现在还没用上）
 这个文件夹和 exe 并排，不进 assets，所以换一份游戏内容不用重新调音量。
