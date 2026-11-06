@@ -5,10 +5,10 @@
 产物：
   bin/gravity.exe        游戏
   bin/level-editor.exe   关卡编辑器
-  bin/assets/            资源，会拷到 exe 旁边（关卡可以直接改）
 
 两个程序都按「exe 旁边的 assets/」找资源，所以 assets/ 必须和 exe 放在一起，
-单独挪走 exe 会找不到关卡。
+单独挪走 exe 会找不到关卡。打包不会往 bin/ 里拷资源：bin/assets 自己放、自己改，
+重新打包不会把它盖掉。
 
 打包参数都显式写出来，不依赖 PyInstaller 的自动推断：
   --paths           每个项目自己的模块根（core/、view/ 这些是顶层模块）
@@ -99,21 +99,11 @@ def build(target: dict) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
-def collect_assets() -> None:
-    source = ROOT / "assets"
-    if not source.is_dir():
-        return
-    target = BIN_DIR / "assets"
-    shutil.copytree(source, target, dirs_exist_ok=True)
-    print(f"[build] assets -> {target.relative_to(ROOT)}")
-
-
 def main() -> None:
     sync_environment()
     BIN_DIR.mkdir(exist_ok=True)
     for target in TARGETS:
         build(target)
-    collect_assets()
 
     print("[build] done:")
     for path in sorted(BIN_DIR.iterdir()):
