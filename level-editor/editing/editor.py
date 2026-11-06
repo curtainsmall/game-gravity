@@ -17,7 +17,6 @@ from core.constants import (
     JUMP_HEIGHT_MIN,
     FACE_LABELS,
     FACE_ORDER,
-    GAME_CREDITS_MAX_ROWS,
     KIND_BLOCK,
     KIND_BUTTON,
     KIND_DESTINATION,
@@ -122,7 +121,8 @@ class Editor:
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
-        self.game_rows: list = []                  # 浮层里的版权信息：每行 {job, names}
+        self.game_cards: list = []                 # 浮层里的版权卡片：{job, names: [名字…]}
+        self.game_card_scroll = 0                  # 卡片列表滚到第几张
         self.game_field = 0                        # 浮层里选中的格：标题、跳高、速度、职位、名字…
         self.level_select_open = False             # 关卡列表浮层
         self.level_select_scroll = 0               # 列表滚到第几行
@@ -667,23 +667,24 @@ class Editor:
                 player.get('move_speed'), MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
             ):g}",
         }
-        self.game_rows = game.credits_to_rows(game.credits_of(settings))
+        self.game_cards = game.credit_cards(game.credits_of(settings))
+        self.game_card_scroll = 0
         self.game_field = 0
         self.level_select_open = False
         self.status = "游戏配置：标题、玩家参数与版权信息将写入 game.json。"
 
     def close_game_settings(self, commit: bool) -> None:
         settings = self.game_settings
-        rows = self.game_rows
+        cards = self.game_cards
         numbers = self.game_numbers
         self.game_settings = None
-        self.game_rows = []
+        self.game_cards = []
         self.game_numbers = {}
         if settings is None or not commit or self.game_path is None:
             return
         title = str(settings.get("title") or "").strip() or game.DEFAULT_TITLE
         settings["title"] = title
-        settings["credits"] = game.rows_to_credits(rows)
+        settings["credits"] = game.cards_to_credits(cards)
         player = dict(game.player_of(settings))
         player["jump_height"] = clamp_int(
             numbers.get("jump_height"), JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
@@ -702,62 +703,78 @@ class Editor:
             return
         # 顶栏显示的跳高、速度跟着更新
         self.game_player = player
+        names = sum(len(names) for names in settings["credits"].values())
         self.status = (
             f"游戏配置已保存：{title}，跳高 {player['jump_height']}，"
-            f"速度 {player['move_speed']:g}，版权信息 {len(settings['credits'])} 条。"
+            f"速度 {player['move_speed']:g}，版权信息 {len(settings['credits'])} 个职位、{names} 个名字。"
         )
 
-    # 字段编号：0 标题，1 跳高，2 速度，之后每条版权占两格（职位、名字）
-    @staticmethod
-    def _credit_cell(field: int) -> tuple[int, str] | None:
-        if field < 1 + GAME_PLAYER_FIELD_COUNT:
-            return None
-        index, offset = divmod(field - 1 - GAME_PLAYER_FIELD_COUNT, 2)
-        return index, "job" if offset == 0 else "names"
+    # 游戏配置里的格子：0 标题，1 跳高，2 速度，之后每张卡片的职位、每个名字各占一格
+    def game_cells(self) -> list[tuple]:
+        cells: list[tuple] = [("title",), ("jump",), ("speed",)]
+        for index, card in enumerate(self.game_cards):
+            cells.append(("job", index))
+            for name_index in range(len(card["names"])):
+                cells.append(("name", index, name_index))
+        return cells
+
+    def current_game_cell(self) -> tuple:
+        cells = self.game_cells()
+        if not cells:
+            return ("title",)
+        return cells[max(0, min(self.game_field, len(cells) - 1))]
+
+    def game_card_index(self) -> int | None:
+        """光标所在卡片的下标；光标在标题或玩家参数上时返回 None。"""
+        cell = self.current_game_cell()
+        return cell[1] if cell[0] in ("job", "name") else None
 
     def game_field_text(self) -> str:
         """当前选中的那一格里的文字。"""
         if self.game_settings is None:
             return ""
-        if self.game_field == 0:
+        cell = self.current_game_cell()
+        if cell[0] == "title":
             return str(self.game_settings.get("title") or "")
-        if self.game_field == 1:
+        if cell[0] == "jump":
             return str(self.game_numbers.get("jump_height") or "")
-        if self.game_field == 2:
+        if cell[0] == "speed":
             return str(self.game_numbers.get("move_speed") or "")
-        cell = self._credit_cell(self.game_field)
-        if cell is None:
+        index = cell[1]
+        if index >= len(self.game_cards):
             return ""
-        index, key = cell
-        if 0 <= index < len(self.game_rows):
-            return str(self.game_rows[index].get(key) or "")
-        return ""
+        card = self.game_cards[index]
+        if cell[0] == "job":
+            return str(card["job"])
+        if cell[2] >= len(card["names"]):
+            return ""
+        return str(card["names"][cell[2]])
 
     def set_game_field_text(self, text: str) -> None:
         if self.game_settings is None:
             return
-        if self.game_field == 0:
+        cell = self.current_game_cell()
+        if cell[0] == "title":
             self.game_settings["title"] = text
-            return
-        if self.game_field in (1, 2):
-            key = "jump_height" if self.game_field == 1 else "move_speed"
+        elif cell[0] in ("jump", "speed"):
+            key = "jump_height" if cell[0] == "jump" else "move_speed"
             self.game_numbers[key] = text
-            return
-        cell = self._credit_cell(self.game_field)
-        if cell is None:
-            return
-        index, key = cell
-        if 0 <= index < len(self.game_rows):
-            self.game_rows[index][key] = text
+        elif cell[0] == "job" and cell[1] < len(self.game_cards):
+            self.game_cards[cell[1]]["job"] = text
+        elif cell[0] == "name" and cell[1] < len(self.game_cards):
+            card = self.game_cards[cell[1]]
+            if cell[2] < len(card["names"]):
+                card["names"][cell[2]] = text
 
     def type_game_settings(self, char: str) -> None:
-        """键盘输入：跳高只吃数字，速度吃数字和小数点，标题和版权什么都能打。"""
+        """键盘输入：跳高只吃数字，速度吃数字和小数点，标题和名字什么都能打。"""
+        cell = self.current_game_cell()
         text = self.game_field_text()
-        if self.game_field == 1:
+        if cell[0] == "jump":
             if char.isdigit() and len(text) < 2:
                 self.set_game_field_text(text + char)
             return
-        if self.game_field == 2:
+        if cell[0] == "speed":
             if (char.isdigit() or char == ".") and len(text) < 5:
                 self.set_game_field_text(text + char)
             return
@@ -769,7 +786,8 @@ class Editor:
 
     def adjust_game_number(self, delta: int) -> None:
         """跳高按 1 格、速度按 0.5 一格加减（面板上的加减按钮和左右键）。"""
-        if self.game_field == 1:
+        cell = self.current_game_cell()
+        if cell[0] == "jump":
             current = clamp_int(
                 self.game_numbers.get("jump_height"),
                 JUMP_HEIGHT_MIN,
@@ -780,7 +798,7 @@ class Editor:
                 max(JUMP_HEIGHT_MIN, min(JUMP_HEIGHT_MAX, current + delta))
             )
             return
-        if self.game_field == 2:
+        if cell[0] == "speed":
             current = clamp_float(
                 self.game_numbers.get("move_speed"),
                 MOVE_SPEED_MIN,
@@ -791,31 +809,51 @@ class Editor:
             self.game_numbers["move_speed"] = f"{stepped:g}"
 
     def move_game_field(self, delta: int) -> None:
-        """上下键在标题、两个玩家参数和版权信息的格子之间走。"""
-        shown = min(len(self.game_rows), GAME_CREDITS_MAX_ROWS)
-        last = 1 + GAME_PLAYER_FIELD_COUNT + 2 * shown
-        self.game_field = max(0, min(self.game_field + delta, last))
+        """上下键在标题、两个玩家参数、卡片里的职位和名字之间走。"""
+        cells = self.game_cells()
+        self.game_field = max(0, min(self.game_field + delta, len(cells) - 1))
 
-    def add_credit_row(self) -> None:
-        """加一条版权信息：新的一行空着，光标落在它的职位上。"""
-        if len(self.game_rows) >= GAME_CREDITS_MAX_ROWS:
-            self.status = f"版权信息最多 {GAME_CREDITS_MAX_ROWS} 条，请删除一条后再添加。"
-            return
-        self.game_rows.append({"job": "", "names": ""})
-        self.game_field = 1 + GAME_PLAYER_FIELD_COUNT + 2 * (len(self.game_rows) - 1)
-        self.status = "已添加一条版权信息，请填写职位与名字（多个名字以「,」分隔）。"
+    def scroll_game_cards(self, delta: int, visible: int | None = None) -> None:
+        """滚轮翻版权卡片；visible 是当前能看到的张数，用来夹住上界。"""
+        last = max(0, len(self.game_cards) - (visible or 1))
+        self.game_card_scroll = max(0, min(self.game_card_scroll + delta, last))
 
-    def remove_credit_row(self) -> None:
-        """删掉光标所在的那条版权信息。"""
-        cell = self._credit_cell(self.game_field)
-        if cell is None or cell[0] >= len(self.game_rows):
-            self.status = "请先选择一条版权信息，再执行删除。"
+    def add_credit_card(self) -> None:
+        """加一张职位卡片：职位和名字都空着，光标落在职位上。"""
+        self.game_cards.append({"job": "", "names": []})
+        self.game_field = self.game_cells().index(("job", len(self.game_cards) - 1))
+        self.status = "已添加一个职位，请填写职位名，再用「＋」添加名字。"
+
+    def remove_credit_card(self) -> None:
+        """删掉光标所在的那张职位卡片。"""
+        index = self.game_card_index()
+        if index is None or index >= len(self.game_cards):
+            self.status = "请先选中一个职位卡片，再执行删除。"
             return
-        index = cell[0]
-        del self.game_rows[index]
-        shown = min(len(self.game_rows), GAME_CREDITS_MAX_ROWS)
-        self.game_field = min(self.game_field, 1 + GAME_PLAYER_FIELD_COUNT + 2 * shown)
-        self.status = "已删除一条版权信息。"
+        del self.game_cards[index]
+        self.game_field = min(self.game_field, len(self.game_cells()) - 1)
+        self.status = "已删除一个职位卡片。"
+
+    def add_credit_name(self, card_index: int) -> None:
+        """给某张卡片加一个空名字，光标落到新名字上。"""
+        if not 0 <= card_index < len(self.game_cards):
+            return
+        names = self.game_cards[card_index]["names"]
+        names.append("")
+        self.game_field = self.game_cells().index(("name", card_index, len(names) - 1))
+        self.status = "已添加一个名字，直接输入内容即可。"
+
+    def remove_credit_name(self, card_index: int, name_index: int) -> None:
+        """删掉某个名字；一个名字都不剩也是合法的（空数组）。"""
+        if not 0 <= card_index < len(self.game_cards):
+            return
+        names = self.game_cards[card_index]["names"]
+        if not 0 <= name_index < len(names):
+            return
+        del names[name_index]
+        self.game_field = min(self.game_field, len(self.game_cells()) - 1)
+        self.status = "已删除一个名字。"
+
 
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:

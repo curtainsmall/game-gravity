@@ -13,8 +13,6 @@ import os
 from core.constants import LEVEL_SCENE_NAME, LEVELS_DIR_NAME
 
 DEFAULT_TITLE = "重力"      # game.json 丢了或没写标题时用它，编辑器照常能用
-NAME_SEPARATOR = ","        # 一条版权里多个名字之间的分隔符
-NAME_SEPARATORS = ",、，;；"   # 手写时也认这几种，写回时统一成「,」
 
 
 def new_settings() -> dict:
@@ -52,43 +50,38 @@ def player_of(settings: dict) -> dict:
 
 
 def credits_of(settings: dict) -> dict[str, list[str]]:
-    """版权信息：职位 → 名字数组。写坏了的条目跳过，名字全是空白的职位也留着。"""
+    """版权信息：职位 → 名字数组。
+
+    数组可以是空的；数组里的空字符串也是合法的一项（编辑器里就是一行空名字）。
+    写坏了的条目（不是数组）跳过，手写成一个字符串的当成只有一个名字。
+    """
     value = settings.get("credits")
     if not isinstance(value, dict):
         return {}
     credits: dict[str, list[str]] = {}
     for job, names in value.items():
-        if isinstance(names, str):                  # 手写成一个名字也认
+        if isinstance(names, str):
             names = [names]
         if not isinstance(names, list):
             continue
-        credits[str(job)] = [str(name) for name in names if isinstance(name, str) and name.strip()]
+        credits[str(job)] = [name if isinstance(name, str) else "" for name in names]
     return credits
 
 
-def credits_to_rows(credits: dict[str, list[str]]) -> list[dict]:
-    """版权信息 → 面板里可编辑的行：每行是职位和名字文本（名字用「, 」隔开）。"""
-    return [
-        {"job": job, "names": f"{NAME_SEPARATOR} ".join(names)}
-        for job, names in credits.items()
-    ]
+def credit_cards(credits: dict[str, list[str]]) -> list[dict]:
+    """版权信息 → 面板里的卡片：每张卡片是一个职位和它的名字列表。"""
+    return [{"job": job, "names": list(names)} for job, names in credits.items()]
 
 
-def split_names(text: str) -> list[str]:
-    """把「a,b」这样的文本拆成名字数组（也认、，；这几种分隔符）。"""
-    for separator in NAME_SEPARATORS[1:]:
-        text = text.replace(separator, NAME_SEPARATOR)
-    return [name.strip() for name in text.split(NAME_SEPARATOR) if name.strip()]
-
-
-def rows_to_credits(rows: list[dict]) -> dict[str, list[str]]:
-    """面板里的行 → 版权信息对象：职位空的丢掉，同名的合并。"""
+def cards_to_credits(cards: list[dict]) -> dict[str, list[str]]:
+    """面板里的卡片 → 版权信息对象：职位空的卡片丢掉，同名职位合并。"""
     credits: dict[str, list[str]] = {}
-    for row in rows:
-        job = str(row.get("job") or "").strip()
+    for card in cards:
+        job = str(card.get("job") or "").strip()
         if not job:
             continue
-        credits.setdefault(job, []).extend(split_names(str(row.get("names") or "")))
+        names = [str(name) for name in card.get("names") or []]
+        credits.setdefault(job, []).extend(names)
     return credits
 
 

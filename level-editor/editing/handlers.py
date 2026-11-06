@@ -194,7 +194,10 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
 def handle_game_settings_click(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
-    """游戏配置浮层：点哪一格就编辑哪一格，改完点「应用」写进 game.json。"""
+    """游戏配置浮层：点哪一格就编辑哪一格，改完点「应用」写进 game.json。
+
+    版权卡片上，名字行尾的「−」删掉那个名字，卡片底下的「＋」加一个空名字。
+    """
     (
         panel,
         title_rect,
@@ -202,13 +205,14 @@ def handle_game_settings_click(
         jump_rect,
         speed_rect,
         _,
-        job_rects,
-        name_rects,
+        _,
+        layouts,
+        _,
         add_rect,
         remove_rect,
         apply_rect,
         cancel_rect,
-    ) = game_settings_geometry(surface, len(editor.game_rows))
+    ) = game_settings_geometry(surface, editor.game_cards, editor.game_card_scroll)
     if apply_rect.collidepoint(position):
         editor.close_game_settings(True)
         return
@@ -216,10 +220,10 @@ def handle_game_settings_click(
         editor.close_game_settings(False)
         return
     if add_rect.collidepoint(position):
-        editor.add_credit_row()
+        editor.add_credit_card()
         return
     if remove_rect.collidepoint(position):
-        editor.remove_credit_row()
+        editor.remove_credit_card()
         return
     if title_rect.collidepoint(position):
         editor.game_field = 0
@@ -234,14 +238,23 @@ def handle_game_settings_click(
         elif right.collidepoint(position):
             editor.adjust_game_number(1)
         return
-    for index, rect in enumerate(job_rects):
-        if rect.collidepoint(position):
-            editor.game_field = 3 + 2 * index
+    cells = editor.game_cells()
+    for layout in layouts:
+        index = layout["index"]
+        for line, rect in enumerate(layout["minus"]):
+            if rect.collidepoint(position):
+                editor.remove_credit_name(index, line)
+                return
+        if layout["plus"].collidepoint(position):
+            editor.add_credit_name(index)
             return
-    for index, rect in enumerate(name_rects):
-        if rect.collidepoint(position):
-            editor.game_field = 4 + 2 * index
+        if layout["job"].collidepoint(position):
+            editor.game_field = cells.index(("job", index))
             return
+        for line, rect in enumerate(layout["names"]):
+            if rect.collidepoint(position):
+                editor.game_field = cells.index(("name", index, line))
+                return
     if not panel.collidepoint(position):
         editor.close_game_settings(False)
 

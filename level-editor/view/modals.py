@@ -10,9 +10,11 @@ from core.constants import (
     BUTTON_HEIGHT,
     DIALOG_BORDER,
     DIM_TEXT,
-    GAME_CREDITS_MAX_ROWS,
+    FOOTER,
+    HEADER,
     HIGHLIGHT,
     LEVEL_SELECT_WIDTH,
+    MARGIN,
     ROW_HEIGHT,
     TEXT,
 )
@@ -270,15 +272,34 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     draw_button(surface, font, cancel_rect, "取消")
 
 
-def game_settings_geometry(surface: pygame.Surface, row_count: int) -> tuple:
-    """游戏配置：标题、玩家的跳高与速度、版权信息若干行，再加应用/取消。
+GAME_PANEL_WIDTH = 620
+GAME_HEADER_HEIGHT = 166        # 面板顶部到版权卡片区之前的固定高度
+GAME_FOOTER_HEIGHT = 74         # 卡片区之后：说明、按钮
+CREDIT_CARD_PAD = 6
+CREDIT_CARD_GAP = 6
+CREDIT_LINE_HEIGHT = ROW_HEIGHT
+CREDIT_JOB_WIDTH = 150
+CREDIT_ICON = 16                # 名字行尾的「−」和下边「＋」的边长
 
-    版权行数由 game.json 里的条数决定，最多摊 GAME_CREDITS_MAX_ROWS 行。
+
+def _credit_card_height(card: dict) -> int:
+    """一张版权卡片的高度：职位一格、每个名字一行，底下再加一行「＋」。"""
+    lines = max(1, len(card["names"]))
+    return CREDIT_CARD_PAD * 2 + lines * CREDIT_LINE_HEIGHT + CREDIT_LINE_HEIGHT
+
+
+def game_settings_geometry(surface: pygame.Surface, cards: list, scroll: int = 0) -> tuple:
+    """游戏配置：标题、玩家的跳高与速度、每个职位一张版权卡片，再加应用/取消。
+
+    卡片一张一张往下排，装不下就用滚轮翻（scroll 是编辑器上的 game_card_scroll）。
     """
-    shown = min(max(0, row_count), GAME_CREDITS_MAX_ROWS)
-    slots = max(1, shown)                       # 一条都没有时留一行提示的位置
+    card_heights = [_credit_card_height(card) for card in cards]
+    content = sum(height + CREDIT_CARD_GAP for height in card_heights)
+    # 面板最高顶到信息栏下面、状态栏上面，剩下的靠滚轮翻
+    max_height = max(360, surface.get_height() - HEADER - FOOTER - 8)
+    wanted = GAME_HEADER_HEIGHT + max(120, content) + GAME_FOOTER_HEIGHT
     panel = place_panel(
-        surface, pygame.Rect(0, 0, 560, 178 + slots * (ROW_HEIGHT + 4) + 62)
+        surface, pygame.Rect(0, 0, GAME_PANEL_WIDTH, min(wanted, max_height))
     )
     title_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
     player_section_rect = pygame.Rect(panel.left + 12, panel.top + 66, panel.width - 24, ROW_HEIGHT)
@@ -286,18 +307,68 @@ def game_settings_geometry(surface: pygame.Surface, row_count: int) -> tuple:
     speed_rect = pygame.Rect(
         panel.left + 12, panel.top + 92 + ROW_HEIGHT, panel.width - 24, ROW_HEIGHT
     )
-    section_rect = pygame.Rect(panel.left + 12, panel.top + 120 + ROW_HEIGHT, panel.width - 24, ROW_HEIGHT)
-    job_rects = []
-    name_rects = []
-    for index in range(shown):
-        y = panel.top + 142 + ROW_HEIGHT + index * (ROW_HEIGHT + 4)
-        job_rects.append(pygame.Rect(panel.left + 12, y, 150, ROW_HEIGHT))
-        name_rects.append(
-            pygame.Rect(panel.left + 12 + 158, y, panel.width - 24 - 158, ROW_HEIGHT)
+    section_rect = pygame.Rect(
+        panel.left + 12, panel.top + 120 + ROW_HEIGHT, panel.width - 24, ROW_HEIGHT
+    )
+    cards_area = pygame.Rect(
+        panel.left + 12,
+        panel.top + GAME_HEADER_HEIGHT,
+        panel.width - 24,
+        max(0, panel.height - GAME_HEADER_HEIGHT - GAME_FOOTER_HEIGHT),
+    )
+
+    # 从滚动位置开始往下摆，装不下的卡片先不画（内容还在，应用时照样写回）
+    layouts = []
+    scroll = max(0, min(scroll, max(0, len(cards) - 1)))
+    y = cards_area.top
+    for index in range(scroll, len(cards)):
+        height = card_heights[index]
+        if y + height > cards_area.bottom:
+            break
+        card_rect = pygame.Rect(cards_area.left, y, cards_area.width, height)
+        job_rect = pygame.Rect(
+            card_rect.left + CREDIT_CARD_PAD,
+            card_rect.top + CREDIT_CARD_PAD,
+            CREDIT_JOB_WIDTH,
+            CREDIT_LINE_HEIGHT,
         )
+        name_left = job_rect.right + 8
+        name_width = card_rect.right - CREDIT_CARD_PAD - name_left - CREDIT_ICON - 4
+        name_rects = []
+        minus_rects = []
+        for line in range(len(cards[index]["names"])):
+            line_top = card_rect.top + CREDIT_CARD_PAD + line * CREDIT_LINE_HEIGHT
+            name_rects.append(pygame.Rect(name_left, line_top, name_width, CREDIT_LINE_HEIGHT))
+            minus_rects.append(
+                pygame.Rect(
+                    name_left + name_width + 4,
+                    line_top + (CREDIT_LINE_HEIGHT - CREDIT_ICON) // 2,
+                    CREDIT_ICON,
+                    CREDIT_ICON,
+                )
+            )
+        plus_rect = pygame.Rect(
+            name_left,
+            card_rect.top + CREDIT_CARD_PAD + max(1, len(cards[index]["names"])) * CREDIT_LINE_HEIGHT,
+            CREDIT_ICON,
+            CREDIT_ICON,
+        )
+        layouts.append(
+            {
+                "index": index,
+                "rect": card_rect,
+                "job": job_rect,
+                "names": name_rects,
+                "minus": minus_rects,
+                "plus": plus_rect,
+            }
+        )
+        y += height + CREDIT_CARD_GAP
+    visible = len(layouts)
+
     button_y = panel.bottom - BUTTON_HEIGHT - 10
-    add_rect = pygame.Rect(panel.left + 12, button_y, 96, BUTTON_HEIGHT)
-    remove_rect = pygame.Rect(add_rect.right + 8, button_y, 96, BUTTON_HEIGHT)
+    add_rect = pygame.Rect(panel.left + 12, button_y, 110, BUTTON_HEIGHT)
+    remove_rect = pygame.Rect(add_rect.right + 8, button_y, 110, BUTTON_HEIGHT)
     apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
     cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
     return (
@@ -307,13 +378,24 @@ def game_settings_geometry(surface: pygame.Surface, row_count: int) -> tuple:
         jump_rect,
         speed_rect,
         section_rect,
-        job_rects,
-        name_rects,
+        cards_area,
+        layouts,
+        visible,
         add_rect,
         remove_rect,
         apply_rect,
         cancel_rect,
     )
+
+
+def draw_icon_button(
+    surface: pygame.Surface, rect: pygame.Rect, glyph: str, font: pygame.font.Font
+) -> None:
+    """名字行尾的小方形按钮：中间画一个「−」或「＋」。"""
+    pygame.draw.rect(surface, (80, 80, 90), rect)
+    pygame.draw.rect(surface, (150, 150, 160), rect, 1)
+    text = font.render(glyph, True, TEXT)
+    surface.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
 
 
 def _draw_cell(
@@ -337,7 +419,8 @@ def _draw_cell(
 
 
 def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    rows = editor.game_rows
+    cards = editor.game_cards
+    cells = editor.game_cells()
     (
         panel,
         title_rect,
@@ -345,25 +428,29 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         jump_rect,
         speed_rect,
         section_rect,
-        job_rects,
-        name_rects,
+        cards_area,
+        layouts,
+        visible,
         add_rect,
         remove_rect,
         apply_rect,
         cancel_rect,
-    ) = game_settings_geometry(surface, len(rows))
+    ) = game_settings_geometry(surface, cards, editor.game_card_scroll)
     draw_panel(surface, panel)
 
     surface.blit(font.render("游戏配置", True, TEXT), (panel.left + 12, panel.top + 8))
     hint = font.render("点击面板外区域即取消", True, DIM_TEXT)
     surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
 
+    def selected_index(cell: tuple) -> bool:
+        return cells[editor.game_field] == cell if editor.game_field < len(cells) else False
+
     _draw_cell(
         surface,
         font,
         title_rect,
         str((editor.game_settings or {}).get("title") or ""),
-        editor.game_field == 0,
+        selected_index(("title",)),
     )
 
     # 玩家参数属于整个游戏，这一关的 player 里写同名键就会覆盖它
@@ -371,11 +458,11 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     surface.blit(
         font.render(label, True, DIM_TEXT), (player_section_rect.left, player_section_rect.top + 2)
     )
-    for field, rect, title, key, unit in (
-        (1, jump_rect, "跳高", "jump_height", "格"),
-        (2, speed_rect, "速度", "move_speed", "格/秒"),
+    for field, cell, rect, title, key, unit in (
+        (1, ("jump",), jump_rect, "跳高", "jump_height", "格"),
+        (2, ("speed",), speed_rect, "速度", "move_speed", "格/秒"),
     ):
-        selected = editor.game_field == field
+        selected = selected_index(cell)
         pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
         pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
         value = editor.game_numbers.get(key, "")
@@ -391,29 +478,38 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
 
-    # 版权信息：字段名是职位、值是名字数组，面板上一行一条
-    label = "版权信息（职位 → 名字，多个名字以「,」分隔）"
-    if len(rows) > GAME_CREDITS_MAX_ROWS:
-        label += f"   只显示前 {GAME_CREDITS_MAX_ROWS} 条（共 {len(rows)} 条）"
+    # 版权信息：每个职位一张卡片，左边写职位、右边一行一个名字
+    label = "版权信息（每个职位一张卡片；名字为空也行，一个名字都没有就是空数组）"
+    if len(cards) > visible:
+        label += f"   滚轮翻卡片（{visible} / {len(cards)} 张可见）"
     surface.blit(font.render(label, True, DIM_TEXT), (section_rect.left, section_rect.top + 2))
-    if not rows:
-        text = font.render("尚无版权信息，请点击「添加一条」填写职位与名字", True, DIM_TEXT)
-        surface.blit(text, (section_rect.left + 6, section_rect.top + ROW_HEIGHT + 8))
-    for index, rect in enumerate(job_rects):
+    if not cards:
+        text = font.render("还没有职位，请点击「添加职位」", True, DIM_TEXT)
+        surface.blit(text, (cards_area.left + 6, cards_area.top + 6))
+    previous_clip = surface.get_clip()
+    surface.set_clip(cards_area)
+    for layout in layouts:
+        card = cards[layout["index"]]
+        pygame.draw.rect(surface, (58, 58, 66), layout["rect"])
+        pygame.draw.rect(surface, (110, 110, 120), layout["rect"], 1)
         _draw_cell(
             surface,
             font,
-            rect,
-            str(rows[index].get("job") or ""),
-            editor.game_field == 3 + 2 * index,
+            layout["job"],
+            str(card.get("job") or ""),
+            selected_index(("job", layout["index"])),
         )
-        _draw_cell(
-            surface,
-            font,
-            name_rects[index],
-            str(rows[index].get("names") or ""),
-            editor.game_field == 4 + 2 * index,
-        )
+        for line, rect in enumerate(layout["names"]):
+            _draw_cell(
+                surface,
+                font,
+                rect,
+                str(card["names"][line]),
+                selected_index(("name", layout["index"], line)),
+            )
+            draw_icon_button(surface, layout["minus"][line], "−", font)
+        draw_icon_button(surface, layout["plus"], "＋", font)
+    surface.set_clip(previous_clip)
 
     # 这几项写的是游戏自己的配置，不属于任何一关
     note = font.render(
@@ -424,8 +520,8 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     )
     surface.blit(note, (section_rect.left, panel.bottom - BUTTON_HEIGHT - 36))
 
-    draw_button(surface, font, add_rect, "添加一条")
-    draw_button(surface, font, remove_rect, "删除本条")
+    draw_button(surface, font, add_rect, "添加职位")
+    draw_button(surface, font, remove_rect, "删除职位")
     draw_button(surface, font, apply_rect, "应用")
     draw_button(surface, font, cancel_rect, "取消")
 

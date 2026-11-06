@@ -145,7 +145,7 @@ def run() -> None:
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
-                # 游戏配置：标题、玩家参数、版权信息，敲字直接改，Enter/点「应用」写盘
+                # 游戏配置：标题、玩家参数、版权卡片，敲字直接改，Enter/点「应用」写盘
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_game_settings(False)
@@ -163,6 +163,8 @@ def run() -> None:
                         editor.erase_game_settings_char()
                     elif event.unicode and event.unicode.isprintable():
                         editor.type_game_settings(event.unicode)
+                elif event.type == pygame.MOUSEWHEEL:
+                    editor.scroll_game_cards(-event.y)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_game_settings_click(screen, editor, event.pos)
             elif editor.pending_switch is not None:

@@ -43,8 +43,8 @@ def title_of(settings: dict) -> str:
 def credits_of(settings: dict) -> dict[str, list[str]]:
     """版权信息：职位 → 名字数组，结算画面按这个顺序列出来。
 
-    credits 是一个对象，字段名是职位、值是名字的数组；写坏了的条目直接跳过，
-    名字全是空白的职位也不列出来。
+    credits 是一个对象，字段名是职位、值是名字的数组；数组可以是空的，空数组的
+    职位不列出来。数组里的空字符串照样留着并显示（名字位置就是空白）。
     """
     value = settings.get("credits")
     if not isinstance(value, dict):
@@ -53,7 +53,7 @@ def credits_of(settings: dict) -> dict[str, list[str]]:
     for job, names in value.items():
         if not isinstance(names, list):
             continue
-        cleaned = [str(name) for name in names if isinstance(name, str) and name.strip()]
+        cleaned = [str(name) if isinstance(name, str) else "" for name in names]
         if cleaned:
             credits[str(job)] = cleaned
     return credits

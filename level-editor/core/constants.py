@@ -139,8 +139,6 @@ FLIP_AREA_OFFSETS_DEFAULT = (0.0, 0.0)
 
 # 关卡设置里的字段数：名称、宽度、高度、翻转带上下、背景、跳高与速度的覆盖
 SETTINGS_FIELD_COUNT = 8
-# 游戏配置里「玩家」那两项：初始跳高、移动速度（动画以后再加）
-GAME_PLAYER_FIELD_COUNT = 2
 BACKGROUND_MAX_LENGTH = 120
 
 # ---- 对象种类 ----
@@ -218,7 +216,6 @@ FILE_MENU_WIDTH = 150
 TOOLBAR_HEIGHT = 24
 ROW_HEIGHT = 22
 BUTTON_HEIGHT = 22
-GAME_CREDITS_MAX_ROWS = 8      # 游戏设置里最多摊开几条版权信息，再多就先不显示
 DETAIL_PANEL_WIDTH = 250
 CREATE_MENU_WIDTH = 150
 RULER_HEIGHT = 24
