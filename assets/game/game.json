@@ -6,14 +6,11 @@
     ],
     "关卡设计": [
       "curtainsmall"
-    ],
-    "引擎": [
-      "pygame-ce"
     ]
   },
   "player": {
     "jump_height": 8,
-    "move_speed": 8,
+    "move_speed": 8.0,
     "animation": {}
   }
 }
