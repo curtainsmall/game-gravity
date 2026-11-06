@@ -82,17 +82,33 @@ def _read_position(entry: dict) -> tuple[float, float]:
     return float(x), float(y)
 
 
+def player_settings(level_definition: LevelDefinition) -> dict:
+    """玩家自己的那几项（跳高、速度、动画）都写在 player 里，没有就是空表。"""
+    entry = level_definition.get("player")
+    return entry if isinstance(entry, dict) else {}
+
+
 def jump_height_of(level_definition: LevelDefinition) -> int:
-    """关卡指定的初始跳高（格），缺省用默认值。"""
-    return int(level_definition.get("jump_height", InputSource.JUMP_HEIGHT_DEFAULT))
+    """玩家初始跳高（格），写在 player 里；缺省用默认值。"""
+    value = player_settings(level_definition).get("jump_height")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return InputSource.JUMP_HEIGHT_DEFAULT
 
 
 def move_speed_of(level_definition: LevelDefinition) -> float:
-    """关卡指定的水平移动速度（方块/秒），缺省用默认值。"""
+    """玩家水平移动速度（方块/秒），写在 player 里；缺省用默认值。"""
     try:
-        return float(level_definition.get("move_speed", InputSource.MOVE_SPEED_DEFAULT))
+        return float(player_settings(level_definition).get("move_speed"))
     except (TypeError, ValueError):
         return InputSource.MOVE_SPEED_DEFAULT
+
+
+def animation_of(level_definition: LevelDefinition) -> dict:
+    """玩家动画：动作名 → 图（相对 scene.json 的路径），还没接动画系统，先读出来。"""
+    value = player_settings(level_definition).get("animation")
+    return value if isinstance(value, dict) else {}
 
 
 def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, float]:

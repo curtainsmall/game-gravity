@@ -15,6 +15,7 @@ from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from world.level import (
     LevelDefinition,
+    animation_of,
     build_blocks,
     build_boundaries,
     build_buttons,
@@ -59,6 +60,7 @@ class Scene:
         # 调试显示：由 App 按设置里的那一个开关填进来
         self.debug: bool = False
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
+        self.player_animation: dict = {}
 
     @classmethod
     def from_level(
@@ -89,6 +91,8 @@ class Scene:
         scene = cls(world=world, objects=objects)
         scene.player = players[0] if players else None
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
+        # 玩家动画先读出来放着：还没有动画系统拿去用
+        scene.player_animation = animation_of(level_definition)
         return scene
 
     @classmethod

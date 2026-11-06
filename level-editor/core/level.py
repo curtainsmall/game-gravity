@@ -70,7 +70,8 @@ class Level:
         self.background = ""       # 背景图，相对关卡目录的路径；空串表示没有背景
         self.jump_height = JUMP_HEIGHT_DEFAULT
         self.move_speed = MOVE_SPEED_DEFAULT   # 水平移动速度，方块/秒
-        self.flip_area_offsets = list(FLIP_AREA_OFFSETS_DEFAULT)  # 翻转区离顶多少格
+        self.animation: dict = {}  # 玩家动画：动作名 → 图片路径，动作名先不限
+        self.flip_area_offsets = list(FLIP_AREA_OFFSETS_DEFAULT)  # 翻转带的高度
         self.blocks: list = []
         self.planks: list = []
         self.movable_blocks: list = []
@@ -87,8 +88,6 @@ class Level:
             "name": self.name,
             "width": self.width,
             "height": self.height,
-            "jump_height": self.jump_height,
-            "move_speed": self.move_speed,
             "flip_area_offsets": list(self.flip_area_offsets),
             "blocks": copy.deepcopy(self.blocks),
             "planks": copy.deepcopy(self.planks),
@@ -99,9 +98,13 @@ class Level:
             "nozzles": copy.deepcopy(self.nozzles),
             "textures": copy.deepcopy(self.textures),
         }
-        # 起点和终点都只有一份，没有就不写这个键
+        # 起点和终点都只有一份，没有就不写这个键；跳高、速度、动画都挂在玩家身上
         if self.player is not None:
-            definition["player"] = copy.deepcopy(self.player)
+            player = copy.deepcopy(self.player)
+            player["jump_height"] = self.jump_height
+            player["move_speed"] = self.move_speed
+            player["animation"] = copy.deepcopy(self.animation)
+            definition["player"] = player
         if self.destination is not None:
             definition["destination"] = copy.deepcopy(self.destination)
         # 没有背景就不写这个键
@@ -115,21 +118,8 @@ class Level:
         level.name = str(definition.get("name", ""))
         level.width = clamp_int(definition.get("width"), LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
         level.height = clamp_int(definition.get("height"), LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
-        level.jump_height = clamp_int(
-            definition.get("jump_height"),
-            JUMP_HEIGHT_MIN,
-            max(JUMP_HEIGHT_MIN, level.height - 1),   # 跳高不超过关卡高度 - 1
-            JUMP_HEIGHT_DEFAULT,
-        )
-        level.move_speed = clamp_float(
-            definition.get("move_speed"),
-            MOVE_SPEED_MIN,
-            MOVE_SPEED_MAX,
-            MOVE_SPEED_DEFAULT,
-        )
         level.flip_area_offsets = _read_flip_area_offsets(definition, level.height)
         level.background = str(definition.get("background", "") or "")
-        level.player = copy.deepcopy(definition.get("player"))
         level.destination = copy.deepcopy(definition.get("destination"))
         level.blocks = copy.deepcopy(list(definition.get("blocks", [])))
         level.planks = copy.deepcopy(list(definition.get("planks", [])))
@@ -144,4 +134,27 @@ class Level:
         level.items = copy.deepcopy(list(definition.get("items", [])))
         level.nozzles = copy.deepcopy(list(definition.get("nozzles", [])))
         level.textures = copy.deepcopy(list(definition.get("textures", [])))
+
+        # 玩家：跳高、速度、动画都挂在它身上；老文件写在外层的，读的时候搬进来
+        player = definition.get("player")
+        level.player = copy.deepcopy(player) if isinstance(player, dict) else None
+        source = level.player if level.player is not None else {}
+        level.jump_height = clamp_int(
+            source.get("jump_height", definition.get("jump_height")),
+            JUMP_HEIGHT_MIN,
+            max(JUMP_HEIGHT_MIN, level.height - 1),   # 跳高不超过关卡高度 - 1
+            JUMP_HEIGHT_DEFAULT,
+        )
+        level.move_speed = clamp_float(
+            source.get("move_speed", definition.get("move_speed")),
+            MOVE_SPEED_MIN,
+            MOVE_SPEED_MAX,
+            MOVE_SPEED_DEFAULT,
+        )
+        animation = source.get("animation", definition.get("animation"))
+        level.animation = copy.deepcopy(animation) if isinstance(animation, dict) else {}
+        if level.player is not None:
+            # 面板上玩家只编辑位置和大小，这三项存在 Level 上
+            for key in ("jump_height", "move_speed", "animation"):
+                level.player.pop(key, None)
         return level
