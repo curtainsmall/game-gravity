@@ -1,11 +1,18 @@
-"""鼠标命中的分发：工具栏、新建菜单、详细面板、关卡设置。"""
+"""鼠标命中的分发：工具栏、关卡列表、新建菜单、详细面板、各种设置浮层。"""
 
 from typing import TYPE_CHECKING
 
 import pygame
 
+from core.constants import ROW_HEIGHT
 from view.chrome import create_menu_rects, toolbar_rects
-from view.modals import player_settings_geometry, settings_geometry
+from view.modals import (
+    game_settings_geometry,
+    level_select_geometry,
+    player_settings_geometry,
+    settings_geometry,
+    switch_geometry,
+)
 from view.panel import (
     detail_button_rects,
     detail_image_rect,
@@ -21,15 +28,17 @@ if TYPE_CHECKING:
 
 
 def handle_toolbar(editor: Editor, position: tuple) -> str | None:
-    for rect, _, action in toolbar_rects():
+    for rect, _, action in toolbar_rects(editor):
         if not rect.collidepoint(position):
             continue
-        if action == "new":
-            editor.new_level()
-        elif action == "open":
-            editor.open_level()
+        if action == "open_game":
+            editor.request_open_game()
+        elif action == "game_settings":
+            editor.open_game_settings()
         elif action == "save":
             editor.save()
+        elif action == "levels":
+            editor.open_level_select()
         elif action == "undo":
             editor.undo()
         elif action == "settings":
@@ -40,6 +49,27 @@ def handle_toolbar(editor: Editor, position: tuple) -> str | None:
             editor.view_menu_open = not editor.view_menu_open
         return action
     return None
+
+
+def handle_level_select_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """关卡列表浮层：点一行就切过去，另有「新建关卡」和「关闭」。"""
+    folders = editor.level_folders()
+    panel, area, rows_visible, create_rect, close_rect = level_select_geometry(surface, len(folders))
+    if create_rect.collidepoint(position):
+        editor.create_level()
+        return
+    if close_rect.collidepoint(position) or not panel.collidepoint(position):
+        editor.level_select_open = False
+        return
+    if not area.collidepoint(position):
+        return
+    scroll = max(0, min(editor.level_select_scroll, max(0, len(folders) - rows_visible)))
+    row = (position[1] - area.top) // ROW_HEIGHT
+    index = scroll + int(row)
+    if 0 <= index < len(folders):
+        editor.choose_level(folders[index])
 
 
 def handle_create_menu(editor: Editor, position: tuple, window_size: tuple, layout) -> bool:
@@ -182,3 +212,56 @@ def handle_player_settings_click(
         return
     if not panel.collidepoint(position):
         editor.close_player_settings(False)
+
+
+def handle_game_settings_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """游戏设置浮层：点哪一格就编辑哪一格，改完点「应用」写进 game.json。"""
+    (
+        panel,
+        title_rect,
+        _,
+        job_rects,
+        name_rects,
+        add_rect,
+        remove_rect,
+        apply_rect,
+        cancel_rect,
+    ) = game_settings_geometry(surface, len(editor.game_rows))
+    if apply_rect.collidepoint(position):
+        editor.close_game_settings(True)
+        return
+    if cancel_rect.collidepoint(position):
+        editor.close_game_settings(False)
+        return
+    if add_rect.collidepoint(position):
+        editor.add_credit_row()
+        return
+    if remove_rect.collidepoint(position):
+        editor.remove_credit_row()
+        return
+    if title_rect.collidepoint(position):
+        editor.game_field = 0
+        return
+    for index, rect in enumerate(job_rects):
+        if rect.collidepoint(position):
+            editor.game_field = 1 + 2 * index
+            return
+    for index, rect in enumerate(name_rects):
+        if rect.collidepoint(position):
+            editor.game_field = 2 + 2 * index
+            return
+    if not panel.collidepoint(position):
+        editor.close_game_settings(False)
+
+
+def handle_switch_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
+    """有没保存的修改时要走开的确认：保存并切换 / 不保存切换 / 取消。"""
+    panel, save_rect, discard_rect, cancel_rect = switch_geometry(surface)
+    if save_rect.collidepoint(position):
+        editor.resolve_pending_switch(True)
+    elif discard_rect.collidepoint(position):
+        editor.resolve_pending_switch(False)
+    elif cancel_rect.collidepoint(position) or not panel.collidepoint(position):
+        editor.resolve_pending_switch(None)

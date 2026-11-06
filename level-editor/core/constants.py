@@ -56,6 +56,7 @@ PREVIEW = (255, 230, 120, 90)
 TEXTURE_COLOR = (150, 150, 170)
 HANDLE_COLOR = (255, 255, 255)
 VIEW_MENU_WIDTH = 170          # 视图设置菜单宽度
+LEVEL_SELECT_WIDTH = 420       # 关卡列表浮层宽度
 
 # ---- 新建菜单里的对象种类 ----
 (
@@ -181,27 +182,37 @@ if getattr(sys, "frozen", False):
 else:
     ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-LEVELS_DIR = os.path.join(ROOT, "assets", "levels")
+# 游戏根：一个文件夹，里面是 game.json 和 levels/。编辑器启动时让用户挑一个 game.json
+# （或者新建一个），之后关卡都从它旁边的 levels/ 里找。下面只是选择框的默认位置。
+DEFAULT_GAME_DIR = os.path.join(ROOT, "assets", "game")
+GAME_FILE_NAME = "game.json"
+LEVELS_DIR_NAME = "levels"
 # 一个关卡 = 一个文件夹，文件夹名就是关卡名
 LEVEL_SCENE_NAME = "scene.json"            # 关卡数据
 LEVEL_BACKGROUND_NAME = "background.png"   # 背景图进来后固定叫这个名字
 # 贴图没有专门的目录：image 只要求是相对 scene.json 的路径，放哪儿都行
 BACKGROUND_FILTERS = [("图片", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
+GAME_FILTERS = [("游戏设置", "*.json"), ("所有文件", "*.*")]
 
 # ---- 界面尺寸 ----
+# (文字, 动作, 宽度, 什么时候显示)：
+#   always 一直在；game 打开了游戏就在（关卡的挑选、游戏设置）；level 只改当前这一关，
+#   视图里没有关卡时整个不画。
 TOOLBAR_ITEMS = [
-    ("新建", "new", 56),
-    ("打开", "open", 56),
-    ("保存", "save", 56),
-    ("撤销", "undo", 56),
-    ("关卡设置", "settings", 88),
-    ("玩家设置", "player_settings", 88),
-    ("视图", "view", 56),
+    ("打开游戏", "open_game", 88, "always"),
+    ("关卡", "levels", 56, "game"),    # 一直挂在工具栏上：浮层里列 levels/ 里的关卡
+    ("游戏设置", "game_settings", 88, "game"),
+    ("视图", "view", 56, "always"),
+    ("保存", "save", 56, "level"),
+    ("撤销", "undo", 56, "level"),
+    ("关卡设置", "settings", 88, "level"),
+    ("玩家设置", "player_settings", 88, "level"),
 ]
 
 TOOLBAR_HEIGHT = 24
 ROW_HEIGHT = 22
 BUTTON_HEIGHT = 22
+GAME_CREDITS_MAX_ROWS = 8      # 游戏设置里最多摊开几条版权信息，再多就先不显示
 DETAIL_PANEL_WIDTH = 250
 CREATE_MENU_WIDTH = 150
 RULER_HEIGHT = 24

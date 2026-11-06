@@ -6,21 +6,16 @@ import debug_display
 import ui
 from levels import level_preview
 
-CREDITS = [
-    ("程序", "curtainsmall"),
-    ("关卡设计", "curtainsmall"),
-    ("引擎", "pygame-ce"),
-]
-
 
 def draw_title(surface: pygame.Surface, app) -> None:
     surface.fill(ui.BACKGROUND)
     width, height = surface.get_size()
-    ui.draw_text(surface, "重力", 64, center=(width // 2, int(height * 0.22)))
+    # 标题来自 game.json
+    ui.draw_text(surface, app.title, 64, center=(width // 2, int(height * 0.22)))
     if not app.levels:
         ui.draw_text(
             surface,
-            "levels/ 里没有可用的关卡",
+            "game/levels/ 里没有可用的关卡",
             18,
             center=(width // 2, int(height * 0.32)),
             color=ui.DIM_TEXT,
@@ -44,7 +39,7 @@ def draw_level_select(surface: pygame.Surface, app) -> None:
 
     area = ui.level_view_area(surface)
     if not app.levels:
-        ui.draw_text(surface, "levels/ 里没有可用的关卡", 18, center=area.center, color=ui.DIM_TEXT)
+        ui.draw_text(surface, "game/levels/ 里没有可用的关卡", 18, center=area.center, color=ui.DIM_TEXT)
         return
 
     previous_clip = surface.get_clip()
@@ -80,14 +75,24 @@ def draw_ending(surface: pygame.Surface, app) -> None:
     ui.draw_text(
         surface, "全部关卡已通过", 20, center=(width // 2, int(height * 0.25)), color=ui.DIM_TEXT
     )
-    for index, (role, name) in enumerate(CREDITS):
+    # 版权信息来自 game.json：职位在左边（右对齐），名字在右边（左对齐）
+    for index, (job, names) in enumerate(app.credits.items()):
         y = int(height * 0.36) + index * 30
-        ui.draw_text(surface, role, 18, center=(width // 2 - 20, y), color=ui.DIM_TEXT)
-        ui.draw_text(surface, name, 18, center=(width // 2 + 90, y))
+        _draw_credits_row(surface, width, y, job, names)
 
     rects = ui.ending_rects(surface)
     ui.draw_button(surface, rects["title"], "返回标题")
     ui.draw_button(surface, rects["quit"], "退出")
+
+
+def _draw_credits_row(
+    surface: pygame.Surface, width: int, y: int, job: str, names: list[str]
+) -> None:
+    """一行版权：职位（暗色）贴着中线右侧结束，名字从另一侧开始。"""
+    label = ui.font(18).render(job, True, ui.DIM_TEXT)
+    surface.blit(label, (width // 2 - 24 - label.get_width(), y - label.get_height() // 2))
+    text = ui.font(18).render("、".join(names), True, ui.TEXT)
+    surface.blit(text, (width // 2 + 24, y - text.get_height() // 2))
 
 
 def draw_pause(surface: pygame.Surface) -> None:

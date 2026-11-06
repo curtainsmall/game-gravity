@@ -1,6 +1,6 @@
 """关卡数据：里面用设计者的词汇，程序里只有 GameObject。
 
-一个关卡是一个文件夹，文件夹名就是关卡名：
+一个关卡是一个文件夹（放在 assets/game/levels/ 下），文件夹名就是关卡名：
     <关卡名>/scene.json        关卡数据
     <关卡名>/background.png    背景图（scene.json 里不写 background 时默认用它）
 background 和各种图片的路径都相对关卡文件夹（也就是相对 scene.json）；背景图按可玩区

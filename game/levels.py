@@ -1,24 +1,16 @@
-"""关卡清单：levels/ 下每个文件夹是一关，按文件夹名排字母序。"""
+"""关卡清单：game/levels/ 下每个文件夹是一关，按文件夹名排字母序。"""
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pygame
 
+from game_settings import LEVELS_DIR
 from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
 
 SCENE_FILE = "scene.json"
-
-# 打包成 exe 后，资源放在 exe 旁边；直接跑源码时放在仓库根目录
-BASE_DIR = (
-    Path(sys.executable).resolve().parent
-    if getattr(sys, "frozen", False)
-    else Path(__file__).resolve().parent.parent
-)
-LEVELS_DIR = BASE_DIR / "assets" / "levels"
 
 
 @dataclass(frozen=True)

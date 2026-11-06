@@ -1,0 +1,14 @@
+{
+  "title": "重力",
+  "credits": {
+    "程序": [
+      "curtainsmall"
+    ],
+    "关卡设计": [
+      "curtainsmall"
+    ],
+    "引擎": [
+      "pygame-ce"
+    ]
+  }
+}

@@ -11,10 +11,11 @@ RENDER_FRAME_RATE_LIMIT = 120
 def main() -> None:
     pygame.init()
     screen = pygame.display.set_mode(WINDOW_PIXEL_SIZE)
-    pygame.display.set_caption("重力")
 
     frame_clock = pygame.time.Clock()
     app = App(screen)
+    # 窗口标题就是 game.json 里的游戏标题
+    pygame.display.set_caption(app.title)
 
     while app.running:
         elapsed_seconds = frame_clock.tick(RENDER_FRAME_RATE_LIMIT) / 1000.0

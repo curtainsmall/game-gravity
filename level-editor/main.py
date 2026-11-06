@@ -19,8 +19,11 @@ from editing.handlers import (
     handle_create_menu,
     handle_detail_click,
     handle_dropdown_click,
+    handle_game_settings_click,
+    handle_level_select_click,
     handle_player_settings_click,
     handle_settings_click,
+    handle_switch_click,
     handle_toolbar,
 )
 from view.chrome import handle_view_menu_click
@@ -94,19 +97,35 @@ def run() -> None:
                     elif cancel_rect.collidepoint(event.pos) or not panel.collidepoint(event.pos):
                         editor.confirm_quit = False
             elif editor.startup:
+                # 启动窗：先要一份 game.json（新建或打开），之后才有游戏和关卡
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         if editor.request_quit():
                             running = False
                     elif event.key in (pygame.K_RETURN, pygame.K_n):
-                        editor.new_level()
+                        editor.create_game()
                     elif event.key == pygame.K_o:
-                        editor.open_level()
+                        editor.open_game()
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     for rect, action in startup_rects(screen):
                         if rect.collidepoint(event.pos):
-                            editor.new_level() if action == "new" else editor.open_level()
+                            editor.create_game() if action == "create" else editor.open_game()
                             break
+            elif editor.level_select_open:
+                # 关卡列表：点一行切过去，另有「新建关卡」「关闭」，滚轮翻页
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        editor.level_select_open = False
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        editor.create_level()
+                    elif event.key == pygame.K_UP:
+                        editor.scroll_level_select(-1)
+                    elif event.key == pygame.K_DOWN:
+                        editor.scroll_level_select(1)
+                elif event.type == pygame.MOUSEWHEEL:
+                    editor.scroll_level_select(-3 * event.y)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    handle_level_select_click(screen, editor, event.pos)
             elif editor.settings is not None:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -151,6 +170,34 @@ def run() -> None:
                         editor.type_player_settings(event.unicode)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_player_settings_click(screen, editor, event.pos)
+            elif editor.game_settings is not None:
+                # 游戏设置：标题和版权信息（职位/名字），敲字直接改，Enter/点「应用」写盘
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        editor.close_game_settings(False)
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        editor.close_game_settings(True)
+                    elif event.key == pygame.K_UP:
+                        editor.move_game_field(-1)
+                    elif event.key == pygame.K_DOWN:
+                        editor.move_game_field(1)
+                    elif event.key == pygame.K_BACKSPACE:
+                        editor.erase_game_settings_char()
+                    elif event.unicode and event.unicode.isprintable():
+                        editor.type_game_settings(event.unicode)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    handle_game_settings_click(screen, editor, event.pos)
+            elif editor.pending_switch is not None:
+                # 有没保存的修改时走开：Y 保存并切换，N 不保存切换，Esc 取消
+                if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_y):
+                        editor.resolve_pending_switch(True)
+                    elif event.key == pygame.K_n:
+                        editor.resolve_pending_switch(False)
+                    elif event.key == pygame.K_ESCAPE:
+                        editor.resolve_pending_switch(None)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    handle_switch_click(screen, editor, event.pos)
             elif editor.view_menu_open:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     editor.view_menu_open = False
@@ -175,6 +222,8 @@ def run() -> None:
                         handle_toolbar(editor, event.pos)
             elif event.type == pygame.MOUSEMOTION:
                 sync_modifiers(editor)
+                if not editor.level_in_view:
+                    continue
                 if editor.object_grab is not None:
                     editor.update_object_grab(event.pos, layout)
                     continue
@@ -189,6 +238,8 @@ def run() -> None:
                 elif editor.drag_start is not None:
                     editor.drag_to(event.pos, layout)
             elif event.type == pygame.MOUSEWHEEL:
+                if not editor.level_in_view:
+                    continue
                 if event.y:
                     factor = ZOOM_STEP if event.y > 0 else 1.0 / ZOOM_STEP
                     new_tile = min(max(layout.tile * factor, layout.min_tile), layout.max_tile)
@@ -213,6 +264,8 @@ def run() -> None:
                     continue
                 if event.button == 1 and handle_toolbar(editor, event.pos):
                     continue
+                if not editor.level_in_view:
+                    continue                    # 视图里没有关卡：画布什么都不接
                 if event.button == 2:
                     editor.pan_drag = (event.pos[0], event.pos[1], editor.pan_x, editor.pan_y)
                     continue
@@ -231,6 +284,8 @@ def run() -> None:
                     if not editor.begin_object_grab(event.pos, layout):
                         editor.begin_marquee(event.pos, layout)
             elif event.type == pygame.MOUSEBUTTONUP:
+                if not editor.level_in_view:
+                    continue
                 if event.button == 2:
                     editor.pan_drag = None
                 elif event.button == 1 and editor.object_grab is not None:
@@ -242,13 +297,15 @@ def run() -> None:
             elif event.type == pygame.KEYDOWN:
                 ctrl = bool(event.mod & pygame.KMOD_CTRL)
                 if ctrl and event.key == pygame.K_z:
-                    editor.undo()
+                    if editor.level_in_view:
+                        editor.undo()
                 elif ctrl and event.key == pygame.K_s:
-                    editor.save()
+                    if editor.level_in_view:
+                        editor.save()
                 elif ctrl and event.key == pygame.K_o:
-                    editor.open_level()
+                    editor.request_open_game()
                 elif ctrl and event.key == pygame.K_n:
-                    editor.new_level()
+                    editor.create_level()
                 elif event.key == pygame.K_ESCAPE:
                     if editor.dropdown_field is not None:
                         editor.close_dropdown()
@@ -266,7 +323,7 @@ def run() -> None:
                         editor.erase_name_char()
                     elif event.unicode and event.unicode.isprintable():
                         editor.type_name(event.unicode)
-                elif event.key == pygame.K_DELETE:
+                elif event.key == pygame.K_DELETE and editor.level_in_view:
                     if editor.selection:
                         editor.delete_selection()
                     elif editor.hovered is not None:

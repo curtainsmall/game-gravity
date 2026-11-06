@@ -32,10 +32,10 @@ def load_scaled(path: str, height: int) -> pygame.Surface | None:
 
 
 def draw_background(
-    surface: pygame.Surface, layout, value: str, level_path: str | None
+    surface: pygame.Surface, layout, value: str, base_dir: str | None
 ) -> None:
     """画在可玩区里；裁剪到网格范围，免得盖到右侧面板上。"""
-    path = resolve_background(value, level_path)
+    path = resolve_background(value, base_dir)
     if path is None:
         return
     image = load_scaled(path, max(1, round(layout.tile * layout.rows)))

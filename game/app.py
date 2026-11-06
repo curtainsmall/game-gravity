@@ -11,6 +11,7 @@ import pygame
 import screens
 import ui
 from controller.input_source import InputState
+from game_settings import credits_of, load_game_settings, title_of
 from levels import discover_levels, load_scene
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
@@ -43,6 +44,10 @@ class App:
         self.surface = surface
         self.running = True
         self.screen = Screen.TITLE
+        # 游戏设置（game.json）：标题和版权信息，标题给窗口和标题画面，版权给结算画面
+        self.game_settings = load_game_settings()
+        self.title = title_of(self.game_settings)
+        self.credits = credits_of(self.game_settings)
         self.levels = discover_levels()
         self.level_index = 0
         self.scene: Scene | None = None
@@ -177,7 +182,7 @@ class App:
 
     def start_level(self, index: int) -> None:
         if not self.levels:
-            self.show_toast("levels/ 里没有可用的关卡")
+            self.show_toast("game/levels/ 里没有可用的关卡")
             self.screen = Screen.TITLE
             return
         if not 0 <= index < len(self.levels):

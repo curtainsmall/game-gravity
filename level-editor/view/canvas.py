@@ -92,7 +92,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     debug = editor.view_settings.get("debug", True)
     pygame.draw.rect(surface, PANEL, (layout.left, layout.top, layout.width, layout.height))
     if editor.view_settings.get("background", True):
-        draw_background(surface, layout, level.background, editor.path)
+        draw_background(surface, layout, level.background, editor.media_base_dir)
 
     for row in range(layout.rows + 2):
         top = layout.top + row * tile
@@ -110,7 +110,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
             pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
     # 贴图压在所有方块之上（方块、木板、可移动方块），网格线再盖在贴图上当辅助线
-    draw_textures(surface, layout, level, editor.path)
+    draw_textures(surface, layout, level, editor.media_base_dir)
 
     # 网格还是按整格画（吸附细到半格，但不改网格的样子）
     for col in range(layout.cols + 1):

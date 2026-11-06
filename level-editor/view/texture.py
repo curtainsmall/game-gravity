@@ -43,7 +43,7 @@ def texture_rect(layout, entry: dict) -> pygame.Rect:
 
 
 def draw_textures(
-    surface: pygame.Surface, layout, level, level_path: str | None
+    surface: pygame.Surface, layout, level, base_dir: str | None
 ) -> None:
     """按数组顺序画，后一个盖前一个。
 
@@ -51,7 +51,7 @@ def draw_textures(
     游戏里才裁到可玩区。
     """
     for entry in level.textures:
-        path = resolve_texture(entry.get("image"), level_path)
+        path = resolve_texture(entry.get("image"), base_dir)
         if path is None:
             continue
         rect = texture_rect(layout, entry)

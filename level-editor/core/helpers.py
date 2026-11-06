@@ -10,7 +10,6 @@ from core.constants import (
     KIND_NOZZLE,
     KIND_PORTAL,
     LEVEL_BACKGROUND_NAME,
-    LEVELS_DIR,
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_SIZE,
     PORTAL_SIZE,
@@ -73,15 +72,6 @@ def folder_name_for(name: str) -> str:
     """关卡名 → 文件夹名：去掉 Windows 不允许的字符，空的就退回默认名字。"""
     cleaned = re.sub(r'[<>:"/\\|?*]', "", name or "").strip().strip(".")
     return cleaned or "新关卡"
-
-
-def folder_is_empty(folder: str) -> bool:
-    """文件夹里没有东西（不能读也当作非空，别往不明底细的地方写）。"""
-    try:
-        with os.scandir(folder) as entries:
-            return next(entries, None) is None
-    except OSError:
-        return False
 
 
 def normalize_rect(a: tuple, b: tuple, minimum: float) -> tuple:
@@ -163,36 +153,31 @@ def clamp_float(value, low: float, high: float, fallback: float) -> float:
     return max(low, min(high, number))
 
 
-def level_base_dir(level_path: str | None) -> str:
-    """关卡的文件夹（path 指向的就是它）；关卡还没保存时用关卡根目录。"""
-    if level_path:
-        return os.path.abspath(level_path)
-    return LEVELS_DIR
-
-
-def resolve_level_path(value: str, level_path: str | None) -> str | None:
-    """相对 scene.json 的路径 → 绝对路径；没有兜底，找不到就 None。"""
+def resolve_level_path(value: str, base_dir: str | None) -> str | None:
+    """相对基准目录（关卡文件夹）的路径 → 绝对路径；没有兜底，找不到就 None。"""
     if not value:
         return None
     path = value.replace("/", os.sep)
     if not os.path.isabs(path):
-        path = os.path.join(level_base_dir(level_path), path)
+        if base_dir is None:
+            return None
+        path = os.path.join(base_dir, path)
     path = os.path.normpath(path)
     return path if os.path.isfile(path) else None
 
 
-def resolve_background(value: str, level_path: str | None) -> str | None:
+def resolve_background(value: str, base_dir: str | None) -> str | None:
     """background 解析成绝对路径；scene.json 没写就退回文件夹里的 background.png。"""
-    found = resolve_level_path(value, level_path)
+    found = resolve_level_path(value, base_dir)
     if found is not None:
         return found
-    return resolve_level_path(LEVEL_BACKGROUND_NAME, level_path)
+    return resolve_level_path(LEVEL_BACKGROUND_NAME, base_dir)
 
 
-def relative_level_path(path: str, level_path: str | None) -> str:
-    """绝对路径 → 相对 scene.json 所在目录的写法，一律用正斜杠。"""
+def relative_level_path(path: str, base_dir: str | None) -> str:
+    """绝对路径 → 相对基准目录（关卡文件夹）的写法，一律用正斜杠。"""
     try:
-        relative = os.path.relpath(path, level_base_dir(level_path))
+        relative = os.path.relpath(path, base_dir) if base_dir else path
     except ValueError:
         relative = path
     return relative.replace(os.sep, "/")

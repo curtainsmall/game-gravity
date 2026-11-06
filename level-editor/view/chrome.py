@@ -1,4 +1,4 @@
-"""顶部信息栏、工具栏和右键新建菜单。"""
+"""顶部信息栏、工具栏、视图菜单和右键新建菜单。"""
 
 import pygame
 from typing import TYPE_CHECKING
@@ -29,22 +29,27 @@ if TYPE_CHECKING:
     from editing.editor import Editor
 
 
-def toolbar_rects() -> list:
+def toolbar_rects(editor: Editor) -> list:
+    """工具栏按钮：always 一直在，game 要有游戏，level 要有落才画。"""
     rects = []
     x = MARGIN
-    for label, action, width in TOOLBAR_ITEMS:
+    for label, action, width, when in TOOLBAR_ITEMS:
+        if when == "game" and editor.game_path is None:
+            continue
+        if when == "level" and not editor.level_in_view:
+            continue
         rects.append((pygame.Rect(x, HEADER - 34, width, TOOLBAR_HEIGHT), label, action))
         x += width + 8
     return rects
 
 
-def view_menu_rects() -> list:
+def view_menu_rects(editor: Editor) -> list:
     """工具栏「视图」按钮下方的菜单：每行是 (矩形, 设置键, 标题)。
 
     这里的东西只影响编辑器自己的显示，不进关卡数据、不写盘。调试显示和游戏里那个
     开关是一回事：关掉就只看背景和贴图（发布后的样子），打开则连翻转带一起画出来。
     """
-    anchor = next(rect for rect, _, action in toolbar_rects() if action == "view")
+    anchor = next(rect for rect, _, action in toolbar_rects(editor) if action == "view")
     items = [
         ("background", "显示背景"),
         ("debug", "调试显示"),
@@ -65,7 +70,7 @@ def view_menu_rects() -> list:
 
 
 def draw_view_menu(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    rects = view_menu_rects()
+    rects = view_menu_rects(editor)
     border = rects[0][0].unionall([rect for rect, _, _ in rects])
     pygame.draw.rect(surface, BUTTON_BG, border)
     pygame.draw.rect(surface, DIALOG_BORDER, border, 1)
@@ -80,7 +85,7 @@ def draw_view_menu(surface: pygame.Surface, editor: Editor, font: pygame.font.Fo
 
 def handle_view_menu_click(editor: Editor, position: tuple) -> bool:
     """点菜单里的一行就切换那个视图开关；返回点是否落在菜单里。"""
-    for rect, key, _ in view_menu_rects():
+    for rect, key, _ in view_menu_rects(editor):
         if rect.collidepoint(position):
             editor.view_settings[key] = not editor.view_settings.get(key, True)
             return True
@@ -107,12 +112,18 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
 
     marker = " *" if editor.dirty else ""
     zoom_text = "游戏比例" if layout.zoom is None else f"{layout.tile:.1f}px/格"
-    head = (
-        f"{display_path(editor.path)}{marker}   缩放: {zoom_text}   "
-        f"尺寸 {editor.level.width}×{editor.level.height}   "
-        f"跳高: {editor.level.jump_height}   速度: {editor.level.move_speed:g}   "
-        f"撤销 {len(editor.undo_stack)} 步"
-    )
+    game_text = display_path(editor.game_path) if editor.game_path else "（没有打开游戏）"
+    if not editor.level_in_view:
+        level_text = "（视图里没有关卡）"
+    else:
+        level_text = display_path(editor.path) if editor.path else "新关卡（未保存）"
+    head = f"游戏 {game_text}   关卡 {level_text}{marker}   缩放: {zoom_text}"
+    if editor.level_in_view:
+        head += (
+            f"   尺寸 {editor.level.width}×{editor.level.height}"
+            f"   跳高: {editor.level.jump_height}   速度: {editor.level.move_speed:g}"
+            f"   撤销 {len(editor.undo_stack)} 步"
+        )
     surface.blit(font.render(head, True, TEXT), (MARGIN, 8))
 
     if editor.creating:
@@ -121,6 +132,10 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
         )
         surface.blit(mode, (surface.get_width() - MARGIN - mode.get_width(), 8))
         hint = "左键拖出矩形 / 单击放置   右键 退出新建   滚轮缩放   中键平移"
+    elif editor.game_path is None:
+        hint = "先打开或新建一个游戏（game.json）"
+    elif not editor.level_in_view:
+        hint = "从「关卡」里挑一关，或者新建一关"
     else:
         hint = (
             "右键 新建对象   左键 设置   Delete 删除   滚轮缩放   中键平移   "
@@ -128,7 +143,7 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
         )
     surface.blit(font.render(hint, True, DIM_TEXT), (MARGIN, 30))
 
-    for rect, label, action in toolbar_rects():
+    for rect, label, action in toolbar_rects(editor):
         pygame.draw.rect(surface, BUTTON_BG, rect)
         pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
         text = font.render(label, True, TEXT)
