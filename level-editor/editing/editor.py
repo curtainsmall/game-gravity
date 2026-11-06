@@ -60,6 +60,7 @@ from core.constants import (
     TOOL_TEXTURE,
 )
 from core.helpers import (
+    SNAP_STEP,
     clamp_float,
     clamp_int,
     clamp_nozzle_power,
@@ -118,7 +119,12 @@ class Editor:
         self.file_menu_open = False             # 工具栏「文件」下拉菜单
         self.view_menu_open = False
         # 视图设置：只影响编辑器自己的显示，从不写进关卡数据、不落盘
-        self.view_settings: dict = {"background": True, "grid": True, "debug": True}
+        self.view_settings: dict = {
+            "background": True,
+            "textures": True,
+            "grid": True,
+            "debug": True,
+        }
         self.menu_open = False
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
@@ -181,8 +187,15 @@ class Editor:
         )
         return jump, speed, overridden
 
+    def show_textures(self) -> bool:
+        """视图菜单里的「显示贴图」：关掉时贴图不画、也点不中（像被藏起来一样）。"""
+        return bool(self.view_settings.get("textures", True))
+
     def all_entries(self) -> list:
-        """所有有矩形的对象，按绘制顺序（先画的在前）：(kind, entry)。"""
+        """所有有矩形的对象，按绘制顺序（先画的在前）：(kind, entry)。
+
+        贴图被视图开关藏起来时不算在内：看不见的图不该抢点击，也不该被框选中。
+        """
         pairs = []
         for entries, kind in (
             (self.level.blocks, KIND_BLOCK),
@@ -193,6 +206,8 @@ class Editor:
             (self.level.portals, KIND_PORTAL),
             (self.level.items, KIND_ITEM),
         ):
+            if kind == KIND_TEXTURE and not self.show_textures():
+                continue
             pairs += [(kind, entry) for entry in entries]
         if self.level.player is not None:
             pairs.append((KIND_PLAYER, self.level.player))
@@ -1596,6 +1611,42 @@ class Editor:
         self.dirty = True
         self.status = f"已删除 {count} 个对象。"
 
+    def duplicate_selection(self) -> None:
+        """Ctrl+D 和面板上的「复制」：复制选中的贴图，错开半格放在原图上面一层。"""
+        entries = [entry for kind, entry in self.selection if kind == KIND_TEXTURE]
+        if not entries:
+            self.status = "只有贴图可以复制：先选中贴图。"
+            return
+        self.push_undo()
+        copies = []
+        for entry in entries:
+            duplicated = copy.deepcopy(entry)
+            x, y = duplicated.get("pos", [0.0, 0.0])
+            duplicated["pos"] = [round(x + SNAP_STEP, 2), round(y - SNAP_STEP, 2)]
+            index = next(
+                (index for index, item in enumerate(self.level.textures) if item is entry),
+                len(self.level.textures) - 1,
+            )
+            self.level.textures.insert(index + 1, duplicated)
+            copies.append((KIND_TEXTURE, duplicated))
+        self.dirty = True
+        self.select_many(copies)
+        self.status = f"已复制 {len(copies)} 张贴图（Ctrl+Z 可撤销）。"
+
+    def rotate_selection_cw(self) -> None:
+        """R：把选中的贴图朝向顺时针转一格；转回向上也照样写 up，不删这个键。"""
+        entries = [entry for kind, entry in self.selection if kind == KIND_TEXTURE]
+        if not entries:
+            self.status = "先选中贴图，再按 R 顺时针旋转。"
+            return
+        self.push_undo()
+        for entry in entries:
+            face = str(entry.get("face", FACE_ORDER[0]))
+            index = FACE_ORDER.index(face) if face in FACE_ORDER else 0
+            entry["face"] = FACE_ORDER[(index + 1) % len(FACE_ORDER)]
+        self.dirty = True
+        self.status = "贴图朝向已顺时针转一格。"
+
     def remove_entry(self, kind: str, entry: dict) -> None:
         if kind == KIND_BLOCK:
             self.level.blocks = [e for e in self.level.blocks if e is not entry]
@@ -1761,13 +1812,17 @@ class Editor:
             ]
         elif kind == KIND_TEXTURE:
             rows.append(("图片", entry.get("image") or "（未选择）"))
+            rows.append(
+                ("朝向", FACE_LABELS.get(str(entry.get("face", "up")), FACE_LABELS["up"]))
+            )
+            rows.append(("水平翻转", "是" if entry.get("flip") else "否"))
             rows.append(("跟随", entry.get("follow") or "无"))
         return rows
 
     def dialog_checkbox(self, index: int) -> bool | None:
         """这一行是不是复选框：是的话返回当前勾没勾，不是返回 None。
 
-        只有「是 / 否」的两项是可移动方块的「仅触发一次」和道具的「变重」。
+        「是 / 否」的三项：可移动方块的「仅触发一次」、道具的「变重」、贴图的「水平翻转」。
         """
         if self.dialog is None:
             return None
@@ -1777,6 +1832,8 @@ class Editor:
             return bool(entry.get("once", False))
         if kind == KIND_ITEM and index == 4:
             return bool(entry.get("heavy", False))
+        if kind == KIND_TEXTURE and index == 6:
+            return bool(entry.get("flip", False))
         return None
 
     def dialog_focusable(self, index: int) -> bool:
@@ -1872,7 +1929,13 @@ class Editor:
         elif kind == KIND_ITEM:
             entry["heavy"] = not entry.get("heavy", False)
         elif kind == KIND_TEXTURE:
-            if field == 5:                 # 跟随：在「无」和可移动方块的名字之间循环
+            if field == 5:                 # 朝向：顺时针转一格（向上也照样写 up）
+                face = str(entry.get("face", FACE_ORDER[0]))
+                index = FACE_ORDER.index(face) if face in FACE_ORDER else 0
+                entry["face"] = FACE_ORDER[(index + delta) % len(FACE_ORDER)]
+            elif field == 6:               # 水平翻转：开关，取消也把 false 留着
+                entry["flip"] = not bool(entry.get("flip", False))
+            elif field == 7:               # 跟随：在「无」和可移动方块的名字之间循环
                 names = [
                     block.get("name", "")
                     for block in self.level.movable_blocks
@@ -1887,10 +1950,7 @@ class Editor:
                     if names
                     else None
                 )
-                if chosen:
-                    entry["follow"] = chosen
-                else:
-                    entry.pop("follow", None)
+                entry["follow"] = chosen or ""
 
     # ---- 选择型字段的下拉列表 ---------------------------------------
     def dialog_options(self, field: int) -> list | None:
@@ -1917,6 +1977,8 @@ class Editor:
             ]
             return [("无", None)] + [(name, name) for name in names]
         if kind == KIND_TEXTURE and field == 5:
+            return [(FACE_LABELS[face], face) for face in FACE_ORDER]
+        if kind == KIND_TEXTURE and field == 7:
             names = [
                 block.get("name", "")
                 for block in self.level.movable_blocks
@@ -1935,7 +1997,7 @@ class Editor:
             return (entry.get("sources") or [None])[0]
         if kind == KIND_PORTAL and field == 5:
             return entry.get("target") or ""
-        if kind == KIND_TEXTURE and field == 5:
+        if kind == KIND_TEXTURE and field == 7:
             return entry.get("follow") or ""
         return entry.get("face", FACE_ORDER[0])
 
@@ -1968,10 +2030,9 @@ class Editor:
         elif kind == KIND_PORTAL and field == 5:
             entry["target"] = value or ""
         elif kind == KIND_TEXTURE and field == 5:
-            if value:
-                entry["follow"] = value
-            else:
-                entry.pop("follow", None)
+            entry["face"] = value or FACE_ORDER[0]
+        elif kind == KIND_TEXTURE and field == 7:
+            entry["follow"] = value or ""
         else:
             entry["face"] = value
         self.dropdown_field = None

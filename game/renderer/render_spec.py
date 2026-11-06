@@ -37,6 +37,8 @@ class RenderSpec:
         placeholder_has_axis: bool = False,
         texture_path: str | None = None,
         texture_smooth: bool = False,
+        texture_face: str = "up",
+        texture_flip: bool = False,
     ) -> None:
         self.placeholder_shape: PlaceholderShape = placeholder_shape
         self.placeholder_size_in_blocks: tuple[float, float] = placeholder_size_in_blocks
@@ -47,3 +49,5 @@ class RenderSpec:
         self.placeholder_has_axis: bool = placeholder_has_axis      # 沿 body 中轴画虚线
         self.texture_path: str | None = texture_path                # 有图就画图，占位形状退到兜底
         self.texture_smooth: bool = texture_smooth                  # 平滑缩放（像素画应关掉）
+        self.texture_face: str = texture_face                       # 图先顺时针转：up/right/down/left
+        self.texture_flip: bool = texture_flip                      # 转完再水平镜像

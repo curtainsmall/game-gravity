@@ -22,6 +22,7 @@ from core.constants import (
     ITEM_COLOR,
     KIND_BUTTON,
     KIND_PORTAL,
+    KIND_TEXTURE,
     MIN_SIZE,
     MOVABLE_COLOR,
     NOZZLE_COLOR,
@@ -122,8 +123,11 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for entry in level.movable_blocks:
             pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
-    # 贴图压在所有方块之上（方块、木板、可移动方块）；缺图时调试显示里铺黑紫棋盘格
-    draw_textures(surface, layout, level, editor.media_base_dir, debug)
+    # 贴图压在所有方块之上（方块、木板、可移动方块）；缺图时调试显示里铺黑紫棋盘格。
+    # 「视图 → 显示贴图」关掉时整层都不画，连描边也一起藏起来
+    show_textures = editor.show_textures()
+    if show_textures:
+        draw_textures(surface, layout, level, editor.media_base_dir, debug)
 
     if debug:
         for entry in level.buttons:
@@ -199,7 +203,11 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         # 选中的对象都亮着；只有"唯一选中"的那个才画四角把手
         grabbed = (editor.object_grab["kind"], editor.object_grab["entry"]) if editor.object_grab else None
         selected = grabbed or (editor.selection[0] if len(editor.selection) == 1 else None)
+        if selected is not None and selected[0] == KIND_TEXTURE and not show_textures:
+            selected = None                 # 藏起来的贴图不画把手
         for kind, entry in editor.selection:
+            if kind == KIND_TEXTURE and not show_textures:
+                continue
             if selected is not None and entry is selected[1]:
                 continue
             draw_object_outline(surface, layout, kind, entry, HIGHLIGHT, 1)
@@ -217,7 +225,10 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
             )
         # 光标下的对象只给淡描边，不画把手
         hovered = editor.hovered
-        if hovered is not None and not any(hovered[1] is entry for _, entry in editor.selection):
+        hidden = hovered is not None and hovered[0] == KIND_TEXTURE and not show_textures
+        if hovered is not None and not hidden and not any(
+            hovered[1] is entry for _, entry in editor.selection
+        ):
             draw_object_outline(surface, layout, hovered[0], hovered[1], DIM_TEXT, 1)
 
 

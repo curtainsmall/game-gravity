@@ -17,7 +17,8 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              编辑器保证它至少比风区沿朝向的长度多 0.5 格，目标点落在风区外），
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
     textures                 贴图：浮点矩形 + image（相对 game.json 的路径）；
-                             follow 写可移动方块的名字，这张图就跟着它一起动
+                             face 是朝向（up/right/down/left，顺时针转，缺省 up），
+                             flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖
     destination              终点
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
@@ -268,6 +269,7 @@ def build_textures(
 ) -> list[GameObject]:
     """贴图：整张美术图盖在方块上。位置和尺寸都是浮点世界单位，不吸格子。
 
+    face 是图自己的朝向（顺时针转 90° 一档，缺省 up），flip 是转完再水平镜像；
     follow 写了可移动方块的名字，加载后这张图就跟着那个方块走（见 world.follower）。
     只认 schema 里列出来的条目，不自动扫描 textures/ 目录。
     """
@@ -294,10 +296,18 @@ def build_textures(
                     placeholder_label_text=str(GameObjectKind.TEXTURE),
                     texture_path=resolve_texture(entry.get("image"), base_dir),
                     texture_smooth=bool(entry.get("smooth", False)),
+                    texture_face=_texture_face(entry),
+                    texture_flip=bool(entry.get("flip", False)),
                 ),
             )
         )
     return textures
+
+
+def _texture_face(entry: dict) -> str:
+    """贴图朝向：缺省或写坏了都按向上，顺时针一档 90°（up/right/down/left）。"""
+    face = str(entry.get("face", "up"))
+    return face if face in ("up", "right", "down", "left") else "up"
 
 
 def build_boundaries(world: World) -> list[GameObject]:

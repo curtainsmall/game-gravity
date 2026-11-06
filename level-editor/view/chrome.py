@@ -110,11 +110,13 @@ def view_menu_rects(editor: Editor, window_width: int) -> list:
     """工具栏「视图」按钮下方的菜单：每行是 (矩形, 设置键, 标题)。
 
     这里的东西只影响编辑器自己的显示，不进关卡数据、不写盘。调试显示和游戏里那个
-    开关是一回事：关掉就只看背景和贴图（发布后的样子），打开则连翻转带一起画出来。
+    开关是一回事：关掉就只看背景和贴图（发布后的样子），打开则连翻转带一起画出来；
+    「显示贴图」关掉时贴图不画也点不中，方便看底下的方块和机关。
     """
     anchor = next(rect for rect, _, action in toolbar_rects(editor, window_width) if action == "view")
     items = [
         ("background", "显示背景"),
+        ("textures", "显示贴图"),
         ("grid", "显示网格"),
         ("debug", "调试显示"),
     ]
@@ -204,8 +206,8 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
         hint = "请从「文件」菜单里选择关卡，或新建关卡。"
     else:
         hint = (
-            "右键新建对象；左键设置；Delete 删除；滚轮缩放；中键平移；"
-            "Shift 吸附；Ctrl 加选或等比缩放；Alt 穿透。"
+            "右键新建对象；左键设置；Delete 删除；R 旋转贴图；Ctrl+D 复制贴图；"
+            "滚轮缩放；中键平移；Shift 吸附；Ctrl 加选或等比缩放；Alt 穿透。"
         )
     surface.blit(font.render(hint, True, DIM_TEXT), (MARGIN, 30))
 

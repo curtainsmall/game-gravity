@@ -315,6 +315,9 @@ def run() -> None:
                     editor.request_open_game()
                 elif ctrl and event.key == pygame.K_n:
                     editor.create_level()
+                elif ctrl and event.key == pygame.K_d:
+                    if editor.level_in_view:
+                        editor.duplicate_selection()
                 elif event.key == pygame.K_ESCAPE:
                     if editor.dropdown_field is not None:
                         editor.close_dropdown()
@@ -332,6 +335,9 @@ def run() -> None:
                         editor.erase_name_char()
                     elif event.unicode and event.unicode.isprintable():
                         editor.type_name(event.unicode)
+                elif event.key == pygame.K_r and editor.level_in_view:
+                    # R：选中的贴图朝向顺时针转一格
+                    editor.rotate_selection_cw()
                 elif event.key == pygame.K_DELETE and editor.level_in_view:
                     if editor.selection:
                         editor.delete_selection()

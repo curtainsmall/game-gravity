@@ -62,7 +62,13 @@ class RenderSystem:
         """贴图按世界矩形整张缩放铺上去，超出可玩区的部分裁掉。没图返回 False。"""
         if not render.texture_path:
             return False
-        image = load_scaled(render.texture_path, rect.size, render.texture_smooth)
+        image = load_scaled(
+            render.texture_path,
+            rect.size,
+            render.texture_smooth,
+            render.texture_face,
+            render.texture_flip,
+        )
         if image is None:
             return False
         previous = surface.get_clip()

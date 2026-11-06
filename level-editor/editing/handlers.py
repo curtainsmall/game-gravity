@@ -105,7 +105,10 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         elif close_rect.collidepoint(position):
             editor.clear_selection()
         return
-    delete_rect, close_rect = detail_button_rects(surface)
+    delete_rect, close_rect, copy_rect = detail_button_rects(surface, editor)
+    if copy_rect is not None and copy_rect.collidepoint(position):
+        editor.duplicate_selection()
+        return
     if delete_rect.collidepoint(position):
         kind, entry = editor.dialog["kind"], editor.dialog["entry"]
         editor.delete_entry(kind, entry)

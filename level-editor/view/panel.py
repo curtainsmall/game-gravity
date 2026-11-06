@@ -121,12 +121,23 @@ def dropdown_rects(surface: pygame.Surface, editor: Editor) -> list:
     ]
 
 
-def detail_button_rects(surface: pygame.Surface) -> tuple:
+def detail_button_rects(surface: pygame.Surface, editor: Editor) -> tuple:
+    """属性面板底部的按钮：删除 / 关闭；贴图多一个「复制」。
+
+    复制和关闭靠右，删除占剩下的位置并最多 110 宽；面板窄的时候删除缩到刚好放得下
+    两个字，三个按钮不会叠在一起。
+    """
     panel = detail_panel_rect(surface)
     y = panel.bottom - 32
-    delete_rect = pygame.Rect(panel.left + 10, y, min(110, panel.width - 86), ROW_HEIGHT)
     close_rect = pygame.Rect(panel.right - 10 - 66, y, 66, ROW_HEIGHT)
-    return delete_rect, close_rect
+    texture = editor.dialog is not None and editor.dialog["kind"] == KIND_TEXTURE
+    if not texture:
+        delete_rect = pygame.Rect(panel.left + 10, y, min(110, panel.width - 86), ROW_HEIGHT)
+        return delete_rect, close_rect, None
+    copy_rect = pygame.Rect(close_rect.left - 8 - 56, y, 56, ROW_HEIGHT)
+    room = copy_rect.left - 8 - (panel.left + 10)
+    delete_rect = pygame.Rect(panel.left + 10, y, min(110, max(44, room)), ROW_HEIGHT)
+    return delete_rect, close_rect, copy_rect
 
 
 def selection_panel_buttons(surface: pygame.Surface) -> tuple:
@@ -232,8 +243,11 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
             (0, 0, min(text.get_width(), clip), text.get_height()),
         )
 
-    delete_rect, close_rect = detail_button_rects(surface)
-    draw_button(surface, font, delete_rect, "删除对象")
+    delete_rect, close_rect, copy_rect = detail_button_rects(surface, editor)
+    texture = editor.dialog is not None and editor.dialog["kind"] == KIND_TEXTURE
+    draw_button(surface, font, delete_rect, "删除" if texture else "删除对象")
+    if copy_rect is not None:
+        draw_button(surface, font, copy_rect, "复制")
     draw_button(surface, font, close_rect, "关闭")
 
     image_rect = detail_image_rect(surface, editor)
