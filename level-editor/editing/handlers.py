@@ -18,7 +18,9 @@ from view.panel import (
     detail_row_rects,
     detail_slot_rect,
     dropdown_rects,
+    field_rect,
     selection_panel_buttons,
+    trigger_geometry,
 )
 from view.widgets import stepper_rects
 
@@ -87,10 +89,10 @@ def handle_dropdown_click(surface: pygame.Surface, editor: Editor, position: tup
             editor.choose_dropdown(value)
             return True
     # 再点一次同一个字段：收起，并且把这次点击吃掉，免得面板又把它展开
-    for rect, index in detail_row_rects(surface, editor):
-        if index == field and rect.collidepoint(position):
-            editor.close_dropdown()
-            return True
+    same = field_rect(surface, editor, field)
+    if same is not None and same.collidepoint(position):
+        editor.close_dropdown()
+        return True
     editor.close_dropdown()
     return False
 
@@ -146,6 +148,29 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         elif right.collidepoint(position):
             editor.adjust_dialog(1)
         return
+
+    trigger = trigger_geometry(surface, editor)
+    if trigger is None:
+        return
+    if trigger["add"].collidepoint(position):
+        editor.add_trigger_card()
+        return
+    for layout in trigger["cards"]:
+        if layout["minus"].collidepoint(position):
+            editor.remove_trigger_card(layout["index"])
+            return
+        if layout["once"].collidepoint(position):
+            editor.toggle_trigger_once(layout["index"])
+            return
+        for part in ("source", "behavior"):
+            if not layout[part].collidepoint(position):
+                continue
+            editor.blur_name()
+            editor.blur_number()
+            field = editor.trigger_field(layout["index"], part)
+            editor.dialog_field = field
+            editor.toggle_dropdown(field)
+            return
 
 
 def handle_cutscene_click(editor: Editor, position: tuple, page: dict) -> None:

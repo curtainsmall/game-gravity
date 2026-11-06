@@ -39,6 +39,7 @@ class RenderSpec:
         texture_smooth: bool = False,
         texture_face: str = "up",
         texture_flip: bool = False,
+        hidden: bool = False,
     ) -> None:
         self.placeholder_shape: PlaceholderShape = placeholder_shape
         self.placeholder_size_in_blocks: tuple[float, float] = placeholder_size_in_blocks
@@ -51,3 +52,4 @@ class RenderSpec:
         self.texture_smooth: bool = texture_smooth                  # 平滑缩放（像素画应关掉）
         self.texture_face: str = texture_face                       # 图先顺时针转：up/right/down/left
         self.texture_flip: bool = texture_flip                      # 转完再水平镜像
+        self.hidden: bool = hidden                                  # 初始隐藏；触发器事件会再改可见性

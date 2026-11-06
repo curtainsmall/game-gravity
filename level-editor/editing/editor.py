@@ -19,6 +19,7 @@ from core.constants import (
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
+    KIND_BEHAVIORS,
     KIND_BLOCK,
     KIND_BUTTON,
     KIND_DESTINATION,
@@ -83,6 +84,11 @@ from view.texture import image_size
 
 if TYPE_CHECKING:
     from view.layout import Layout
+
+# 触发卡片上的三个格子不是普通属性行，字段号从这里往后排：
+# 1000 + 卡片下标 * 3 + (0 = 来源 / 1 = 行为 / 2 = 仅触发一次)
+TRIGGER_FIELD_BASE = 1000
+TRIGGER_PARTS = ("source", "behavior", "once")
 
 
 class Editor:
@@ -362,7 +368,7 @@ class Editor:
                     "pos": [x, y],
                     "size": [w, h],
                     "offset": [0, 0],
-                    "sources": [],
+                    "triggers": [],
                 }
             )
         self.dirty = True
@@ -1789,12 +1795,9 @@ class Editor:
         rows += [("宽度", number_text(size[0])), ("高度", number_text(size[1]))]
         if kind == KIND_MOVABLE:
             offset = entry.get("offset", [0, -3])
-            sources = entry.get("sources", [])
             rows += [
                 ("横向偏移", number_text(offset[0])),
                 ("纵向偏移", number_text(offset[1])),
-                ("触发按钮", "、".join(sources) if sources else "无"),
-                ("仅触发一次", "是" if entry.get("once") else "否"),
             ]
         elif kind == KIND_BUTTON:
             rows.append(("朝向", FACE_LABELS.get(entry.get("face", ""), "（空）")))
@@ -1817,6 +1820,7 @@ class Editor:
             )
             rows.append(("水平翻转", "是" if entry.get("flip") else "否"))
             rows.append(("跟随", entry.get("follow") or "无"))
+            rows.append(("隐藏", "是" if entry.get("hide") else "否"))
         return rows
 
     def dialog_checkbox(self, index: int) -> bool | None:
@@ -1828,18 +1832,137 @@ class Editor:
             return None
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
-        if kind == KIND_MOVABLE and index == 7:
-            return bool(entry.get("once", False))
         if kind == KIND_ITEM and index == 4:
             return bool(entry.get("heavy", False))
         if kind == KIND_TEXTURE and index == 6:
             return bool(entry.get("flip", False))
+        if kind == KIND_TEXTURE and index == 8:
+            return bool(entry.get("hide", False))
         return None
 
+    # ---- 触发行为卡片 -----------------------------------------------
+    def trigger_cards(self) -> list | None:
+        """当前对象的触发行为卡片；这个种类不接触发器时返回 None。"""
+        if self.dialog is None or self.dialog["kind"] not in KIND_BEHAVIORS:
+            return None
+        cards = self.dialog["entry"].get("triggers")
+        return cards if isinstance(cards, list) else []
+
+    def trigger_field(self, index: int, part: str) -> int:
+        """卡片上某个格子的字段号：来源、行为、仅触发一次各占一个。"""
+        return (
+            TRIGGER_FIELD_BASE + index * len(TRIGGER_PARTS) + TRIGGER_PARTS.index(part)
+        )
+
+    def trigger_field_parts(self, field: int) -> tuple[int, str] | None:
+        """字段号 → (卡片下标, "source" / "behavior" / "once")；不是卡片字段就返回 None。"""
+        if field < TRIGGER_FIELD_BASE:
+            return None
+        offset = field - TRIGGER_FIELD_BASE
+        return offset // len(TRIGGER_PARTS), TRIGGER_PARTS[offset % len(TRIGGER_PARTS)]
+
+    def trigger_storage(self) -> list:
+        """要写卡片时才建列表：没接触发器的对象，json 里不会凭空多一个空 triggers。"""
+        entry = self.dialog["entry"]
+        cards = entry.get("triggers")
+        if not isinstance(cards, list):
+            cards = []
+            entry["triggers"] = cards
+        return cards
+
+    def trigger_sources(self) -> list:
+        """可以当来源的按钮名字。"""
+        return [
+            button.get("name", "") for button in self.level.buttons if button.get("name")
+        ]
+
+    def add_trigger_card(self) -> None:
+        """面板上的「＋ 添加触发器」：加一张空来源的卡片，行为取这个种类的第一项。"""
+        cards = self.trigger_cards()
+        if cards is None:
+            return
+        self.push_undo()
+        behaviors = KIND_BEHAVIORS[self.dialog["kind"]]
+        cards = self.trigger_storage()
+        cards.append({"source": "", "behavior": behaviors[0][1], "once": False})
+        self.dialog_field = self.trigger_field(len(cards) - 1, "source")
+        self.dropdown_field = None
+        self.number_buffer = None
+        self.dirty = True
+        self.status = "已添加一条触发行为，请选择来源。"
+
+    def remove_trigger_card(self, index: int) -> None:
+        """删掉第 index 张卡片；光标落到留下那张卡片的来源上。"""
+        cards = self.trigger_cards()
+        if cards is None or not 0 <= index < len(cards):
+            return
+        self.push_undo()
+        del self.trigger_storage()[index]
+        remaining = self.trigger_cards() or []
+        self.dialog_field = (
+            self.trigger_field(min(index, len(remaining) - 1), "source")
+            if remaining
+            else 0
+        )
+        self.dropdown_field = None
+        self.number_buffer = None
+        self.dirty = True
+        self.status = "已删除一条触发行为。"
+
+    def adjust_trigger_field(self, field: int, delta: int) -> None:
+        """卡片上的 ←→：来源 / 行为在选项里循环，仅触发一次是开关。"""
+        parts = self.trigger_field_parts(field)
+        if parts is None:
+            return
+        cards = self.trigger_storage()
+        index, part = parts
+        if index >= len(cards):
+            return
+        if part == "once":
+            cards[index]["once"] = not bool(cards[index].get("once", False))
+            return
+        options = self.dialog_options(field)
+        if not options:
+            return
+        values = [value for _, value in options]
+        current = str(cards[index].get(part) or "")
+        if current in values:
+            chosen = values[(values.index(current) + delta) % len(values)]
+        else:
+            chosen = values[0]
+        cards[index][part] = chosen
+
+    def toggle_trigger_once(self, index: int) -> None:
+        """点卡片上的「仅触发一次」：就地切换。"""
+        cards = self.trigger_cards()
+        if cards is None or not 0 <= index < len(cards):
+            return
+        self.push_undo()
+        cards[index]["once"] = not bool(cards[index].get("once", False))
+        self.dialog_field = self.trigger_field(index, "once")
+        self.dropdown_field = None
+        self.number_buffer = None
+        self.dirty = True
+
+    def dialog_fields(self) -> list:
+        """属性面板能聚焦的格子：先是属性行，再是触发卡片的来源 / 行为 / 仅触发一次。"""
+        fields = [
+            index
+            for index in range(len(self.dialog_rows()))
+            if self.dialog_focusable(index)
+        ]
+        for index in range(len(self.trigger_cards() or [])):
+            fields += [self.trigger_field(index, part) for part in TRIGGER_PARTS]
+        return fields
+
     def dialog_focusable(self, index: int) -> bool:
-        """这一行能不能选中：数字、下拉、开关可以，纯显示的行（贴图路径）不行。"""
+        """这一格能不能选中：数字、下拉、开关和触发卡片可以，纯显示的行不行。"""
         if self.dialog is None:
             return False
+        parts = self.trigger_field_parts(index)
+        if parts is not None:
+            cards = self.trigger_cards()
+            return cards is not None and parts[0] < len(cards)
         return (
             self.dialog_number_value(index) is not None
             or self.dialog_options(index) is not None
@@ -1870,24 +1993,11 @@ class Editor:
             self.set_dialog_number(field, current_number + 0.5 * delta)
             return
 
-        if kind == KIND_MOVABLE:
-            if field == 6:                 # 触发按钮：在「无」和已有按钮名之间循环
-                names = [
-                    button.get("name", "") for button in self.level.buttons if button.get("name")
-                ]
-                options = [None, *names]
-                current = (entry.get("sources") or [None])[0]
-                chosen = (
-                    options[(options.index(current) + delta) % len(options)]
-                    if current in options
-                    else names[0]
-                    if names
-                    else None
-                )
-                entry["sources"] = [chosen] if chosen else []
-            else:                          # 一次触发：开关
-                entry["once"] = not entry.get("once", False)
-        elif kind == KIND_BUTTON:
+        if self.trigger_field_parts(field) is not None:
+            self.adjust_trigger_field(field, delta)
+            return
+
+        if kind == KIND_BUTTON:
             current_face = entry.get("face", FACE_ORDER[0])
             entry["face"] = (
                 FACE_ORDER[(FACE_ORDER.index(current_face) + delta) % len(FACE_ORDER)]
@@ -1951,17 +2061,29 @@ class Editor:
                     else None
                 )
                 entry["follow"] = chosen or ""
+            elif field == 8:               # 隐藏：开关（初始状态）
+                entry["hide"] = not bool(entry.get("hide", False))
 
     # ---- 选择型字段的下拉列表 ---------------------------------------
     def dialog_options(self, field: int) -> list | None:
         """选择型字段的可选项 [(显示文字, 值)]；数字、开关字段返回 None。
 
-        朝向、传送门的目标、可移动方块的触发按钮都从这里出下拉列表。
+        朝向、传送门的目标、贴图的跟随，以及触发卡片上的来源和行为都从这里出下拉列表。
         """
         if self.dialog is None:
             return None
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
+        parts = self.trigger_field_parts(field)
+        if parts is not None:
+            cards = self.trigger_cards()
+            if cards is None or parts[0] >= len(cards):
+                return None
+            if parts[1] == "once":
+                return None                    # 开关格，不是下拉
+            if parts[1] == "source":
+                return [("无", "")] + [(name, name) for name in self.trigger_sources()]
+            return list(KIND_BEHAVIORS[kind])
         if kind in (KIND_BUTTON, KIND_PORTAL, KIND_NOZZLE) and field == 4:
             return [(FACE_LABELS[face], face) for face in FACE_ORDER]
         if kind == KIND_PORTAL and field == 5:
@@ -1971,11 +2093,6 @@ class Editor:
                 if portal.get("name") and portal is not entry
             ]
             return [("无", "")] + [(name, name) for name in names]
-        if kind == KIND_MOVABLE and field == 6:
-            names = [
-                button.get("name", "") for button in self.level.buttons if button.get("name")
-            ]
-            return [("无", None)] + [(name, name) for name in names]
         if kind == KIND_TEXTURE and field == 5:
             return [(FACE_LABELS[face], face) for face in FACE_ORDER]
         if kind == KIND_TEXTURE and field == 7:
@@ -1993,8 +2110,14 @@ class Editor:
             return None
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
-        if kind == KIND_MOVABLE and field == 6:
-            return (entry.get("sources") or [None])[0]
+        parts = self.trigger_field_parts(field)
+        if parts is not None:
+            cards = self.trigger_cards()
+            if cards is None or parts[0] >= len(cards):
+                return ""
+            if parts[1] == "once":
+                return ""
+            return str(cards[parts[0]].get(parts[1]) or "")
         if kind == KIND_PORTAL and field == 5:
             return entry.get("target") or ""
         if kind == KIND_TEXTURE and field == 7:
@@ -2022,26 +2145,31 @@ class Editor:
         field = self.dropdown_field
         if field is None or self.dialog is None:
             return
-        kind = self.dialog["kind"]
-        entry = self.dialog["entry"]
         self.push_undo()
-        if kind == KIND_MOVABLE and field == 6:
-            entry["sources"] = [value] if value else []
-        elif kind == KIND_PORTAL and field == 5:
-            entry["target"] = value or ""
-        elif kind == KIND_TEXTURE and field == 5:
-            entry["face"] = value or FACE_ORDER[0]
-        elif kind == KIND_TEXTURE and field == 7:
-            entry["follow"] = value or ""
+        parts = self.trigger_field_parts(field)
+        if parts is not None:
+            cards = self.trigger_storage()
+            index, part = parts
+            if index < len(cards):
+                cards[index][part] = "" if value is None else str(value)
         else:
-            entry["face"] = value
+            kind = self.dialog["kind"]
+            entry = self.dialog["entry"]
+            if kind == KIND_PORTAL and field == 5:
+                entry["target"] = value or ""
+            elif kind == KIND_TEXTURE and field == 5:
+                entry["face"] = value or FACE_ORDER[0]
+            elif kind == KIND_TEXTURE and field == 7:
+                entry["follow"] = value or ""
+            else:
+                entry["face"] = value
         self.dropdown_field = None
         self.number_buffer = None
         self.dirty = True
 
     # ---- 数字字段的键盘输入 -----------------------------------------
     def dialog_number_value(self, field: int):
-        """字段是数字就返回当前值；朝向、触发按钮这类枚举返回 None。"""
+        """字段是数字就返回当前值；朝向、跟随、触发卡片这类枚举返回 None。"""
         if self.dialog is None:
             return None
         kind = self.dialog["kind"]
@@ -2134,17 +2262,14 @@ class Editor:
         self.number_buffer = None
 
     def move_dialog_field(self, delta: int) -> None:
-        """上下键换一行，跳过纯显示的行（贴图路径这种点不中也调不了的）。"""
+        """上下键换一格：属性行和触发卡片的格子排成一串，纯显示的行跳过。"""
         self.number_buffer = None
-        count = len(self.dialog_rows())
-        if not count:
+        fields = self.dialog_fields()
+        if not fields:
             return
-        field = self.dialog_field
-        for _ in range(count):
-            field = (field + delta) % count
-            if self.dialog_focusable(field):
-                self.dialog_field = field
-                return
+        current = self.dialog_field
+        index = fields.index(current) if current in fields else 0
+        self.dialog_field = fields[(index + delta) % len(fields)]
 
     # ---- 关卡设置 ---------------------------------------------------
     def settings_override(self, key: str) -> str:

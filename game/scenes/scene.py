@@ -16,6 +16,7 @@ from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from sound.bgm import Bgm, level_bgm
+from trigger.trigger_system import TriggerSystem
 from world.follower import FollowSystem
 from world.level import (
     LevelDefinition,
@@ -57,6 +58,7 @@ class Scene:
         self.physics_system: PhysicsSystem = PhysicsSystem()
         self.pickup_system: PickupSystem = PickupSystem()
         self.portal_system: PortalSystem = PortalSystem()
+        self.trigger_system: TriggerSystem = TriggerSystem()
         self.follow_system: FollowSystem = FollowSystem()
         self.render_system: RenderSystem = RenderSystem()
 
@@ -90,10 +92,9 @@ class Scene:
         )
         players = build_player(level_definition)
         buttons = build_buttons(level_definition)
-        triggers_by_name = {button.name: button for button in buttons if button.name}
         objects = (
             build_blocks(level_definition)                 # 方块与木板
-            + build_movable_blocks(level_definition, triggers_by_name)
+            + build_movable_blocks(level_definition)
             + build_boundaries(world)                      # 地面/天花板/墙
             + build_textures(level_definition, base_dir)   # 贴图压在所有方块之上
             + build_items(level_definition)
@@ -107,6 +108,8 @@ class Scene:
         scene.player = players[0] if players else None
         # 贴图按名字挂到可移动方块上，记下加载时的相对位置
         scene.follow_system.attach(objects)
+        # 触发行为：来源名字解析一次，之后每帧派发事件
+        scene.trigger_system.attach(objects)
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
         # 玩家动画先读出来放着：还没有动画系统拿去用
         scene.player_animation = animation_of(level_definition, game_player, base_dir)
@@ -138,10 +141,11 @@ class Scene:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
     def update(self, delta_seconds: float) -> None:
-        """一步：控制来源 → 贴图跟随 → 物理积分与解算 → 道具拾取 → 传送门。"""
+        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 道具拾取 → 传送门。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
+        self.trigger_system.update()
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.follow_system.update()
         self.physics_system.update(self.objects, self.world, delta_seconds)

@@ -4,11 +4,52 @@
   "flip_area_offsets": [8.0, 8.0],
   "blocks": [],
   "planks": [],
-  "movable_blocks": [],
-  "buttons": [],
+  "movable_blocks": [
+    {
+      "name": "",
+      "pos": [28.97, 5.03],
+      "size": [1.6, 3.36],
+      "offset": [0, -2.5],
+      "triggers": [
+        {
+          "source": "b1",
+          "behavior": "move"
+        }
+      ]
+    }
+  ],
+  "buttons": [
+    {
+      "name": "b1",
+      "pos": [22.42, 0.03],
+      "size": [2.27, 1.42],
+      "face": ""
+    }
+  ],
   "portals": [],
   "items": [],
   "nozzles": [],
-  "textures": [],
+  "textures": [
+    {
+      "pos": [22.35, 7.25],
+      "size": [3.26, 3.38],
+      "image": "textures/level1/3x3.png",
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "b1",
+          "behavior": "hide"
+        }
+      ]
+    }
+  ],
+  "player": {
+    "pos": [5.435257764197799, 0.9917355371900847],
+    "size": [1.0, 1.0]
+  },
+  "destination": {
+    "pos": [34.757571813784566, 0.5619834710743845],
+    "size": [1.0, 1.0]
+  },
   "background": "textures/level1/background.png"
 }

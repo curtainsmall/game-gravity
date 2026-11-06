@@ -187,6 +187,15 @@ KIND_TITLES = {
     KIND_TEXTURE: "贴图",
 }
 
+# ---- 触发行为 ----
+# 每种对象能接的触发行为：(显示文字, json 里的行为名)。TriggerSystem 只派发事件名，这些名字
+# 由游戏里各自读 events 的系统认领（move 由 ControllerSystem，hide/show 由渲染）；编辑器这边
+# 只负责列出每种对象能填哪些。
+KIND_BEHAVIORS = {
+    KIND_TEXTURE: (("隐藏", "hide"), ("显示", "show")),
+    KIND_MOVABLE: (("移动", "move"),),
+}
+
 # ---- 路径 ----
 # 打包成 exe 后，关卡放在 exe 旁边的 assets/ 里；直接跑源码时在仓库根目录
 if getattr(sys, "frozen", False):

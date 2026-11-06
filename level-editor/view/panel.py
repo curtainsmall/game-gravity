@@ -23,6 +23,58 @@ from view.widgets import draw_button, draw_checkbox, draw_stepper, stepper_rects
 if TYPE_CHECKING:
     from editing.editor import Editor
 
+TRIGGER_LABEL_HEIGHT = 18
+TRIGGER_CARD_HEIGHT = ROW_HEIGHT * 2     # 一行来源 / 行为，一行「仅触发一次」
+TRIGGER_CARD_GAP = 2
+TRIGGER_ADD_WIDTH = 140
+
+
+def trigger_geometry(surface: pygame.Surface, editor: "Editor") -> dict | None:
+    """属性行下面的触发器区：标题、每张卡片（来源 / 行为 / − / 仅触发一次）和「添加」按钮。
+
+    这个种类不接触发器时返回 None；卡片顺着属性行往下排，数量多了会顶到底部按钮。
+    """
+    cards = editor.trigger_cards()
+    if cards is None:
+        return None
+    panel = detail_panel_rect(surface)
+    slots = detail_slots(surface, editor)
+    top = slots[-1][0].bottom + 10 if slots else panel.top + 28
+    label = pygame.Rect(
+        panel.left + 10, top, panel.width - 20, TRIGGER_LABEL_HEIGHT
+    )
+    layouts = []
+    y = label.bottom + 2
+    for index in range(len(cards)):
+        card = pygame.Rect(panel.left + 10, y, panel.width - 20, TRIGGER_CARD_HEIGHT)
+        line = pygame.Rect(card.left, card.top + 1, card.width, ROW_HEIGHT - 2)
+        minus = pygame.Rect(line.right - 18, line.top, 18, line.height)
+        behavior_width = min(110, max(70, card.width // 3))
+        behavior = pygame.Rect(
+            minus.left - 6 - behavior_width, line.top, behavior_width, line.height
+        )
+        source = pygame.Rect(
+            line.left, line.top, behavior.left - 6 - line.left, line.height
+        )
+        once = pygame.Rect(card.left, line.bottom + 2, card.width, ROW_HEIGHT - 2)
+        layouts.append(
+            {
+                "index": index,
+                "rect": card,
+                "source": source,
+                "behavior": behavior,
+                "once": once,
+                "minus": minus,
+            }
+        )
+        y += TRIGGER_CARD_HEIGHT + TRIGGER_CARD_GAP
+    add = pygame.Rect(panel.left + 10, y + 2, TRIGGER_ADD_WIDTH, ROW_HEIGHT)
+    return {
+        "label": label,
+        "cards": layouts,
+        "add": add,
+    }
+
 
 def detail_panel_width(surface: pygame.Surface) -> int:
     return min(DETAIL_PANEL_WIDTH, max(180, surface.get_width() // 3))
@@ -82,6 +134,22 @@ def detail_image_rect(surface: pygame.Surface, editor: Editor) -> pygame.Rect | 
     return detail_slot_rect(surface, editor, "image")
 
 
+def field_rect(surface: pygame.Surface, editor: Editor, field: int) -> pygame.Rect | None:
+    """某个字段的矩形：属性行，或者触发卡片上的下拉格子。"""
+    for rect, index in detail_row_rects(surface, editor):
+        if index == field:
+            return rect
+    trigger = trigger_geometry(surface, editor)
+    if trigger is None:
+        return None
+    for layout in trigger["cards"]:
+        if field == editor.trigger_field(layout["index"], "source"):
+            return layout["source"]
+        if field == editor.trigger_field(layout["index"], "behavior"):
+            return layout["behavior"]
+    return None
+
+
 def dropdown_rects(surface: pygame.Surface, editor: Editor) -> list:
     """展开中的下拉列表：[(矩形, 显示文字, 值)]；没展开就是空列表。
 
@@ -93,11 +161,7 @@ def dropdown_rects(surface: pygame.Surface, editor: Editor) -> list:
     options = editor.dialog_options(field)
     if not options:
         return []
-    row_rect = None
-    for rect, index in detail_row_rects(surface, editor):
-        if index == field:
-            row_rect = rect
-            break
+    row_rect = field_rect(surface, editor, field)
     if row_rect is None:
         return []
 
@@ -180,6 +244,96 @@ def draw_selection_panel(surface: pygame.Surface, editor: Editor, font: pygame.f
     draw_button(surface, font, close_rect, "取消")
 
 
+def _option_label(editor: Editor, field: int, value) -> str:
+    """下拉字段当前值对应的显示文字；值不在选项里就退回原样。"""
+    for label, option in editor.dialog_options(field) or []:
+        if option == value:
+            return label
+    return str(value or "")
+
+
+def _draw_trigger_cell(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    rect: pygame.Rect,
+    text: str,
+    selected: bool,
+) -> None:
+    """触发卡片上的一个下拉格子：文字靠左，右边一个小三角表示可以点开。"""
+    pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
+    pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
+    rendered = font.render(text, True, HIGHLIGHT if selected else TEXT)
+    clip = max(1, rect.width - 20)
+    surface.blit(
+        rendered,
+        (rect.left + 6, rect.centery - rendered.get_height() // 2),
+        (0, 0, min(rendered.get_width(), clip), rendered.get_height()),
+    )
+    center_x = rect.right - 9
+    pygame.draw.polygon(
+        surface,
+        HIGHLIGHT if selected else TEXT,
+        [
+            (center_x - 4, rect.centery - 2),
+            (center_x + 4, rect.centery - 2),
+            (center_x, rect.centery + 3),
+        ],
+    )
+
+
+def _draw_minus(surface: pygame.Surface, font: pygame.font.Font, rect: pygame.Rect) -> None:
+    """卡片右端的小方按钮：删掉这张卡片。"""
+    pygame.draw.rect(surface, (80, 80, 90), rect)
+    pygame.draw.rect(surface, (150, 150, 160), rect, 1)
+    text = font.render("−", True, TEXT)
+    surface.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+
+
+def draw_trigger_section(
+    surface: pygame.Surface, font: pygame.font.Font, editor: Editor, geometry: dict
+) -> None:
+    """触发器区：标题、每张卡片的来源 / 行为 / −，以及底下的添加按钮。"""
+    label = geometry["label"]
+    surface.blit(font.render("触发器", True, DIM_TEXT), (label.left, label.top))
+    hint = font.render("来源 → 行为", True, DIM_TEXT)
+    surface.blit(hint, (label.right - hint.get_width(), label.top))
+
+    cards = editor.trigger_cards() or []
+    for layout in geometry["cards"]:
+        card = cards[layout["index"]]
+        source_field = editor.trigger_field(layout["index"], "source")
+        behavior_field = editor.trigger_field(layout["index"], "behavior")
+        once_field = editor.trigger_field(layout["index"], "once")
+        _draw_trigger_cell(
+            surface,
+            font,
+            layout["source"],
+            card.get("source") or "无",
+            editor.dialog_field == source_field,
+        )
+        _draw_trigger_cell(
+            surface,
+            font,
+            layout["behavior"],
+            _option_label(editor, behavior_field, card.get("behavior")),
+            editor.dialog_field == behavior_field,
+        )
+        _draw_minus(surface, font, layout["minus"])
+        selected = editor.dialog_field == once_field
+        pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), layout["once"])
+        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), layout["once"], 1)
+        draw_checkbox(
+            surface,
+            font,
+            layout["once"],
+            "仅触发一次",
+            bool(card.get("once", False)),
+            selected,
+            inset=6,
+        )
+    draw_button(surface, font, geometry["add"], "＋ 添加触发器")
+
+
 def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
     panel = detail_panel_rect(surface)
     pygame.draw.rect(surface, DIALOG_BG, panel)
@@ -242,6 +396,10 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
             (name_rect.left + 6, name_rect.centery - text.get_height() // 2),
             (0, 0, min(text.get_width(), clip), text.get_height()),
         )
+
+    trigger = trigger_geometry(surface, editor)
+    if trigger is not None:
+        draw_trigger_section(surface, font, editor, trigger)
 
     delete_rect, close_rect, copy_rect = detail_button_rects(surface, editor)
     texture = editor.dialog is not None and editor.dialog["kind"] == KIND_TEXTURE

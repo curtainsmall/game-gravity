@@ -9,8 +9,10 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
     name, width, height      关卡名与尺寸，单位格
     flip_area_offsets        [向上翻带高度, 向下翻带高度]，见 controller.flip_rule
     blocks, planks           方块与木板
-    movable_blocks           可移动方块：offset 是目标点相对支点的偏移，sources 引用按钮名
-    buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供可移动方块引用
+    movable_blocks           可移动方块：offset 是目标点相对支点的偏移，triggers 是触发行为卡片
+                             （来源是按钮名，行为名 move = 沿 offset 走，once = 只触发一次；
+                             老的 sources 只写按钮名，老的 once 写在方块上）
+    buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供触发器引用
     portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
     items                    道具：heavy 表示变重
     nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的；
@@ -18,7 +20,8 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
     textures                 贴图：浮点矩形 + image（相对 game.json 的路径）；
                              face 是朝向（up/right/down/left，顺时针转，缺省 up），
-                             flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动
+                             flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动；
+                             hide 表示初始隐藏，triggers 的 hide / show 由按钮切换显示
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖
     destination              终点
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
@@ -39,7 +42,6 @@ from pathlib import Path
 from controller.controller import Controller
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
-from controller.trigger_source import TriggerSource
 from core.game_object import GameObject, GameObjectKind
 from nozzle.nozzle import Nozzle
 from item.item import Item
@@ -47,6 +49,7 @@ from physics.body import Body
 from portal.portal import Portal
 from renderer.palette import color_for_kind
 from renderer.render_spec import PlaceholderFace, PlaceholderShape, RenderSpec
+from trigger.trigger import TriggerBehavior, TriggerSheet
 from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
 
 LevelDefinition = dict[str, object]
@@ -222,6 +225,7 @@ def _make(
     is_sensor: bool = False,
     is_passable_during_flip: bool = False,
     controller: Controller | None = None,
+    triggers: TriggerSheet | None = None,
     default_size: tuple[float, float] = DEFAULT_SIZE,
     facing: bool = False,
 ) -> GameObject:
@@ -244,6 +248,7 @@ def _make(
             is_passable_during_flip=is_passable_during_flip,
         ),
         controller=controller,
+        triggers=triggers,
         render=RenderSpec(
             placeholder_size_in_blocks=(width, height),
             placeholder_color=color_for_kind(kind),
@@ -270,7 +275,8 @@ def build_textures(
     """贴图：整张美术图盖在方块上。位置和尺寸都是浮点世界单位，不吸格子。
 
     face 是图自己的朝向（顺时针转 90° 一档，缺省 up），flip 是转完再水平镜像；
-    follow 写了可移动方块的名字，加载后这张图就跟着那个方块走（见 world.follower）。
+    follow 写了可移动方块的名字，加载后这张图就跟着那个方块走（见 world.follower）；
+    hide 是初始隐藏，triggers 卡片里的 hide / show 由按钮切换显示。
     只认 schema 里列出来的条目，不自动扫描 textures/ 目录。
     """
     textures = []
@@ -282,6 +288,7 @@ def build_textures(
                 kind=GameObjectKind.TEXTURE,
                 name=str(entry.get("name", "")),
                 follow=str(entry.get("follow") or "").strip(),
+                triggers=_trigger_sheet(entry),
                 body=Body(
                     left=x,
                     bottom=y,
@@ -298,10 +305,43 @@ def build_textures(
                     texture_smooth=bool(entry.get("smooth", False)),
                     texture_face=_texture_face(entry),
                     texture_flip=bool(entry.get("flip", False)),
+                    hidden=bool(entry.get("hide", False)),
                 ),
             )
         )
     return textures
+
+
+def _trigger_sheet(entry: dict) -> TriggerSheet | None:
+    """条目里的 triggers 卡片 → TriggerSheet；老数据写在 sources 里的当成 move 卡片。
+
+    卡片没有来源的跳过；一张有效卡片都没有就返回 None（这个对象不接触发器）。
+    老数据把「仅触发一次」写在外面（once），读的时候当成每张卡片各自的 once。
+    """
+    block_once = bool(entry.get("once", False))
+    behaviors = []
+    cards = entry.get("triggers")
+    if isinstance(cards, list):
+        for card in cards:
+            if not isinstance(card, dict):
+                continue
+            source = str(card.get("source") or "").strip()
+            if not source:
+                continue
+            behaviors.append(
+                TriggerBehavior(
+                    source,
+                    str(card.get("behavior") or "").strip(),
+                    bool(card.get("once", block_once)),
+                )
+            )
+    elif isinstance(entry.get("sources"), list):
+        behaviors = [
+            TriggerBehavior(str(name), "move", block_once)
+            for name in entry["sources"]
+            if name
+        ]
+    return TriggerSheet(behaviors) if behaviors else None
 
 
 def _texture_face(entry: dict) -> str:
@@ -445,25 +485,18 @@ def build_portals(level_definition: LevelDefinition) -> list[GameObject]:
     return portals
 
 
-def build_movable_blocks(level_definition: LevelDefinition, triggers_by_name: dict) -> list[GameObject]:
+def build_movable_blocks(level_definition: LevelDefinition) -> list[GameObject]:
+    """可移动方块：offset 是它自己的属性，triggers 卡片决定谁把它叫走、要不要保持。"""
     movable_blocks = []
     for entry in level_definition.get("movable_blocks", []):
-        triggers = [
-            triggers_by_name[name]
-            for name in entry.get("sources", [])
-            if name in triggers_by_name
-        ]
-        source = TriggerSource(
-            triggers=triggers,
-            offset=entry.get("offset", [0, 0]),
-            once=bool(entry.get("once", False)),
-        )
+        controller = Controller(offset=entry.get("offset", [0, 0]))
         movable_blocks.append(
             _make(
                 entry,
                 GameObjectKind.MOVABLE_BLOCK,
                 is_static=True,
-                controller=Controller(source=source),
+                controller=controller,
+                triggers=_trigger_sheet(entry),
             )
         )
     return movable_blocks

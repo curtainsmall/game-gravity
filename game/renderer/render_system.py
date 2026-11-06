@@ -46,7 +46,9 @@ class RenderSystem:
                 continue
             rect = self.viewport.to_screen_rect(body, world)
             if game_object.kind == GameObjectKind.TEXTURE:
-                # 贴图是美术，任何时候都画；图找不到时在调试显示里铺黑紫棋盘格
+                # 贴图是美术，任何时候都画（隐藏的除外）；图找不到时在调试显示里铺黑紫棋盘格
+                if not self._visible(game_object):
+                    continue
                 if not self._texture(surface, rect, render, playable) and debug:
                     draw_missing_texture(surface, rect.clip(playable))
                 continue
@@ -56,6 +58,16 @@ class RenderSystem:
             if render.placeholder_has_axis:
                 self._dotted_axis(surface, rect, render.placeholder_color)
             self._shape(surface, rect, render)
+
+    @staticmethod
+    def _visible(game_object) -> bool:
+        """贴图可见性：初始值看 render.hidden，触发器事件 hide / show 再盖一层（隐藏优先）。"""
+        visible = not game_object.render.hidden
+        if "hide" in game_object.events:
+            visible = False
+        elif "show" in game_object.events:
+            visible = True
+        return visible
 
     @staticmethod
     def _texture(surface: pygame.Surface, rect: pygame.Rect, render, playable: pygame.Rect) -> bool:

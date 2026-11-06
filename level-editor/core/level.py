@@ -59,6 +59,28 @@ def _format_block(value, depth: int) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _migrate_trigger_sources(entry: dict) -> None:
+    """老数据把来源写在 sources（只有 move）、「仅触发一次」写在方块自己身上。
+
+    读成 triggers 卡片，写盘只写新格式；卡片缺 once 的按老方块的值补上。
+    """
+    block_once = bool(entry.pop("once", False))
+    cards = entry.get("triggers")
+    if not isinstance(cards, list):
+        sources = entry.pop("sources", None)
+        if not isinstance(sources, list):
+            return
+        cards = [
+            {"source": str(name), "behavior": "move"} for name in sources if name
+        ]
+        if not cards:
+            return
+        entry["triggers"] = cards
+    for card in cards:
+        if isinstance(card, dict):
+            card.setdefault("once", block_once)
+
+
 def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
     """翻转区两个起点：缺字段、写坏了都退回默认值，夹在 0 ~ 关卡高度之间。"""
     value = definition.get("flip_area_offsets", FLIP_AREA_OFFSETS_DEFAULT)
@@ -140,6 +162,9 @@ class Level:
         level.blocks = copy.deepcopy(list(definition.get("blocks", [])))
         level.planks = copy.deepcopy(list(definition.get("planks", [])))
         level.movable_blocks = copy.deepcopy(list(definition.get("movable_blocks", [])))
+        for entry in level.movable_blocks:
+            if isinstance(entry, dict):
+                _migrate_trigger_sources(entry)
         level.buttons = copy.deepcopy(list(definition.get("buttons", [])))
         # 门本身就是触发区了：老数据里的 range 读进来就丢掉，省得存回去又冒出来
         level.portals = [

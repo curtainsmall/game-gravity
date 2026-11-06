@@ -8,6 +8,7 @@ from item.item import Item
 from physics.body import Body
 from portal.portal import Portal
 from renderer.render_spec import RenderSpec
+from trigger.trigger import TriggerSheet
 
 
 class GameObjectKind(StrEnum):
@@ -39,6 +40,7 @@ class GameObject:
         nozzle: Nozzle | None = None,
         item: Item | None = None,
         portal: Portal | None = None,
+        triggers: TriggerSheet | None = None,
         interaction_state: int = 0,
         name: str = "",
         follow: str = "",
@@ -47,17 +49,19 @@ class GameObject:
         self.name: str = name                             # 关卡里的名字，供引用
         self.follow: str = follow                         # 跟哪个可移动方块一起动（名字），空表示不动
         self.body: Body | None = body                     # 物理部件
-        self.controller: Controller | None = controller   # 运动来源
+        self.controller: Controller | None = controller   # 运动部件
         self.render: RenderSpec | None = render           # 显示部件
         self.nozzle: Nozzle | None = nozzle                        # 风区参数
         self.item: Item | None = item                     # 道具参数
         self.portal: Portal | None = portal               # 传送门参数
+        self.triggers: TriggerSheet | None = triggers     # 触发行为卡片，空表示不接触发器
         self.interaction_state: int = interaction_state   # 交互状态，由系统写入
+        self.events: set[str] = set()                     # 当前生效的事件名，由 TriggerSystem 写入
 
     def describe(self) -> str:
         parts = [
             name
-            for name in ("body", "controller", "render", "nozzle", "item", "portal")
+            for name in ("body", "controller", "render", "nozzle", "item", "portal", "triggers")
             if getattr(self, name) is not None
         ]
         label = self.name or str(self.kind)
