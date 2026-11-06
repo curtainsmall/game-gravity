@@ -195,18 +195,25 @@ BACKGROUND_FILTERS = [("图片文件", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所�
 GAME_FILTERS = [("游戏配置文件", "*.json"), ("所有文件", "*.*")]
 
 # ---- 界面尺寸 ----
-# (文字, 动作, 宽度, 什么时候显示)：
-#   always 一直在；game 打开了游戏就在（关卡的挑选、游戏设置）；level 只改当前这一关，
-#   视图里没有关卡时整个不画。
+# (文字, 动作, 宽度, 什么时候显示, 靠哪边)：
+#   always 一直在；game 打开了游戏就在；level 只改当前这一关，视图里没有关卡时整个不画。
+#   left 从左边排，right 贴着右边排（right 组里靠后的更靠右：游戏配置在最右，
+#   这样关卡设置收起来时它不会动）。
 TOOLBAR_ITEMS = [
-    ("打开游戏配置", "open_game", 112, "always"),
-    ("选择关卡", "levels", 88, "game"),   # 一直挂在工具栏上：浮层里列 levels/ 里的关卡
-    ("游戏配置", "game_settings", 88, "game"),
-    ("视图", "view", 56, "always"),
-    ("保存", "save", 56, "level"),
-    ("撤销", "undo", 56, "level"),
-    ("关卡设置", "settings", 88, "level"),
+    ("文件", "files", 56, "always", "left"),      # 下拉：打开游戏配置 / 选择关卡
+    ("视图", "view", 56, "always", "left"),
+    ("保存", "save", 56, "level", "left"),
+    ("撤销", "undo", 56, "level", "left"),
+    ("关卡设置", "settings", 88, "level", "right"),
+    ("游戏配置", "game_settings", 88, "game", "right"),
 ]
+
+# 「文件」菜单里的项：(文字, 动作, 什么时候能点)
+FILE_MENU_ITEMS = [
+    ("打开游戏配置", "open_game", "always"),
+    ("选择关卡", "levels", "game"),
+]
+FILE_MENU_WIDTH = 150
 
 TOOLBAR_HEIGHT = 24
 ROW_HEIGHT = 22

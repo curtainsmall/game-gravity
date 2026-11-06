@@ -24,7 +24,7 @@ from editing.handlers import (
     handle_switch_click,
     handle_toolbar,
 )
-from view.chrome import handle_view_menu_click
+from view.chrome import handle_file_menu_click, handle_view_menu_click
 from view.frame import draw
 from view.layout import Layout
 from view.modals import quit_geometry, startup_rects
@@ -176,11 +176,22 @@ def run() -> None:
                         editor.resolve_pending_switch(None)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_switch_click(screen, editor, event.pos)
+            elif editor.file_menu_open:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    editor.file_menu_open = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1 and handle_file_menu_click(
+                        editor, event.pos, screen.get_width()
+                    ):
+                        continue
+                    editor.file_menu_open = False
             elif editor.view_menu_open:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     editor.view_menu_open = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1 and handle_view_menu_click(editor, event.pos):
+                    if event.button == 1 and handle_view_menu_click(
+                        editor, event.pos, screen.get_width()
+                    ):
                         continue
                     editor.view_menu_open = False
             elif event.type in (pygame.KEYDOWN, pygame.KEYUP) and event.key in MODIFIER_KEYS:
@@ -197,7 +208,7 @@ def run() -> None:
                         continue
                     editor.menu_open = False
                     if event.button == 1:
-                        handle_toolbar(editor, event.pos)
+                        handle_toolbar(editor, event.pos, screen.get_width())
             elif event.type == pygame.MOUSEMOTION:
                 sync_modifiers(editor)
                 if not editor.level_in_view:
@@ -240,7 +251,9 @@ def run() -> None:
                     if event.button == 1:
                         handle_detail_click(screen, editor, event.pos)
                     continue
-                if event.button == 1 and handle_toolbar(editor, event.pos):
+                if event.button == 1 and handle_toolbar(
+                    editor, event.pos, screen.get_width()
+                ):
                     continue
                 if not editor.level_in_view:
                     continue                    # 视图里没有关卡：画布什么都不接

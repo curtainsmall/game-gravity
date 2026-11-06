@@ -6,7 +6,7 @@ import pygame
 
 from core.constants import BACKGROUND, FOOTER, MARGIN, STATUS_TEXT
 from view.canvas import draw_canvas, draw_ruler
-from view.chrome import draw_create_menu, draw_header, draw_view_menu
+from view.chrome import draw_create_menu, draw_file_menu, draw_header, draw_view_menu
 from view.layout import Layout
 from view.modals import (
     draw_game_settings,
@@ -33,6 +33,8 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
 
     if editor.menu_open:
         draw_create_menu(surface, editor, font)
+    if editor.file_menu_open:
+        draw_file_menu(surface, editor, font)
     if editor.view_menu_open:
         draw_view_menu(surface, editor, font)
     if editor.dialog is not None:

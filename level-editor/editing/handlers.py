@@ -26,24 +26,24 @@ if TYPE_CHECKING:
     from editing.editor import Editor
 
 
-def handle_toolbar(editor: Editor, position: tuple) -> str | None:
-    for rect, _, action in toolbar_rects(editor):
+def handle_toolbar(editor: Editor, position: tuple, window_width: int) -> str | None:
+    for rect, _, action in toolbar_rects(editor, window_width):
         if not rect.collidepoint(position):
             continue
-        if action == "open_game":
-            editor.request_open_game()
+        if action == "files":
+            editor.file_menu_open = not editor.file_menu_open
+            editor.view_menu_open = False
         elif action == "game_settings":
             editor.open_game_settings()
         elif action == "save":
             editor.save()
-        elif action == "levels":
-            editor.open_level_select()
         elif action == "undo":
             editor.undo()
         elif action == "settings":
             editor.open_settings()
         elif action == "view":
             editor.view_menu_open = not editor.view_menu_open
+            editor.file_menu_open = False
         return action
     return None
 

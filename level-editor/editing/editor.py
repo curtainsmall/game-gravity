@@ -110,6 +110,7 @@ class Editor:
         self.keep_ratio = False                 # 按住 Ctrl：贴图等比缩放
         self.click_through = False              # 按住 Alt：穿透最上层
         self.last_mouse = (0, 0)
+        self.file_menu_open = False             # 工具栏「文件」下拉菜单
         self.view_menu_open = False
         # 视图设置：只影响编辑器自己的显示，从不写进关卡数据、不落盘
         self.view_settings: dict = {"background": True, "debug": True}
@@ -514,6 +515,7 @@ class Editor:
         self.level_select_open = True
         self.level_select_scroll = 0
         self.view_menu_open = False
+        self.file_menu_open = False
 
     def scroll_level_select(self, delta: int) -> None:
         self.level_select_scroll = max(0, self.level_select_scroll + delta)
