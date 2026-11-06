@@ -11,17 +11,20 @@ from core.constants import (
     DIALOG_BORDER,
     DIM_TEXT,
     FOOTER,
+    GAME_CUTSCENE_TAB,
     GAME_SETTINGS_TABS,
     HEADER,
     HIGHLIGHT,
     LEVEL_SELECT_WIDTH,
     MARGIN,
     ROW_HEIGHT,
+    SETTINGS_CUTSCENE_TAB,
     SETTINGS_TABS,
     TEXT,
 )
 from core.helpers import display_path, level_name_of
 from core.sound import SCENE_KEYS
+from view.cutscene import cutscene_geometry, cutscene_page_height, draw_cutscene_page
 from view.widgets import (
     draw_button,
     draw_checkbox,
@@ -162,20 +165,26 @@ def _pack_tabs(widths: list, limit: int) -> list:
 
 
 SETTINGS_PANEL_WIDTH = 560
-SETTINGS_PANEL_HEIGHT = 320    # 三页固定一样高：切页时面板不跳
+SETTINGS_PANEL_HEIGHT = 320    # 常规 / 玩家 / 声音三页一样高：切页时面板不跳（过场页按图片张数变高）
 SETTINGS_PANEL_TOP = 30        # 标题下面这一行是页签
 SETTINGS_CONTENT_TOP = 64      # 页签下面开始排字段
 
 
-def settings_geometry(surface: pygame.Surface, tab: int) -> dict:
-    """关卡设置：常规 / 玩家 / 声音三页，底下是应用和取消。
+def settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
+    """关卡设置：常规 / 玩家 / 声音 / 过场四页，底下是应用和取消。
 
     每页的字段都排成同高的行：常规是名称、宽高、翻转带、背景，玩家是跳高与速度的覆盖，
-    声音是这一关的 BGM、循环和淡入淡出。只有当前页的那些行有矩形。
+    声音是这一关的 BGM、循环和淡入淡出；过场是级联、声音和一串图片卡片（见 view.cutscene）。
+    只有当前页的那些行有矩形。
     """
-    panel = place_panel(
-        surface, pygame.Rect(0, 0, SETTINGS_PANEL_WIDTH, SETTINGS_PANEL_HEIGHT)
-    )
+    tab = editor.settings_tab
+    if tab == SETTINGS_CUTSCENE_TAB:
+        # 过场页的高度跟着图片张数走，顶到信息栏下面、状态栏上面就用滚轮翻
+        max_height = max(360, surface.get_height() - HEADER - FOOTER - 8)
+        height = min(cutscene_page_height(editor, SETTINGS_CONTENT_TOP), max_height)
+    else:
+        height = SETTINGS_PANEL_HEIGHT
+    panel = place_panel(surface, pygame.Rect(0, 0, SETTINGS_PANEL_WIDTH, height))
     tab_rects = []
     x = panel.left + MARGIN
     for index, (label, _) in enumerate(SETTINGS_TABS):
@@ -192,6 +201,7 @@ def settings_geometry(surface: pygame.Surface, tab: int) -> dict:
     audio_browse = None
     audio_preview = None
     hint = None
+    page = None
 
     def row(offset: int, width: int = row_width) -> pygame.Rect:
         return pygame.Rect(
@@ -207,6 +217,8 @@ def settings_geometry(surface: pygame.Surface, tab: int) -> dict:
         hint = pygame.Rect(panel.left + MARGIN, content_top, row_width, ROW_HEIGHT)
         rows[6] = row(24)
         rows[7] = row(58)
+    elif tab == SETTINGS_CUTSCENE_TAB:  # 过场：级联、声音和图片卡片
+        page = cutscene_geometry(surface, editor, panel, content_top)
     else:                           # 声音
         rows[8] = row(0)
         audio_preview = pygame.Rect(rows[8].right - 76, rows[8].top, 76, rows[8].height)
@@ -233,6 +245,7 @@ def settings_geometry(surface: pygame.Surface, tab: int) -> dict:
         "audio_browse": audio_browse,
         "audio_preview": audio_preview,
         "hint": hint,
+        "cutscene": page,
         "apply": apply_rect,
         "cancel": cancel_rect,
     }
@@ -394,7 +407,7 @@ def _draw_level_sound_settings(
 
 
 def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    geometry = settings_geometry(surface, editor.settings_tab)
+    geometry = settings_geometry(surface, editor)
     panel = geometry["panel"]
     draw_panel(surface, panel)
 
@@ -402,7 +415,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     tip = font.render("Tab 切换分页；点击面板外区域即取消", True, DIM_TEXT)
     surface.blit(tip, (panel.right - MARGIN - tip.get_width(), panel.top + 8))
 
-    # 页签：常规 / 玩家 / 声音
+    # 页签：常规 / 玩家 / 声音 / 过场
     for rect, index in geometry["tabs"]:
         selected = index == editor.settings_tab
         pygame.draw.rect(surface, (80, 80, 90) if selected else BUTTON_BG, rect)
@@ -413,7 +426,9 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
             (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2),
         )
 
-    if editor.settings_tab == 0:
+    if editor.settings_cutscene_tab():
+        draw_cutscene_page(surface, editor, font, geometry["cutscene"])
+    elif editor.settings_tab == 0:
         _draw_general_settings(surface, editor, font, geometry)
     elif editor.settings_tab == 1:
         _draw_player_settings(surface, editor, font, geometry)
@@ -444,15 +459,17 @@ def _credit_card_height(card: dict) -> int:
     return CREDIT_CARD_PAD * 2 + lines * CREDIT_LINE_HEIGHT + CREDIT_LINE_HEIGHT
 
 
-def game_settings_geometry(
-    surface: pygame.Surface, cards: list, scroll: int = 0, tab: int = 0
-) -> dict:
-    """游戏配置：常规 / 制作名单 / 声音三页，底下是应用和取消。
+def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
+    """游戏配置：常规 / 制作名单 / 声音 / 过场四页，底下是应用和取消。
 
-    常规页是标题与玩家参数；制作名单页每个职位一张卡片，装不下就用滚轮翻（scroll 是
-    编辑器上的 game_card_scroll）；声音页把标题与制作名单两块上下排开，每块是路径、
-    循环和淡入淡出。只有当前页的那些矩形有值。
+    常规页是标题与玩家参数；制作名单页每个职位一张卡片，装不下就用滚轮翻（滚到第几张
+    记在编辑器的 game_card_scroll 上）；声音页把标题与制作名单两块上下排开，每块是路径、
+    循环和淡入淡出；过场页和关卡设置里的是同一页（见 view.cutscene）。只有当前页的
+    那些矩形有值。
     """
+    tab = editor.game_tab
+    cards = editor.game_cards
+    scroll = editor.game_card_scroll
     if tab == 0:
         height = GAME_GENERAL_HEIGHT
     elif tab == 1:
@@ -462,6 +479,9 @@ def game_settings_geometry(
         max_height = max(360, surface.get_height() - HEADER - FOOTER - 8)
         wanted = GAME_CONTENT_TOP + 26 + max(120, content) + GAME_FOOTER_HEIGHT
         height = min(wanted, max_height)
+    elif tab == GAME_CUTSCENE_TAB:
+        max_height = max(360, surface.get_height() - HEADER - FOOTER - 8)
+        height = min(cutscene_page_height(editor, GAME_CONTENT_TOP), max_height)
     else:
         height = GAME_SOUND_HEIGHT
     panel = place_panel(surface, pygame.Rect(0, 0, GAME_PANEL_WIDTH, height))
@@ -488,6 +508,7 @@ def game_settings_geometry(
         "visible": 0,
         "add": None,
         "remove": None,
+        "cutscene": None,
         "note_top": content_top,
         "apply": pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT),
         "cancel": pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT),
@@ -577,6 +598,8 @@ def game_settings_geometry(
             geometry["add"].right + 8, button_y, 110, BUTTON_HEIGHT
         )
         geometry["note_top"] = panel.bottom - BUTTON_HEIGHT - 36
+    elif tab == GAME_CUTSCENE_TAB:
+        geometry["cutscene"] = cutscene_geometry(surface, editor, panel, content_top)
     else:
         for scene_index, (key, label) in enumerate(SCENE_KEYS):
             top = content_top + scene_index * SCENE_STEP
@@ -820,9 +843,7 @@ def _draw_game_sound(
 
 
 def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    geometry = game_settings_geometry(
-        surface, editor.game_cards, editor.game_card_scroll, editor.game_tab
-    )
+    geometry = game_settings_geometry(surface, editor)
     panel = geometry["panel"]
     draw_panel(surface, panel)
 
@@ -830,7 +851,7 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     hint = font.render("Tab 切换分页；点击面板外区域即取消", True, DIM_TEXT)
     surface.blit(hint, (panel.right - MARGIN - hint.get_width(), panel.top + 8))
 
-    # 页签：常规 / 制作名单 / 声音
+    # 页签：常规 / 制作名单 / 声音 / 过场
     for rect, index in geometry["tabs"]:
         selected = index == editor.game_tab
         pygame.draw.rect(surface, (80, 80, 90) if selected else BUTTON_BG, rect)
@@ -841,7 +862,9 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
             (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2),
         )
 
-    if editor.game_tab == 0:
+    if editor.game_cutscene_tab():
+        draw_cutscene_page(surface, editor, font, geometry["cutscene"])
+    elif editor.game_tab == 0:
         _draw_game_general(surface, editor, font, geometry)
     elif editor.game_tab == 1:
         _draw_game_credits(surface, editor, font, geometry)

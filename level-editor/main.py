@@ -130,7 +130,8 @@ def run() -> None:
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_level_select_click(screen, editor, event.pos)
             elif editor.settings is not None:
-                # 关卡设置：Tab 切常规/玩家/声音，↑↓ 选字段，←→ 调值，敲字改路径
+                # 关卡设置：Tab 切常规/玩家/声音/过场，↑↓ 选字段，←→ 调值，敲字改路径，
+                # 过场页的图片卡片用滚轮翻
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_settings(False)
@@ -151,10 +152,13 @@ def run() -> None:
                         editor.erase_settings_char()
                     else:
                         editor.type_settings(event.unicode)
+                elif event.type == pygame.MOUSEWHEEL:
+                    editor.scroll_cutscene(-event.y)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
-                # 游戏配置：Tab 切常规/制作名单/声音，↑↓ 选格子，←→ 调值，敲字直接改
+                # 游戏配置：Tab 切常规/制作名单/声音/过场，↑↓ 选格子，←→ 调值，敲字直接改，
+                # 制作名单和过场的卡片都用滚轮翻
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_game_settings(False)

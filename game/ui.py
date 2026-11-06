@@ -195,6 +195,22 @@ def pause_rects(surface: pygame.Surface) -> dict:
     return rects
 
 
+def cutscene_pause_rects(surface: pygame.Surface) -> dict:
+    """过场的暂停浮层：和游戏暂停一样，但没有「重新开始」（那是玩法用的）。"""
+    width, height = surface.get_size()
+    panel = pygame.Rect(0, 0, 320, 288)
+    panel.center = (width // 2, height // 2)
+    rects = {"panel": panel}
+    for index, key in enumerate(("resume", "settings", "title")):
+        rects[key] = pygame.Rect(
+            panel.left + 30,
+            panel.top + 84 + index * (BUTTON_SIZE[1] + BUTTON_GAP),
+            panel.width - 60,
+            BUTTON_SIZE[1],
+        )
+    return rects
+
+
 def settings_rects(surface: pygame.Surface) -> dict:
     """设置浮层：三档音量、一个调试显示开关，加上返回按钮。
 

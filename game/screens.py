@@ -119,6 +119,17 @@ def draw_pause(surface: pygame.Surface) -> None:
     ui.draw_button(surface, rects["title"], "返回标题界面")
 
 
+def draw_cutscene_pause(surface: pygame.Surface) -> None:
+    """过场的暂停浮层：没有「重新开始」，音乐不跟着停。"""
+    ui.draw_shade(surface)
+    rects = ui.cutscene_pause_rects(surface)
+    ui.draw_panel(surface, rects["panel"])
+    ui.draw_text(surface, "游戏已暂停", 30, center=(rects["panel"].centerx, rects["panel"].top + 42))
+    ui.draw_button(surface, rects["resume"], "继续游戏")
+    ui.draw_button(surface, rects["settings"], "设置")
+    ui.draw_button(surface, rects["title"], "返回标题界面")
+
+
 def draw_settings(surface: pygame.Surface, app) -> None:
     ui.draw_shade(surface)
     rects = ui.settings_rects(surface)

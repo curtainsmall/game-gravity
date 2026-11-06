@@ -80,6 +80,7 @@ class Level:
         self.height = ROWS         # 关卡高度，格
         self.background = ""       # 背景图，相对游戏根的路径；空串表示没有背景
         self.sound: dict | None = None  # 这一关的音乐：{bgm, loop, fade_in, fade_out}；None 表示没有
+        self.cutscene: dict | None = None  # 进这一关之前的过场；None 表示没有
         self.flip_area_offsets = list(FLIP_AREA_OFFSETS_DEFAULT)  # 翻转带的高度
         self.blocks: list = []
         self.planks: list = []
@@ -118,6 +119,9 @@ class Level:
         # 没有曲子就不写这个键
         if self.sound:
             definition["sound"] = copy.deepcopy(self.sound)
+        # 没有过场就不写这个键
+        if self.cutscene:
+            definition["cutscene"] = copy.deepcopy(self.cutscene)
         return definition
 
     @classmethod
@@ -130,6 +134,8 @@ class Level:
         level.background = str(definition.get("background", "") or "")
         sound = definition.get("sound")
         level.sound = copy.deepcopy(sound) if isinstance(sound, dict) else None
+        cutscene = definition.get("cutscene")
+        level.cutscene = copy.deepcopy(cutscene) if isinstance(cutscene, dict) else None
         level.destination = copy.deepcopy(definition.get("destination"))
         level.blocks = copy.deepcopy(list(definition.get("blocks", [])))
         level.planks = copy.deepcopy(list(definition.get("planks", [])))

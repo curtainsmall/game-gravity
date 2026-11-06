@@ -5,19 +5,20 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-from core import game, sound
+from core import cutscene, game, sound
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
     BUTTON_SIZE,
     COLS,
+    FACE_LABELS,
+    FACE_ORDER,
+    GAME_CUTSCENE_TAB,
+    GAME_SETTINGS_TABS,
     HANDLE_PIXELS,
     HEADER,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
-    FACE_LABELS,
-    FACE_ORDER,
-    GAME_SETTINGS_TABS,
     KIND_BLOCK,
     KIND_BUTTON,
     KIND_DESTINATION,
@@ -45,6 +46,7 @@ from core.constants import (
     NUMBER_TEXT_MAX_LENGTH,
     PORTAL_SIZE,
     ROWS,
+    SETTINGS_CUTSCENE_TAB,
     SETTINGS_TABS,
     TOOL_BLOCK,
     TOOL_BUTTON,
@@ -121,8 +123,13 @@ class Editor:
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
         self.settings: dict | None = None
-        self.settings_tab = 0                      # 关卡设置停在哪一页：常规/玩家/声音
+        self.settings_tab = 0                      # 关卡设置停在哪一页：常规/玩家/声音/过场
         self.settings_field = 0
+        self.cutscene: dict | None = None           # 过场页编辑中的状态
+        self.cutscene_scope = "level"               # "level" / "game"：声音选项的叫法
+        self.cutscene_field = 0                     # 过场页选中的格（cell 下标）
+        self.cutscene_scroll = 0                    # 过场卡片滚到第几张
+        self.cutscene_visible = cutscene.VISIBLE_CARDS  # 过场卡片一屏能看见几张（几何算出来）
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
@@ -670,7 +677,7 @@ class Editor:
         return ""
 
     def normalize_media_paths(self) -> None:
-        """背景和贴图都只记相对 game.json 的路径，一个文件都不复制。
+        """背景、贴图、音乐和过场图都只记相对 game.json 的路径，一个文件都不复制。
 
         相对路径统一写成相对游戏根的正斜杠形式；解析不到的路径原样留着，
         别把用户填的值抹掉。
@@ -691,6 +698,19 @@ class Editor:
             path = rebased(self.level.sound["bgm"])
             if path is not None:
                 self.level.sound["bgm"] = path
+        if self.level.cutscene:
+            for picture in self.level.cutscene.get("pictures", []):
+                value = picture.get("path")
+                if not value:
+                    continue
+                path = rebased(value)
+                if path is not None:
+                    picture["path"] = path
+            sound = self.level.cutscene.get("sound")
+            if isinstance(sound, dict) and sound.get("bgm"):
+                path = rebased(sound["bgm"])
+                if path is not None:
+                    sound["bgm"] = path
         for entry in self.level.textures:
             value = entry.get("image")
             if not value:
@@ -726,19 +746,25 @@ class Editor:
         self.game_card_scroll = 0
         self.game_tab = 0
         self.game_field = 0
+        self.cutscene = cutscene.from_value(settings.get(cutscene.CUTSCENE_KEY))
+        self.cutscene_scope = "game"
+        self.cutscene_field = 0
+        self.cutscene_scroll = 0
         self.preview.stop()
         self.level_select_open = False
-        self.status = "游戏配置：常规、制作名单与音乐将写入 game.json。"
+        self.status = "游戏配置：常规、制作名单、音乐与结尾过场将写入 game.json。"
 
     def close_game_settings(self, commit: bool) -> None:
         settings = self.game_settings
         cards = self.game_cards
         numbers = self.game_numbers
         sounds = self.game_sound
+        cutscene_state = self.cutscene
         self.game_settings = None
         self.game_cards = []
         self.game_numbers = {}
         self.game_sound = {}
+        self.cutscene = None
         self.preview.stop()                # 试听只在面板开着的时候有意义
         if settings is None or not commit or self.game_path is None:
             return
@@ -766,6 +792,12 @@ class Editor:
             settings[sound.GAME_SOUNDS_KEY] = block
         else:
             settings.pop(sound.GAME_SOUNDS_KEY, None)
+        # 结尾过场：没有图片就把 cutscene 键整个去掉
+        cutscene_value = cutscene.to_object(cutscene_state) if cutscene_state else None
+        if cutscene_value is not None:
+            settings[cutscene.CUTSCENE_KEY] = cutscene_value
+        else:
+            settings.pop(cutscene.CUTSCENE_KEY, None)
         try:
             game.save_settings(settings, self.game_path)
         except OSError as error:
@@ -774,13 +806,17 @@ class Editor:
         # 顶栏显示的跳高、速度跟着更新
         self.game_player = player
         names = sum(len(names) for names in settings["credits"].values())
+        pictures = len(cutscene_value["pictures"]) if cutscene_value else 0
         self.status = (
             f"游戏配置已保存：{title}，跳高 {player['jump_height']}，"
             f"速度 {player['move_speed']:g}，制作名单 {len(settings['credits'])} 个职位、"
-            f"{names} 个名字，音乐 {len(block)} 幕。"
+            f"{names} 个名字，音乐 {len(block)} 幕，结尾过场 {pictures} 张图。"
         )
 
     # ---- 游戏配置的分页 ---------------------------------------------
+    def game_cutscene_tab(self) -> bool:
+        return self.game_tab == GAME_CUTSCENE_TAB
+
     def select_game_tab(self, index: int) -> None:
         """点页签切页；换页时把试听停下，选中格回到这一页的第一格。"""
         if not 0 <= index < len(GAME_SETTINGS_TABS) or index == self.game_tab:
@@ -788,9 +824,12 @@ class Editor:
         self.preview.stop()
         self.game_tab = index
         self.game_field = 0
+        if index == GAME_CUTSCENE_TAB:
+            self.cutscene_field = 0
+            self.cutscene_scroll = 0
 
     def switch_game_tab(self, delta: int) -> None:
-        """Tab / Shift+Tab：在常规、制作名单、声音之间转。"""
+        """Tab / Shift+Tab：在常规、制作名单、声音、过场之间转。"""
         self.select_game_tab((self.game_tab + delta) % len(GAME_SETTINGS_TABS))
 
     # 每一页的格子：常规是标题与两个玩家参数；制作名单是每张卡片的职位、每个名字；
@@ -869,6 +908,9 @@ class Editor:
 
     def type_game_settings(self, char: str) -> None:
         """键盘输入：跳高只吃数字，速度、淡入淡出吃数字和小数点，路径与文字什么都能打。"""
+        if self.game_cutscene_tab():
+            self.type_cutscene(char)
+            return
         cell = self.current_game_cell()
         text = self.game_field_text()
         kind = cell[0]
@@ -894,10 +936,16 @@ class Editor:
             self.set_game_field_text(text + char)
 
     def erase_game_settings_char(self) -> None:
+        if self.game_cutscene_tab():
+            self.erase_cutscene_char()
+            return
         self.set_game_field_text(self.game_field_text()[:-1])
 
     def adjust_game_number(self, delta: int) -> None:
         """跳高按 1 格、速度和高低音淡入淡出按 0.5 一格，循环是开关。"""
+        if self.game_cutscene_tab():
+            self.adjust_cutscene(delta)
+            return
         cell = self.current_game_cell()
         kind = cell[0]
         if kind == "loop":
@@ -941,11 +989,17 @@ class Editor:
 
     def move_game_field(self, delta: int) -> None:
         """上下键只在当前这一页的格子之间走。"""
+        if self.game_cutscene_tab():
+            self.move_cutscene_field(delta)
+            return
         cells = self.game_cells()
         self.game_field = max(0, min(self.game_field + delta, len(cells) - 1))
 
     def scroll_game_cards(self, delta: int, visible: int | None = None) -> None:
         """滚轮翻制作名单卡片；visible 是当前能看到的张数，用来夹住上界。"""
+        if self.game_cutscene_tab():
+            self.scroll_cutscene(delta)
+            return
         last = max(0, len(self.game_cards) - (visible or 1))
         self.game_card_scroll = max(0, min(self.game_card_scroll + delta, last))
 
@@ -1022,6 +1076,243 @@ class Editor:
         rebased = dict(fields)
         rebased["bgm"] = relative_level_path(path, self.media_base_dir)
         return rebased
+
+    # ---- 过场编辑（关卡设置 / 游戏配置的过场页） ---------------------
+    def cutscene_cells(self) -> list[tuple]:
+        """过场页的格子，顺序就是上下键的方向：级联、声音，然后每张图四格。"""
+        state = self.cutscene
+        if state is None:
+            return []
+        cells: list[tuple] = [("cascade",), ("sound_mode",)]
+        if state["sound_mode"] == cutscene.SOUND_MODE_CUSTOM:
+            cells += [
+                ("sound_bgm",),
+                ("sound_loop",),
+                ("sound_fade_in",),
+                ("sound_fade_out",),
+            ]
+        for index in range(len(state["pictures"])):
+            cells += [("path", index), ("fade_in", index), ("hold", index), ("fade_out", index)]
+        return cells
+
+    def current_cutscene_cell(self) -> tuple:
+        cells = self.cutscene_cells()
+        if not cells:
+            return ("cascade",)
+        return cells[max(0, min(self.cutscene_field, len(cells) - 1))]
+
+    def set_cutscene_field(self, cell: tuple) -> None:
+        cells = self.cutscene_cells()
+        if cell in cells:
+            self.cutscene_field = cells.index(cell)
+            self.keep_cutscene_visible()
+
+    def cutscene_picture_index(self) -> int | None:
+        """选中的是某张图的格子时返回图片下标，否则 None。"""
+        cell = self.current_cutscene_cell()
+        return cell[1] if cell[0] in ("path", "fade_in", "hold", "fade_out") else None
+
+    def set_cutscene_cascade(self) -> None:
+        if self.cutscene is None:
+            return
+        self.cutscene["cascade"] = not bool(self.cutscene["cascade"])
+        self.set_cutscene_field(("cascade",))
+
+    def set_cutscene_sound_mode(self, mode: str) -> None:
+        """过场声音：无 / 跟随本幕 / 指定。"""
+        if self.cutscene is None or mode not in cutscene.SOUND_ORDER:
+            return
+        self.cutscene["sound_mode"] = mode
+        self.set_cutscene_field(("sound_mode",))
+        self.status = (
+            f"过场声音：{cutscene.sound_mode_label(self.cutscene_scope, mode)}。"
+        )
+
+    def cutscene_field_text(self) -> str:
+        state = self.cutscene
+        if state is None:
+            return ""
+        cell = self.current_cutscene_cell()
+        kind = cell[0]
+        if kind in ("path", "fade_in", "hold", "fade_out"):
+            index = cell[1]
+            if index >= len(state["pictures"]):
+                return ""
+            return str(state["pictures"][index][kind])
+        if kind == "sound_bgm":
+            return str(state["sound"]["bgm"])
+        if kind in ("sound_fade_in", "sound_fade_out"):
+            key = "fade_in" if kind == "sound_fade_in" else "fade_out"
+            return str(state["sound"][key])
+        return ""
+
+    def set_cutscene_field_text(self, text: str) -> None:
+        state = self.cutscene
+        if state is None:
+            return
+        cell = self.current_cutscene_cell()
+        kind = cell[0]
+        if kind in ("path", "fade_in", "hold", "fade_out"):
+            index = cell[1]
+            if index < len(state["pictures"]):
+                state["pictures"][index][kind] = text
+        elif kind == "sound_bgm":
+            state["sound"]["bgm"] = text
+        elif kind in ("sound_fade_in", "sound_fade_out"):
+            state["sound"]["fade_in" if kind == "sound_fade_in" else "fade_out"] = text
+
+    def move_cutscene_field(self, delta: int) -> None:
+        cells = self.cutscene_cells()
+        if not cells:
+            return
+        self.cutscene_field = max(0, min(self.cutscene_field + delta, len(cells) - 1))
+        self.keep_cutscene_visible()
+
+    def keep_cutscene_visible(self) -> None:
+        """光标落在某张图的格子上时，把那张卡片滚进视野。"""
+        index = self.cutscene_picture_index()
+        if index is None:
+            return
+        visible = max(1, self.cutscene_visible)
+        if index < self.cutscene_scroll:
+            self.cutscene_scroll = index
+        elif index >= self.cutscene_scroll + visible:
+            self.cutscene_scroll = index - visible + 1
+
+    def scroll_cutscene(self, delta: int) -> None:
+        if self.cutscene is None:
+            return
+        last = max(0, len(self.cutscene["pictures"]) - 1)
+        self.cutscene_scroll = max(0, min(self.cutscene_scroll + delta, last))
+
+    def adjust_cutscene(self, delta: int) -> None:
+        """←→ 和面板上的加减：时间 ±0.5，复选框/声音模式切换。"""
+        state = self.cutscene
+        if state is None:
+            return
+        cell = self.current_cutscene_cell()
+        kind = cell[0]
+        if kind in ("fade_in", "fade_out", "hold"):
+            index = cell[1]
+            if index >= len(state["pictures"]):
+                return
+            limit = cutscene.HOLD_MAX_SECONDS if kind == "hold" else cutscene.FADE_MAX_SECONDS
+            current = clamp_float(state["pictures"][index][kind], 0.0, limit, 0.0)
+            value = max(0.0, min(limit, current + cutscene.STEP_SECONDS * delta))
+            state["pictures"][index][kind] = f"{value:g}"
+        elif kind == "cascade":
+            self.set_cutscene_cascade()
+        elif kind == "sound_mode":
+            index = cutscene.SOUND_ORDER.index(state["sound_mode"])
+            mode = cutscene.SOUND_ORDER[(index + delta) % len(cutscene.SOUND_ORDER)]
+            self.set_cutscene_sound_mode(mode)
+        elif kind == "sound_loop":
+            state["sound"]["loop"] = not bool(state["sound"]["loop"])
+        elif kind in ("sound_fade_in", "sound_fade_out"):
+            key = "fade_in" if kind == "sound_fade_in" else "fade_out"
+            current = clamp_float(
+                state["sound"][key], 0.0, sound.MAX_FADE_SECONDS, sound.DEFAULT_FADE_IN
+            )
+            value = max(
+                0.0, min(sound.MAX_FADE_SECONDS, current + sound.FADE_STEP * delta)
+            )
+            state["sound"][key] = f"{value:g}"
+
+    def type_cutscene(self, char: str) -> None:
+        """键盘输入：路径什么都能打，时间只吃数字和小数点。"""
+        if self.cutscene is None:
+            return
+        cell = self.current_cutscene_cell()
+        kind = cell[0]
+        text = self.cutscene_field_text()
+        if kind == "path":
+            if char.isprintable() and len(text) < cutscene.PICTURE_PATH_MAX_LENGTH:
+                self.set_cutscene_field_text(text + char)
+        elif kind == "sound_bgm":
+            if char.isprintable() and len(text) < sound.BGM_PATH_MAX_LENGTH:
+                self.set_cutscene_field_text(text + char)
+        elif kind in ("fade_in", "fade_out", "hold", "sound_fade_in", "sound_fade_out"):
+            if (char.isdigit() or char == ".") and len(text) < 5:
+                self.set_cutscene_field_text(text + char)
+
+    def erase_cutscene_char(self) -> None:
+        if self.cutscene is None:
+            return
+        cell = self.current_cutscene_cell()
+        if cell[0] in ("cascade", "sound_mode", "sound_loop"):
+            return
+        self.set_cutscene_field_text(self.cutscene_field_text()[:-1])
+
+    def add_cutscene_picture(self) -> None:
+        if self.cutscene is None:
+            return
+        self.cutscene["pictures"].append(cutscene.new_picture())
+        index = len(self.cutscene["pictures"]) - 1
+        self.set_cutscene_field(("path", index))
+        self.cutscene_scroll = max(0, index - max(1, self.cutscene_visible) + 1)
+        self.status = "已添加一张过场图，请填路径和三个时间。"
+
+    def remove_cutscene_picture(self, index: int) -> None:
+        if self.cutscene is None or not 0 <= index < len(self.cutscene["pictures"]):
+            return
+        del self.cutscene["pictures"][index]
+        self.cutscene_field = min(self.cutscene_field, max(0, len(self.cutscene_cells()) - 1))
+        self.cutscene_scroll = max(
+            0, min(self.cutscene_scroll, max(0, len(self.cutscene["pictures"]) - 1))
+        )
+        self.status = "已删除一张过场图。"
+
+    def move_cutscene_picture(self, index: int, delta: int) -> None:
+        if self.cutscene is None:
+            return
+        pictures = self.cutscene["pictures"]
+        target = index + delta
+        if not 0 <= index < len(pictures) or not 0 <= target < len(pictures):
+            return
+        pictures[index], pictures[target] = pictures[target], pictures[index]
+        self.set_cutscene_field(("path", target))
+        self.status = "已调整图片顺序。"
+
+    def pick_cutscene_image(self, index: int) -> None:
+        """给某张过场图挑一张图：只记路径，不复制文件。"""
+        if self.cutscene is None or not 0 <= index < len(self.cutscene["pictures"]):
+            return
+        path = ask_image_path("选择过场图片", self.media_base_dir)
+        if not path:
+            self.status = "已取消选择过场图片。"
+            return
+        self.cutscene["pictures"][index]["path"] = relative_level_path(
+            path, self.media_base_dir
+        )
+        self.set_cutscene_field(("path", index))
+        self.status = "已选择过场图片：仅记录相对 game.json 的路径，不复制文件。"
+
+    def pick_cutscene_sound(self) -> None:
+        """给过场挑一首自己的曲子：只记路径，不复制文件。"""
+        if self.cutscene is None or self.cutscene["sound_mode"] != cutscene.SOUND_MODE_CUSTOM:
+            return
+        path = ask_audio_path("选择过场音乐", self.media_base_dir)
+        if not path:
+            self.status = "已取消选择过场音乐。"
+            return
+        self.cutscene["sound"]["bgm"] = relative_level_path(path, self.media_base_dir)
+        self.set_cutscene_field(("sound_bgm",))
+        self.status = "已选择过场音乐：仅记录相对 game.json 的路径，不复制文件。"
+
+    def preview_cutscene_sound(self) -> None:
+        if self.cutscene is None:
+            return
+        fields = self.cutscene["sound"]
+        path = resolve_level_path(fields["bgm"], self.media_base_dir)
+        if path is None:
+            self.preview.stop()
+            self.status = f"找不到这首曲子：{fields['bgm'] or '（未填写）'}。"
+            return
+        self.status = self.preview.toggle(
+            path,
+            bool(fields["loop"]),
+            clamp_float(fields["fade_in"], 0.0, sound.MAX_FADE_SECONDS, sound.DEFAULT_FADE_IN),
+        )
 
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:
@@ -1789,14 +2080,21 @@ class Editor:
         }
         self.settings_tab = 0
         self.settings_field = 0
+        self.cutscene = cutscene.from_value(self.level.cutscene)
+        self.cutscene_scope = "level"
+        self.cutscene_field = 0
+        self.cutscene_scroll = 0
         self.preview.stop()
         self.push_undo()
 
     # ---- 关卡设置的分页 ---------------------------------------------
     def settings_fields(self) -> tuple:
-        """当前这一页有哪几个字段（下标）。"""
+        """当前这一页有哪几个字段（下标）；过场页是卡片，没有这种字段。"""
         tab = max(0, min(self.settings_tab, len(SETTINGS_TABS) - 1))
         return SETTINGS_TABS[tab][1]
+
+    def settings_cutscene_tab(self) -> bool:
+        return self.settings_tab == SETTINGS_CUTSCENE_TAB
 
     def select_settings_tab(self, index: int) -> None:
         """点页签切页；换页时把试听停下。"""
@@ -1804,14 +2102,23 @@ class Editor:
             return
         self.preview.stop()
         self.settings_tab = index
-        self.settings_field = self.settings_fields()[0]
+        if index == SETTINGS_CUTSCENE_TAB:
+            self.cutscene_field = 0
+            self.cutscene_scroll = 0
+            return
+        fields = self.settings_fields()
+        if fields:
+            self.settings_field = fields[0]
 
     def switch_settings_tab(self, delta: int) -> None:
-        """Tab / Shift+Tab：在常规、玩家、声音之间转。"""
+        """Tab / Shift+Tab：在常规、玩家、声音、过场之间转。"""
         self.select_settings_tab((self.settings_tab + delta) % len(SETTINGS_TABS))
 
     def move_settings_field(self, delta: int) -> None:
         """上下键只在当前这一页里走。"""
+        if self.settings_cutscene_tab():
+            self.move_cutscene_field(delta)
+            return
         fields = self.settings_fields()
         index = fields.index(self.settings_field) if self.settings_field in fields else 0
         self.settings_field = fields[(index + delta) % len(fields)]
@@ -1844,20 +2151,24 @@ class Editor:
                     "fade_out": self.settings["fade_out"],
                 }
             )
+            # 这一关的过场：没有图片就把 cutscene 键整个去掉
+            self.level.cutscene = cutscene.to_object(self.cutscene) if self.cutscene else None
             self.dirty = True
             background = self.level.background or "无"
             flip_up, flip_down = self.level.flip_area_offsets
             jump, speed, overridden = self.player_stats()
             music = self.level.sound["bgm"] if self.level.sound else "无"
+            pictures = len(self.level.cutscene["pictures"]) if self.level.cutscene else 0
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
                 f"尺寸 {self.level.width}×{self.level.height}，"
                 f"翻转带 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}，"
                 f"跳高 {jump} / 速度 {speed:g}"
                 f"{'（本关覆盖游戏配置）' if overridden else '（跟随游戏配置）'}，"
-                f"音乐 {music}。"
+                f"音乐 {music}，过场 {pictures} 张图。"
             )
         self.settings = None
+        self.cutscene = None
 
     def _apply_player_override(self) -> None:
         """把关卡设置里填的跳高、速度写进 player；空格子表示跟随游戏配置，删掉这个键。"""
@@ -1946,6 +2257,9 @@ class Editor:
     def adjust_settings(self, delta: int) -> None:
         if self.settings is None:
             return
+        if self.settings_cutscene_tab():
+            self.adjust_cutscene(delta)
+            return
         field = self.settings_field
         if field == 1:
             self._step_size("width", delta, LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
@@ -2002,6 +2316,9 @@ class Editor:
     def type_settings(self, char: str) -> None:
         if self.settings is None:
             return
+        if self.settings_cutscene_tab():
+            self.type_cutscene(char)
+            return
         field = self.settings_field
         if field == 0:
             if char.isprintable() and len(self.settings["name"]) < 24:
@@ -2040,6 +2357,9 @@ class Editor:
 
     def erase_settings_char(self) -> None:
         if self.settings is None:
+            return
+        if self.settings_cutscene_tab():
+            self.erase_cutscene_char()
             return
         field = self.settings_field
         if field == 0:

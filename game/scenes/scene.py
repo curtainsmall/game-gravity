@@ -8,6 +8,7 @@ from controller.controller_system import ControllerSystem
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
 from core.game_object import GameObjectKind
+from cutscene.cutscene import Cutscene, cutscene_of
 from game_settings import game_root, load_game_settings, player_of
 from item.pickup_system import PickupSystem
 from physics.physics_system import PhysicsSystem
@@ -64,6 +65,7 @@ class Scene:
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
         self.player_animation: dict = {}
         self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
+        self.cutscene: Cutscene | None = None  # 进这一关之前的过场
 
     @classmethod
     def from_level(
@@ -106,6 +108,8 @@ class Scene:
         scene.player_animation = animation_of(level_definition, game_player, base_dir)
         # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐
         scene.bgm = level_bgm(level_definition, base_dir)
+        # 进这一关之前的过场：没图就当作没有
+        scene.cutscene = cutscene_of(level_definition, base_dir)
         return scene
 
     @classmethod

@@ -145,9 +145,83 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         return
 
 
+def handle_cutscene_click(editor: Editor, position: tuple, page: dict) -> None:
+    """过场页：级联、声音的三种模式与自定曲子，以及每张图片卡片上的按钮和格子。
+
+    点中哪一格就把光标挪过去；时间格子上的加减和卡片右上角的 ↑ ↓ − 各管各的。
+    """
+    if page["cascade"].collidepoint(position):
+        editor.set_cutscene_cascade()
+        return
+    for mode, rect in page["sound_modes"].items():
+        if rect.collidepoint(position):
+            editor.set_cutscene_sound_mode(mode)
+            return
+    if page["sound_browse"] is not None and page["sound_browse"].collidepoint(position):
+        editor.pick_cutscene_sound()
+        return
+    if page["sound_preview"] is not None and page["sound_preview"].collidepoint(position):
+        editor.preview_cutscene_sound()
+        return
+    if page["sound_path"] is not None and page["sound_path"].collidepoint(position):
+        editor.set_cutscene_field(("sound_bgm",))
+        return
+    if page["sound_loop"] is not None and page["sound_loop"].collidepoint(position):
+        editor.set_cutscene_field(("sound_loop",))
+        editor.adjust_cutscene(1)       # 循环：点整格切换
+        return
+    for cell, rect in (
+        (("sound_fade_in",), page["sound_fade_in"]),
+        (("sound_fade_out",), page["sound_fade_out"]),
+    ):
+        if rect is None or not rect.collidepoint(position):
+            continue
+        editor.set_cutscene_field(cell)
+        left, right = stepper_rects(rect)
+        if left.collidepoint(position):
+            editor.adjust_cutscene(-1)
+        elif right.collidepoint(position):
+            editor.adjust_cutscene(1)
+        return
+    if page["add"].collidepoint(position):
+        editor.add_cutscene_picture()
+        return
+    for layout in page["cards"]:
+        index = layout["index"]
+        if layout["browse"].collidepoint(position):
+            editor.pick_cutscene_image(index)
+            return
+        if layout["up"].collidepoint(position):
+            editor.move_cutscene_picture(index, -1)
+            return
+        if layout["down"].collidepoint(position):
+            editor.move_cutscene_picture(index, 1)
+            return
+        if layout["remove"].collidepoint(position):
+            editor.remove_cutscene_picture(index)
+            return
+        if layout["path"].collidepoint(position):
+            editor.set_cutscene_field(("path", index))
+            return
+        for cell, rect in (
+            (("fade_in", index), layout["fade_in"]),
+            (("hold", index), layout["hold"]),
+            (("fade_out", index), layout["fade_out"]),
+        ):
+            if not rect.collidepoint(position):
+                continue
+            editor.set_cutscene_field(cell)
+            left, right = stepper_rects(rect)
+            if left.collidepoint(position):
+                editor.adjust_cutscene(-1)
+            elif right.collidepoint(position):
+                editor.adjust_cutscene(1)
+            return
+
+
 def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
     """关卡设置浮层：切页签、点字段、浏览图片/曲子、试听、应用/取消。"""
-    geometry = settings_geometry(surface, editor.settings_tab)
+    geometry = settings_geometry(surface, editor)
     if geometry["apply"].collidepoint(position):
         editor.close_settings(True)
         return
@@ -158,6 +232,11 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         if rect.collidepoint(position):
             editor.select_settings_tab(index)
             return
+    if editor.settings_cutscene_tab():
+        handle_cutscene_click(editor, position, geometry["cutscene"])
+        if not geometry["panel"].collidepoint(position):
+            editor.close_settings(False)
+        return
     if geometry["browse"] is not None and geometry["browse"].collidepoint(position):
         editor.pick_background()
         return
@@ -191,9 +270,7 @@ def handle_game_settings_click(
 
     制作名单卡片上，名字行尾的「−」删掉那个名字，卡片底下的「＋」加一个空名字。
     """
-    geometry = game_settings_geometry(
-        surface, editor.game_cards, editor.game_card_scroll, editor.game_tab
-    )
+    geometry = game_settings_geometry(surface, editor)
     panel = geometry["panel"]
     if geometry["apply"].collidepoint(position):
         editor.close_game_settings(True)
@@ -205,6 +282,12 @@ def handle_game_settings_click(
         if rect.collidepoint(position):
             editor.select_game_tab(index)
             return
+
+    if editor.game_cutscene_tab():
+        handle_cutscene_click(editor, position, geometry["cutscene"])
+        if not panel.collidepoint(position):
+            editor.close_game_settings(False)
+        return
 
     cells = editor.game_cells()
     if editor.game_tab == 0:

@@ -49,6 +49,11 @@ def level_bgm(level_definition: dict, base_dir: str | Path | None) -> Bgm | None
     return _bgm(level_definition.get(LEVEL_SOUND_KEY), base_dir)
 
 
+def bgm_value(value, base_dir: str | Path | None) -> Bgm | None:
+    """一段 sound 对象（bgm / loop / fade_in / fade_out）→ Bgm；空或找不到文件返回 None。"""
+    return _bgm(value, base_dir)
+
+
 def _bgm(value, base_dir: str | Path | None) -> Bgm | None:
     if not isinstance(value, dict):
         return None
