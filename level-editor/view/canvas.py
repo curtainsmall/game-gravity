@@ -14,6 +14,8 @@ from core.constants import (
     FACE_DIRECTIONS,
     FACE_ORDER,
     FACE_ROTATIONS,
+    FLIP_DOWN_COLOR,
+    FLIP_UP_COLOR,
     GRID,
     GROUND_COLOR,
     HANDLE_COLOR,
@@ -73,6 +75,7 @@ def frustum_points(rect: pygame.Rect, face: str) -> list:
 def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None:
     level = editor.level
     tile = layout.tile
+    debug = editor.view_settings.get("debug", True)
     pygame.draw.rect(surface, PANEL, (layout.left, layout.top, layout.width, layout.height))
     if editor.view_settings.get("background", True):
         draw_background(surface, layout, level.background, editor.path)
@@ -82,12 +85,15 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         if row in (0, layout.rows + 1):
             pygame.draw.rect(surface, GROUND_COLOR, (layout.left, top, layout.width, tile))
 
-    for entry in level.blocks:
-        pygame.draw.rect(surface, BLOCK_COLOR, layout.entry_rect(entry))
-    for entry in level.planks:
-        pygame.draw.rect(surface, PLANK_COLOR, layout.entry_rect(entry))
-    for entry in level.movable_blocks:
-        pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
+    # 调试显示也包含翻转带：画在对象下面，标出区域但不盖住方块
+    if debug:
+        draw_flip_area(surface, editor, layout)
+        for entry in level.blocks:
+            pygame.draw.rect(surface, BLOCK_COLOR, layout.entry_rect(entry))
+        for entry in level.planks:
+            pygame.draw.rect(surface, PLANK_COLOR, layout.entry_rect(entry))
+        for entry in level.movable_blocks:
+            pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
     # 贴图压在所有方块之上（方块、木板、可移动方块），网格线再盖在贴图上当辅助线
     draw_textures(surface, layout, level, editor.path)
@@ -100,51 +106,52 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         y = layout.top + row * tile
         pygame.draw.line(surface, GRID, (layout.left, y), (layout.left + layout.width, y))
 
-    for entry in level.buttons:
-        pygame.draw.polygon(surface, BUTTON_COLOR, frustum_points(layout.entry_rect(entry), entry.get("face", "")))
+    if debug:
+        for entry in level.buttons:
+            pygame.draw.polygon(surface, BUTTON_COLOR, frustum_points(layout.entry_rect(entry), entry.get("face", "")))
 
-    for entry in level.items:
-        rect = layout.entry_rect(entry)
-        center = rect.center
-        radius = rect.width / 2.0
-        pygame.draw.polygon(
-            surface,
-            ITEM_COLOR,
-            [
-                (
-                    center[0] + radius * math.cos(math.radians(-90 + 72 * i)),
-                    center[1] + radius * math.sin(math.radians(-90 + 72 * i)),
-                )
-                for i in range(5)
-            ],
-        )
+        for entry in level.items:
+            rect = layout.entry_rect(entry)
+            center = rect.center
+            radius = rect.width / 2.0
+            pygame.draw.polygon(
+                surface,
+                ITEM_COLOR,
+                [
+                    (
+                        center[0] + radius * math.cos(math.radians(-90 + 72 * i)),
+                        center[1] + radius * math.sin(math.radians(-90 + 72 * i)),
+                    )
+                    for i in range(5)
+                ],
+            )
 
-    for entry in level.portals:
-        draw_portal(surface, layout, entry)
+        for entry in level.portals:
+            draw_portal(surface, layout, entry)
 
-    for entry in level.nozzles:
-        # pos 是底边中点：三角形底边中点就画在这个点上，底边落在 y 这道平面上。
-        center_x = layout.left + entry["pos"][0] * tile
-        base_y = layout.top + (layout.rows + 1 - entry["pos"][1]) * tile
-        up = float(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
-        apex_y = base_y - tile if up else base_y + tile
-        draw_nozzle_range(surface, layout, entry)
-        pygame.draw.polygon(
-            surface,
-            NOZZLE_COLOR,
-            [(center_x - tile / 2, base_y), (center_x + tile / 2, base_y), (center_x, apex_y)],
-        )
-        draw_nozzle_power(surface, layout, entry)
+        for entry in level.nozzles:
+            # pos 是底边中点：三角形底边中点就画在这个点上，底边落在 y 这道平面上。
+            center_x = layout.left + entry["pos"][0] * tile
+            base_y = layout.top + (layout.rows + 1 - entry["pos"][1]) * tile
+            up = float(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
+            apex_y = base_y - tile if up else base_y + tile
+            draw_nozzle_range(surface, layout, entry)
+            pygame.draw.polygon(
+                surface,
+                NOZZLE_COLOR,
+                [(center_x - tile / 2, base_y), (center_x + tile / 2, base_y), (center_x, apex_y)],
+            )
+            draw_nozzle_power(surface, layout, entry)
 
-    # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
-    if level.player is not None:
-        draw_cell_marker(surface, layout.entry_rect(level.player), PLAYER_COLOR)
-    if level.destination:
-        draw_cell_marker(surface, layout.entry_rect(level.destination), DESTINATION_COLOR)
+        # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
+        if level.player is not None:
+            draw_cell_marker(surface, layout.entry_rect(level.player), PLAYER_COLOR)
+        if level.destination:
+            draw_cell_marker(surface, layout.entry_rect(level.destination), DESTINATION_COLOR)
 
-    # 可移动方块：支点、目标点，以及两点之间的红色虚线（直线，不拐弯）
-    for entry in level.movable_blocks:
-        draw_pivot_guide(surface, layout, entry)
+        # 可移动方块：支点、目标点，以及两点之间的红色虚线（直线，不拐弯）
+        for entry in level.movable_blocks:
+            draw_pivot_guide(surface, layout, entry)
 
     # 拖动预览（浮点自由矩形）
     if editor.drag_start is not None and editor.drag_current is not None:
@@ -325,6 +332,35 @@ def draw_portal(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
     )
     pygame.draw.line(surface, PORTAL_COLOR, center, tip, 2)
     _arrow_head(surface, tip, (step_x, -step_y), PORTAL_COLOR, size=6)
+
+
+def draw_flip_area(surface: pygame.Surface, editor: Editor, layout: Layout) -> None:
+    """翻转带：向上翻贴顶画红斜纹、向下翻贴底画蓝斜纹（和游戏里的调试显示一样）。
+
+    带的几何和游戏里同一套：向上翻是 [关卡高度 - 上偏移, 关卡高度)，
+    向下翻是 [0, 下偏移)，偏移是 0 就是空带子。画在对象下面，不盖住方块。
+    """
+    level = editor.level
+    height = float(level.height)
+    window = pygame.Rect(0, 0, *layout.window)
+    up_offset, down_offset = level.flip_area_offsets
+    for upward, offset in ((True, float(up_offset)), (False, float(down_offset))):
+        if offset <= 0.0:
+            continue
+        low, high = (height - offset, height) if upward else (0.0, offset)
+        rect = layout.world_rect(0.0, low, float(level.width), high - low).clip(window)
+        if rect.width <= 0 or rect.height <= 0:
+            continue
+        _hatch(surface, rect, FLIP_UP_COLOR if upward else FLIP_DOWN_COLOR)
+
+
+def _hatch(surface: pygame.Surface, rect: pygame.Rect, color: tuple, step: int = 14, width: int = 4) -> None:
+    """斜向斑马纹：45° 斜线铺满这块矩形，颜色带 alpha 所以是半透明的。"""
+    layer = pygame.Surface(rect.size, pygame.SRCALPHA)
+    reach = rect.height
+    for x in range(-reach - step, rect.width + step, step):
+        pygame.draw.line(layer, color, (x, rect.height), (x + reach, 0), width)
+    surface.blit(layer, rect.topleft)
 
 
 def draw_ruler(surface: pygame.Surface, layout: Layout, font: pygame.font.Font) -> None:

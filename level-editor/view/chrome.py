@@ -41,10 +41,14 @@ def toolbar_rects() -> list:
 def view_menu_rects() -> list:
     """工具栏「视图」按钮下方的菜单：每行是 (矩形, 设置键, 标题)。
 
-    这里的东西只影响编辑器自己的显示，不进关卡数据、不写盘。
+    这里的东西只影响编辑器自己的显示，不进关卡数据、不写盘。调试显示和游戏里那个
+    开关是一回事：关掉就只看背景和贴图（发布后的样子），打开则连翻转带一起画出来。
     """
     anchor = next(rect for rect, _, action in toolbar_rects() if action == "view")
-    items = [("background", "显示背景")]
+    items = [
+        ("background", "显示背景"),
+        ("debug", "调试显示"),
+    ]
     return [
         (
             pygame.Rect(
