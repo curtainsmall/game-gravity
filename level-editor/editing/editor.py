@@ -1761,6 +1761,7 @@ class Editor:
             ]
         elif kind == KIND_TEXTURE:
             rows.append(("图片", entry.get("image") or "（未选择）"))
+            rows.append(("跟随", entry.get("follow") or "无"))
         return rows
 
     def dialog_checkbox(self, index: int) -> bool | None:
@@ -1870,6 +1871,26 @@ class Editor:
                 )
         elif kind == KIND_ITEM:
             entry["heavy"] = not entry.get("heavy", False)
+        elif kind == KIND_TEXTURE:
+            if field == 5:                 # 跟随：在「无」和可移动方块的名字之间循环
+                names = [
+                    block.get("name", "")
+                    for block in self.level.movable_blocks
+                    if block.get("name")
+                ]
+                options = [None, *names]
+                current = entry.get("follow") or None
+                chosen = (
+                    options[(options.index(current) + delta) % len(options)]
+                    if current in options
+                    else names[0]
+                    if names
+                    else None
+                )
+                if chosen:
+                    entry["follow"] = chosen
+                else:
+                    entry.pop("follow", None)
 
     # ---- 选择型字段的下拉列表 ---------------------------------------
     def dialog_options(self, field: int) -> list | None:
@@ -1895,6 +1916,13 @@ class Editor:
                 button.get("name", "") for button in self.level.buttons if button.get("name")
             ]
             return [("无", None)] + [(name, name) for name in names]
+        if kind == KIND_TEXTURE and field == 5:
+            names = [
+                block.get("name", "")
+                for block in self.level.movable_blocks
+                if block.get("name")
+            ]
+            return [("无", "")] + [(name, name) for name in names]
         return None
 
     def dialog_option_value(self, field: int):
@@ -1907,6 +1935,8 @@ class Editor:
             return (entry.get("sources") or [None])[0]
         if kind == KIND_PORTAL and field == 5:
             return entry.get("target") or ""
+        if kind == KIND_TEXTURE and field == 5:
+            return entry.get("follow") or ""
         return entry.get("face", FACE_ORDER[0])
 
     def toggle_dropdown(self, field: int) -> bool:
@@ -1937,6 +1967,11 @@ class Editor:
             entry["sources"] = [value] if value else []
         elif kind == KIND_PORTAL and field == 5:
             entry["target"] = value or ""
+        elif kind == KIND_TEXTURE and field == 5:
+            if value:
+                entry["follow"] = value
+            else:
+                entry.pop("follow", None)
         else:
             entry["face"] = value
         self.dropdown_field = None

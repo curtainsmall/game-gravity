@@ -41,9 +41,11 @@ class GameObject:
         portal: Portal | None = None,
         interaction_state: int = 0,
         name: str = "",
+        follow: str = "",
     ) -> None:
         self.kind: GameObjectKind = kind
         self.name: str = name                             # 关卡里的名字，供引用
+        self.follow: str = follow                         # 跟哪个可移动方块一起动（名字），空表示不动
         self.body: Body | None = body                     # 物理部件
         self.controller: Controller | None = controller   # 运动来源
         self.render: RenderSpec | None = render           # 显示部件

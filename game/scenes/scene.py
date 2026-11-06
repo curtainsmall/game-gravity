@@ -16,6 +16,7 @@ from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from sound.bgm import Bgm, level_bgm
+from world.follower import FollowSystem
 from world.level import (
     LevelDefinition,
     animation_of,
@@ -56,6 +57,7 @@ class Scene:
         self.physics_system: PhysicsSystem = PhysicsSystem()
         self.pickup_system: PickupSystem = PickupSystem()
         self.portal_system: PortalSystem = PortalSystem()
+        self.follow_system: FollowSystem = FollowSystem()
         self.render_system: RenderSystem = RenderSystem()
 
         self.requested_next_scene: Scene | None = None
@@ -103,6 +105,8 @@ class Scene:
         )
         scene = cls(world=world, objects=objects)
         scene.player = players[0] if players else None
+        # 贴图按名字挂到可移动方块上，记下加载时的相对位置
+        scene.follow_system.attach(objects)
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
         # 玩家动画先读出来放着：还没有动画系统拿去用
         scene.player_animation = animation_of(level_definition, game_player, base_dir)
@@ -134,11 +138,12 @@ class Scene:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
     def update(self, delta_seconds: float) -> None:
-        """一步：控制来源 → 物理积分与解算 → 道具拾取 → 传送门。"""
+        """一步：控制来源 → 贴图跟随 → 物理积分与解算 → 道具拾取 → 传送门。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
+        self.follow_system.update()
         self.physics_system.update(self.objects, self.world, delta_seconds)
         self.pickup_system.update(self.objects)
         self.portal_system.update(self.objects, self.player)
