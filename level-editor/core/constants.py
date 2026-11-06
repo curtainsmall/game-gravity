@@ -190,7 +190,12 @@ LEVEL_FILE_SUFFIX = ".json"
 LEVEL_BACKGROUND_NAME = "background.png"   # 没写 background 时在游戏根里找它兜底
 # 贴图没有专门的目录：image 只要求是相对 game.json 的路径，放哪儿都行
 BACKGROUND_FILTERS = [("图片文件", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
+AUDIO_FILTERS = [("音频文件", "*.ogg *.mp3 *.wav *.flac"), ("所有文件", "*.*")]
 GAME_FILTERS = [("游戏配置文件", "*.json"), ("所有文件", "*.*")]
+
+# 玩家自己的设置（音量）：和游戏共用 exe 旁边的 .game/setting.json，编辑器只读它
+SETTING_DIR_NAME = ".game"
+SETTING_FILE_NAME = "setting.json"
 
 # ---- 界面尺寸 ----
 # (文字, 动作, 宽度, 什么时候显示, 靠哪边)：
@@ -203,6 +208,7 @@ TOOLBAR_ITEMS = [
     ("保存", "save", 56, "level", "left"),
     ("撤销", "undo", 56, "level", "left"),
     ("关卡设置", "settings", 88, "level", "right"),
+    ("声音", "sound", 56, "game", "right"),
     ("游戏配置", "game_settings", 88, "game", "right"),
 ]
 

@@ -14,6 +14,7 @@ from physics.physics_system import PhysicsSystem
 from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
+from sound.bgm import Bgm, level_bgm
 from world.level import (
     LevelDefinition,
     animation_of,
@@ -62,6 +63,7 @@ class Scene:
         self.debug: bool = False
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
         self.player_animation: dict = {}
+        self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
 
     @classmethod
     def from_level(
@@ -102,6 +104,8 @@ class Scene:
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
         # 玩家动画先读出来放着：还没有动画系统拿去用
         scene.player_animation = animation_of(level_definition, game_player, base_dir)
+        # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐
+        scene.bgm = level_bgm(level_definition, base_dir)
         return scene
 
     @classmethod

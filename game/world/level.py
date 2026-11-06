@@ -19,6 +19,7 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖
     destination              终点
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
+    sound                    这一关的音乐：bgm（相对 game.json 的路径）、loop、fade_in、fade_out
 
 有矩形的对象都写成 {"pos": [x, y], "size": [w, h]}：pos 是左下角，size 缺省 1×1
 （传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是

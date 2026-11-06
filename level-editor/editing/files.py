@@ -1,6 +1,12 @@
 """文件对话框小件。"""
 
-from core.constants import BACKGROUND_FILTERS, DEFAULT_GAME_DIR, GAME_FILTERS, GAME_FILE_NAME
+from core.constants import (
+    AUDIO_FILTERS,
+    BACKGROUND_FILTERS,
+    DEFAULT_GAME_DIR,
+    GAME_FILTERS,
+    GAME_FILE_NAME,
+)
 
 
 def ask_game_file(title: str, initial_dir: str = DEFAULT_GAME_DIR) -> str | None:
@@ -16,6 +22,11 @@ def ask_game_file_to_create(title: str, initial_dir: str = DEFAULT_GAME_DIR) -> 
 def ask_image_path(title: str, initial_dir: str) -> str | None:
     """挑一张图片（背景、贴图都用它）。"""
     return _ask_file(title, initial_dir, BACKGROUND_FILTERS, save=False)
+
+
+def ask_audio_path(title: str, initial_dir: str) -> str | None:
+    """挑一首曲子（每一幕的 BGM 都用它）。"""
+    return _ask_file(title, initial_dir, AUDIO_FILTERS, save=False)
 
 
 def _ask_file(

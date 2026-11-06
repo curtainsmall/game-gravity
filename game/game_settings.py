@@ -2,10 +2,11 @@
 
 游戏根就是 assets/game 这个文件夹：
     game.json          游戏自己的设置：title 是标题，credits 是版权信息（职位 → 名字数组），
-                       player 是玩家默认的跳高、速度与动画
+                       player 是玩家默认的跳高、速度与动画，sounds 是标题与结局的音乐
     levels/<名字>.json 一个文件是一关，文件名（去掉 .json）就是关卡名
 game.json 和 levels/*.json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
-图片放哪儿都行，只要能按相对路径找到。打包后 game/ 必须和 exe 放在一起。
+图片、曲目放哪儿都行，只要能按相对路径找到。打包后 game/ 必须和 exe 放在一起。
+玩家自己的偏好（音量）不在这里，在 exe 旁边的 .game/setting.json（见 user_settings）。
 """
 
 import json

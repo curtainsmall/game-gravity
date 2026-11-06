@@ -26,6 +26,7 @@ from core.constants import (
 )
 from core.helpers import display_path
 from view.layout import Layout
+from view.widgets import draw_checkbox
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -140,9 +141,9 @@ def draw_view_menu(surface: pygame.Surface, editor: Editor, font: pygame.font.Fo
     for rect, key, label in rects:
         if rect.collidepoint(mouse):
             pygame.draw.rect(surface, (100, 100, 110), rect)
-        mark = "[x]" if editor.view_settings.get(key, True) else "[ ]"
-        text = font.render(f"{mark} {label}", True, TEXT)
-        surface.blit(text, (rect.left + 6, rect.centery - text.get_height() // 2))
+        draw_checkbox(
+            surface, font, rect, label, bool(editor.view_settings.get(key, True)), inset=6
+        )
 
 
 def handle_view_menu_click(editor: Editor, position: tuple, window_width: int) -> bool:

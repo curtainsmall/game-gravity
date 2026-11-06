@@ -260,13 +260,15 @@
       "pos": [8.5, 0],
       "size": [1.0, 0.3],
       "face": "up",
-      "target": "p2"
+      "target": "p2",
+      "name": "p1"
     },
     {
       "pos": [13.0, 0.5],
       "size": [1.0, 0.3],
       "face": "right",
-      "target": "p1"
+      "target": "p1",
+      "name": "p2"
     }
   ],
   "items": [

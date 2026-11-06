@@ -19,7 +19,14 @@ from core.constants import (
     TEXT,
 )
 from core.helpers import display_path, level_name_of
-from view.widgets import draw_button, draw_panel, draw_stepper, place_panel, stepper_rects
+from view.widgets import (
+    draw_button,
+    draw_checkbox,
+    draw_panel,
+    draw_stepper,
+    place_panel,
+    stepper_rects,
+)
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -529,6 +536,185 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     draw_button(surface, font, remove_rect, "删除职位")
     draw_button(surface, font, apply_rect, "应用")
     draw_button(surface, font, cancel_rect, "取消")
+
+
+SOUND_PANEL_WIDTH = 620       # 和游戏配置面板同宽：最小窗口下按钮也够得着
+SOUND_TAB_HEIGHT = 24
+SOUND_TAB_GAP = 4
+SOUND_TAB_PADDING = 12
+SOUND_TAB_MAX_WIDTH = 180
+SOUND_FIELD_HEIGHT = ROW_HEIGHT + 2
+SOUND_ROW_STEP = 32            # 一页里两行字段之间的行距
+SOUND_CONTENT_HEIGHT = 178     # 一页内容的固定高度：路径、循环、淡入淡出、三行说明
+SOUND_FOOTER_HEIGHT = 40
+
+_TAB_FONT: pygame.font.Font | None = None
+
+
+def _tab_text_width(text: str) -> int:
+    """页签宽度要按文字量算；几何和绘制用同一个字体，两边才对得上。"""
+    global _TAB_FONT
+    if _TAB_FONT is None:
+        _TAB_FONT = pygame.font.SysFont("microsoftyahei", 14)
+    return _TAB_FONT.size(text)[0]
+
+
+def _tab_width(label: str) -> int:
+    return min(SOUND_TAB_MAX_WIDTH, _tab_text_width(label) + SOUND_TAB_PADDING * 2)
+
+
+def _pack_tabs(widths: list) -> list:
+    """页签一行放不下就换行；返回每行里有哪几页（下标）。"""
+    limit = SOUND_PANEL_WIDTH - 2 * MARGIN
+    rows: list[list[int]] = [[]]
+    used = 0
+    for index, width in enumerate(widths):
+        if rows[-1] and used + width > limit:
+            rows.append([])
+            used = 0
+        rows[-1].append(index)
+        used += width + SOUND_TAB_GAP
+    return rows
+
+
+def sound_geometry(surface: pygame.Surface, tabs: list, index: int) -> dict:
+    """声音浮层：一排页签（标题、结局、玩家、每个关卡一页），下面是当前页的四个字段。
+
+    页签按文字宽度排，一行放不下就换行，面板高度跟着行数长。
+    """
+    rows = _pack_tabs([_tab_width(tab["label"]) for tab in tabs])
+    header = 32 + len(rows) * (SOUND_TAB_HEIGHT + SOUND_TAB_GAP) + 8
+    panel = place_panel(
+        surface,
+        pygame.Rect(
+            0, 0, SOUND_PANEL_WIDTH, header + SOUND_CONTENT_HEIGHT + SOUND_FOOTER_HEIGHT
+        ),
+    )
+
+    tabs_top = panel.top + 32
+    tab_rects = []
+    for row_index, row in enumerate(rows):
+        x = panel.left + MARGIN
+        y = tabs_top + row_index * (SOUND_TAB_HEIGHT + SOUND_TAB_GAP)
+        for tab_index in row:
+            width = _tab_width(tabs[tab_index]["label"])
+            tab_rects.append((pygame.Rect(x, y, width, SOUND_TAB_HEIGHT), tab_index))
+            x += width + SOUND_TAB_GAP
+    content_top = tabs_top + len(rows) * (SOUND_TAB_HEIGHT + SOUND_TAB_GAP) + 8
+
+    row = pygame.Rect(
+        panel.left + MARGIN, content_top, panel.width - 2 * MARGIN, SOUND_FIELD_HEIGHT
+    )
+    preview_rect = pygame.Rect(row.right - 76, row.top, 76, row.height)
+    browse_rect = pygame.Rect(preview_rect.left - 6 - 76, row.top, 76, row.height)
+    path_rect = pygame.Rect(row.left, row.top, browse_rect.left - 6 - row.left, row.height)
+
+    loop_rect = pygame.Rect(row.left, row.top + SOUND_ROW_STEP, 260, SOUND_FIELD_HEIGHT)
+
+    fades_top = row.top + SOUND_ROW_STEP * 2
+    fade_width = min(280, (row.width - 16) // 2)
+    fade_in_rect = pygame.Rect(row.left, fades_top, fade_width, SOUND_FIELD_HEIGHT)
+    fade_out_rect = pygame.Rect(
+        row.left + fade_width + 16, fades_top, fade_width, SOUND_FIELD_HEIGHT
+    )
+
+    hint_rect = pygame.Rect(row.left, fades_top + SOUND_FIELD_HEIGHT + 10, row.width, 66)
+
+    button_y = panel.bottom - 10 - BUTTON_HEIGHT
+    apply_rect = pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT)
+    cancel_rect = pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT)
+    return {
+        "panel": panel,
+        "tabs": tab_rects,
+        "path": path_rect,
+        "browse": browse_rect,
+        "preview": preview_rect,
+        "loop": loop_rect,
+        "fade_in": fade_in_rect,
+        "fade_out": fade_out_rect,
+        "hint": hint_rect,
+        "apply": apply_rect,
+        "cancel": cancel_rect,
+    }
+
+
+def draw_sound(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    tabs = editor.sound_tabs or []
+    geometry = sound_geometry(surface, tabs, editor.sound_index)
+    panel = geometry["panel"]
+    draw_panel(surface, panel)
+
+    surface.blit(font.render("声音", True, TEXT), (panel.left + MARGIN, panel.top + 8))
+    hint = font.render("每一幕一首背景音乐，曲子路径相对 game.json", True, DIM_TEXT)
+    surface.blit(hint, (panel.right - MARGIN - hint.get_width(), panel.top + 8))
+
+    # 页签：标题、结局、玩家，然后每个关卡文件一页（按文件名排序）
+    for rect, index in geometry["tabs"]:
+        selected = index == editor.sound_index
+        pygame.draw.rect(surface, (80, 80, 90) if selected else BUTTON_BG, rect)
+        pygame.draw.rect(surface, HIGHLIGHT if selected else DIALOG_BORDER, rect, 1)
+        label = font.render(tabs[index]["label"], True, HIGHLIGHT if selected else TEXT)
+        clip = pygame.Rect(rect.left + 8, rect.top, max(1, rect.width - 16), rect.height)
+        previous = surface.get_clip()
+        surface.set_clip(clip)
+        surface.blit(label, (clip.left, rect.centery - label.get_height() // 2))
+        surface.set_clip(previous)
+
+    if not editor.sound_available():
+        text = font.render(
+            "玩家音效还没有定义内容，这一页先空着；音量在游戏内的设置里调。", True, DIM_TEXT
+        )
+        surface.blit(
+            text,
+            (
+                geometry["path"].left + 6,
+                geometry["path"].centery - text.get_height() // 2,
+            ),
+        )
+    else:
+        values = editor.current_sound()
+        focus = editor.sound_focus
+        _draw_cell(
+            surface,
+            font,
+            geometry["path"],
+            f"BGM 路径：{values['bgm'] or '（无）'}",
+            focus == 0,
+        )
+        draw_button(surface, font, geometry["browse"], "浏览…")
+        draw_button(surface, font, geometry["preview"], "试听")
+
+        draw_checkbox(
+            surface,
+            font,
+            geometry["loop"],
+            "循环播放",
+            bool(values["loop"]),
+            focus == 1,
+        )
+        for field, rect, label, key in (
+            (2, geometry["fade_in"], "淡入", "fade_in"),
+            (3, geometry["fade_out"], "淡出", "fade_out"),
+        ):
+            _draw_cell(surface, font, rect, f"{label}（秒）：{values[key]}", focus == field)
+            left, right = stepper_rects(rect)
+            draw_stepper(surface, left, -1)
+            draw_stepper(surface, right, 1)
+
+    for line_index, line in enumerate(
+        (
+            "循环关闭时只放一遍；没有 BGM 的一幕就不写进去。",
+            "「应用」把标题与结局写进 game.json 的 sounds，把每一关写进该关文件里的 sound。",
+            "Tab 切换分页；Enter 应用；Esc 取消。",
+        )
+    ):
+        surface.blit(
+            font.render(line, True, DIM_TEXT),
+            (geometry["hint"].left, geometry["hint"].top + line_index * 22),
+        )
+
+    draw_button(surface, font, geometry["apply"], "应用")
+    draw_button(surface, font, geometry["cancel"], "取消")
 
 
 def switch_geometry(surface: pygame.Surface) -> tuple:

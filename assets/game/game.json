@@ -12,5 +12,13 @@
     "jump_height": 8,
     "move_speed": 8.0,
     "animation": {}
+  },
+  "sounds": {
+    "title": {
+      "bgm": "sounds/开场曲beta.mp3",
+      "loop": true,
+      "fade_in": 0.5,
+      "fade_out": 1.0
+    }
   }
 }

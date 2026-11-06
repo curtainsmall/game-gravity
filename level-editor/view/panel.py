@@ -18,7 +18,7 @@ from core.constants import (
     ROW_HEIGHT,
     TEXT,
 )
-from view.widgets import draw_button, draw_stepper, stepper_rects
+from view.widgets import draw_button, draw_checkbox, draw_stepper, stepper_rects
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -179,12 +179,17 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
     for rect, index in detail_row_rects(surface, editor):
         label, value = rows[index]
         selected = index == editor.dialog_field
+        checked = editor.dialog_checkbox(index)
+        pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
+        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
+        if checked is not None:
+            # 「是 / 否」的项画成复选框：整行点一下就勾上或取消
+            draw_checkbox(surface, font, rect, label, checked, selected, inset=6)
+            continue
         typing = selected and editor.number_buffer is not None
         if typing:
             # 正在键盘输入：显示输入框内容加光标，而不是已生效的值
             value = f"{editor.number_buffer}|"
-        pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
-        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
         left, right = stepper_rects(rect)
         text = font.render(f"{label}：{value}", True, HIGHLIGHT if selected else TEXT)
         clip = max(1, left.left - rect.left - 8)

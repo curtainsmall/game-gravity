@@ -25,6 +25,7 @@ def main() -> None:
         app.draw(screen)
         pygame.display.flip()
 
+    app.sound.shutdown()
     pygame.quit()
 
 

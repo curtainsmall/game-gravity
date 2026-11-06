@@ -13,5 +13,15 @@
   "player": {
     "pos": [0.0, 0.0],
     "size": [1.0, 1.0]
+  },
+  "destination": {
+    "pos": [7.0, 0.0],
+    "size": [1.0, 1.0]
+  },
+  "sound": {
+    "bgm": "sounds/开场曲beta.mp3",
+    "loop": true,
+    "fade_in": 0.5,
+    "fade_out": 1.0
   }
 }

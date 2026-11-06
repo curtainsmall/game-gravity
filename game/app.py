@@ -2,6 +2,7 @@
 
 界面有标题、选关、游玩、结算四个，暂停和设置是两个浮层：暂停只盖在游玩上，
 设置可以盖在任何界面上。游玩本身不存档，退出标题就算放弃进度。
+音乐跟着界面走：标题和选关共用标题音乐，每一关放关卡自己的曲子，结算放结局音乐。
 """
 
 from enum import StrEnum
@@ -10,11 +11,14 @@ import pygame
 
 import screens
 import ui
+import user_settings
 from controller.input_source import InputState
-from game_settings import credits_of, load_game_settings, title_of
+from game_settings import credits_of, game_root, load_game_settings, title_of
 from levels import discover_levels, load_scene
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
+from sound.bgm import ENDING_KEY, TITLE_KEY, game_bgm
+from sound.sound_system import SoundSystem
 
 PHYSICS_STEP_SECONDS = 1.0 / 60.0
 MAX_ELAPSED_SECONDS_PER_FRAME = 0.25
@@ -44,10 +48,18 @@ class App:
         self.surface = surface
         self.running = True
         self.screen = Screen.TITLE
+        # 玩家自己的设置（exe 旁边的 .game/setting.json）：只有音量，改一次写一次
+        self.user_settings = user_settings.load_settings()
+        self.sound = SoundSystem(user_settings.volume_of(self.user_settings))
         # 游戏设置（game.json）：标题和版权信息，标题给窗口和标题画面，版权给结算画面
         self.game_settings = load_game_settings()
         self.title = title_of(self.game_settings)
         self.credits = credits_of(self.game_settings)
+        # 标题、结局的音乐在 game.json 里；每一关的音乐跟着关卡文件走（Scene.bgm）
+        self.title_bgm = game_bgm(self.game_settings, TITLE_KEY, game_root())
+        self.ending_bgm = game_bgm(self.game_settings, ENDING_KEY, game_root())
+        self.sound.start()
+        self.sound.play(self.title_bgm)
         self.levels = discover_levels()
         self.level_index = 0
         self.scene: Scene | None = None
@@ -131,7 +143,7 @@ class App:
         if event.type != pygame.KEYDOWN:
             return
         if event.key == pygame.K_ESCAPE:
-            self.paused = True
+            self.set_paused(True)
         elif event.key == pygame.K_TAB and self.scene is not None:
             self.scene.toggle_view_mode()
             self.view_mode = self.scene.view_mode
@@ -142,12 +154,12 @@ class App:
 
     def handle_pause_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.paused = False
+            self.set_paused(False)
             return
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             rects = ui.pause_rects(self.surface)
             if rects["resume"].collidepoint(event.pos) or not rects["panel"].collidepoint(event.pos):
-                self.paused = False
+                self.set_paused(False)
             elif rects["restart"].collidepoint(event.pos):
                 self.start_level(self.level_index)
             elif rects["settings"].collidepoint(event.pos):
@@ -159,13 +171,26 @@ class App:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.settings_open = False
             return
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            rects = ui.settings_rects(self.surface)
-            if rects["debug"].collidepoint(event.pos):
-                self.debug = not self.debug
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return
+        rects = ui.settings_rects(self.surface)
+        for key, row in rects["volume"].items():
+            if row["minus"].collidepoint(event.pos):
+                self.step_volume(key, -1)
                 return
-            if rects["back"].collidepoint(event.pos) or not rects["panel"].collidepoint(event.pos):
-                self.settings_open = False
+            if row["plus"].collidepoint(event.pos):
+                self.step_volume(key, 1)
+                return
+            if row["hit"].collidepoint(event.pos):
+                # 点滑条：按点到的位置直接跳过去
+                track = row["track"]
+                self.set_volume(key, (event.pos[0] - track.left) / max(1, track.width))
+                return
+        if rects["debug"].collidepoint(event.pos):
+            self.debug = not self.debug
+            return
+        if rects["back"].collidepoint(event.pos) or not rects["panel"].collidepoint(event.pos):
+            self.settings_open = False
 
     def handle_ending_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -177,6 +202,27 @@ class App:
                 self.quit_to_title()
             elif rects["quit"].collidepoint(event.pos):
                 self.running = False
+
+    # ---- 音量与暂停 -------------------------------------------------
+    def set_volume(self, key: str, value: float) -> None:
+        """改一项音量：马上对正在放的曲子生效，同时写进 .game/setting.json。"""
+        volume = user_settings.set_volume(self.user_settings, key, value)
+        self.sound.set_volume(volume)
+        user_settings.save_settings(self.user_settings)
+
+    def step_volume(self, key: str, steps: int) -> None:
+        """按 10% 一格加减（设置里的「−」「＋」）。"""
+        volume = user_settings.step_volume(self.user_settings, key, steps)
+        self.sound.set_volume(volume)
+        user_settings.save_settings(self.user_settings)
+
+    def set_paused(self, paused: bool) -> None:
+        """暂停：音乐跟着停住，回来接着放。"""
+        self.paused = paused
+        if paused:
+            self.sound.pause()
+        else:
+            self.sound.resume()
 
     # ---- 关卡切换 ---------------------------------------------------
     def show_toast(self, text: str) -> None:
@@ -213,6 +259,8 @@ class App:
         self.unconsumed_seconds = 0.0
         self.jump_edge = False
         self.flip_edge = False
+        # 同一关再进一次时这一首还在放，不会打断重来
+        self.sound.play(scene.bgm)
 
     def next_playable_index(self, start: int) -> int | None:
         """从 start 起往后第一个能玩的关卡（不往回绕）。"""
@@ -234,6 +282,7 @@ class App:
         index = self.next_playable_index(self.level_index + 1)
         if index is None:
             self.screen = Screen.ENDING
+            self.sound.play(self.ending_bgm)
             return
         self.start_level(index)
 
@@ -244,6 +293,8 @@ class App:
         self.paused = False
         self.settings_open = False
         self.screen = Screen.TITLE
+        # 从暂停里退回标题时音乐也停在那儿，play 会先把它叫醒
+        self.sound.play(self.title_bgm)
 
     def clamp_level_scroll(self) -> None:
         limit = ui.max_level_scroll(self.surface, len(self.levels))
@@ -251,6 +302,8 @@ class App:
 
     # ---- 每帧 -------------------------------------------------------
     def update(self, elapsed_seconds: float) -> None:
+        # 换曲时旧曲子淡出、新曲子晚一步开始，都靠这一步推进
+        self.sound.update(elapsed_seconds)
         if self.toast_seconds > 0.0:
             self.toast_seconds = max(0.0, self.toast_seconds - elapsed_seconds)
         if self.screen != Screen.PLAYING or self.paused or self.settings_open:

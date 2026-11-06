@@ -126,6 +126,27 @@ def draw_settings(surface: pygame.Surface, app) -> None:
     ui.draw_panel(surface, panel)
     ui.draw_text(surface, "设置", 30, center=(panel.centerx, panel.top + 40))
 
+    # 音量：总音量乘在音乐和音效上，改一下立刻生效，同时写进 .game/setting.json
+    surface.blit(ui.font(18).render("音量", True, ui.DIM_TEXT), (panel.left + 24, panel.top + 64))
+    saved = ui.font(16).render("保存到程序旁边的 .game/setting.json", True, ui.DIM_TEXT)
+    surface.blit(saved, (panel.right - 24 - saved.get_width(), panel.top + 66))
+    for key, row in rects["volume"].items():
+        amount = app.sound.volume.get(key, 1.0)
+        ui.draw_text(
+            surface, ui.VOLUME_LABELS[key], 18, pos=(row["row"].left, row["row"].centery - 11)
+        )
+        track = row["track"]
+        pygame.draw.rect(surface, (210, 210, 210), track)
+        filled = pygame.Rect(track.left, track.top, int(track.width * amount), track.height)
+        pygame.draw.rect(surface, (120, 150, 190), filled)
+        pygame.draw.rect(surface, ui.BORDER, track, 1)
+        pygame.draw.rect(
+            surface, ui.TEXT, pygame.Rect(filled.right - 1, track.top - 4, 3, track.height + 8)
+        )
+        ui.draw_button(surface, row["minus"], "−", 18)
+        ui.draw_button(surface, row["plus"], "＋", 18)
+        ui.draw_text(surface, f"{round(amount * 100)}%", 18, center=row["value"].center)
+
     row = rects["debug"]
     hovered = row.collidepoint(pygame.mouse.get_pos())
     if hovered:

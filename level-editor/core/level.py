@@ -4,6 +4,8 @@
 编辑器自己关心的事：玩家的跳高、速度、动画属于整个游戏（game.json，见 core.game），
 不归 Level 管；关卡 json 的 player 里如果还留着这几个键，原样保留当这一关的覆盖值。
 关卡名就是文件名（levels/<名字>.json），json 里不再写 name。
+这一关的背景音乐（sound）跟着关卡文件走，归 Level 管；标题和结局的音乐在 game.json 里，
+由声音浮层直接读写（见 core.sound）。
 """
 
 import copy
@@ -77,6 +79,7 @@ class Level:
         self.width = COLS          # 关卡宽度，格
         self.height = ROWS         # 关卡高度，格
         self.background = ""       # 背景图，相对游戏根的路径；空串表示没有背景
+        self.sound: dict | None = None  # 这一关的音乐：{bgm, loop, fade_in, fade_out}；None 表示没有
         self.flip_area_offsets = list(FLIP_AREA_OFFSETS_DEFAULT)  # 翻转带的高度
         self.blocks: list = []
         self.planks: list = []
@@ -112,6 +115,9 @@ class Level:
         # 没有背景就不写这个键
         if self.background:
             definition["background"] = self.background
+        # 没有曲子就不写这个键
+        if self.sound:
+            definition["sound"] = copy.deepcopy(self.sound)
         return definition
 
     @classmethod
@@ -122,6 +128,8 @@ class Level:
         level.height = clamp_int(definition.get("height"), LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
         level.flip_area_offsets = _read_flip_area_offsets(definition, level.height)
         level.background = str(definition.get("background", "") or "")
+        sound = definition.get("sound")
+        level.sound = copy.deepcopy(sound) if isinstance(sound, dict) else None
         level.destination = copy.deepcopy(definition.get("destination"))
         level.blocks = copy.deepcopy(list(definition.get("blocks", [])))
         level.planks = copy.deepcopy(list(definition.get("planks", [])))

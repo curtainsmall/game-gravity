@@ -5,7 +5,7 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-from core import game
+from core import game, sound
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
     BUTTON_SIZE,
@@ -71,7 +71,7 @@ from core.helpers import (
     snap,
 )
 from core.level import Level, dump_level
-from editing.files import ask_game_file, ask_game_file_to_create, ask_image_path
+from editing.files import ask_audio_path, ask_game_file, ask_game_file_to_create, ask_image_path
 from view.texture import image_size
 
 if TYPE_CHECKING:
@@ -124,6 +124,11 @@ class Editor:
         self.game_cards: list = []                 # 浮层里的版权卡片：{job, names: [名字…]}
         self.game_card_scroll = 0                  # 卡片列表滚到第几张
         self.game_field = 0                        # 浮层里选中的格：标题、跳高、速度、职位、名字…
+        self.sound_tabs: list | None = None        # 声音浮层：每一页是某份 json 里的一幕
+        self.sound_values: list = []               # 每一页编辑中的四项（数字是字符串）
+        self.sound_index = 0                       # 声音浮层当前页
+        self.sound_focus = 0                       # 当前页选中的项：路径、循环、淡入、淡出
+        self.preview = sound.Preview()             # 试听（和游戏共用一个混音器）
         self.level_select_open = False             # 关卡列表浮层
         self.level_select_scroll = 0               # 列表滚到第几行
         self.pending_switch: tuple[str, str] | None = None  # 等确认的切换：("level"/"game"/"new", 目标)
@@ -892,6 +897,220 @@ class Editor:
         self.game_field = min(self.game_field, len(self.game_cells()) - 1)
         self.status = "已删除一个名字。"
 
+    # ---- 声音（每一幕一首 BGM） -------------------------------------
+    def open_sound(self) -> None:
+        """声音浮层：标题、结局、玩家，然后每个关卡文件一页（按文件名排序）。"""
+        if self.game_path is None:
+            self.status = "尚未打开游戏配置，无法编辑声音。"
+            return
+        tabs = [
+            {"key": sound.TITLE_KEY, "label": "标题", "kind": "game"},
+            {"key": sound.ENDING_KEY, "label": "结局", "kind": "game"},
+            {"key": sound.PLAYER_KEY, "label": "玩家", "kind": "player"},
+        ]
+        for path in self.level_files():
+            tabs.append(
+                {"key": path, "label": level_name_of(path), "kind": "level", "path": path}
+            )
+        self.sound_tabs = tabs
+        self.sound_values = self._read_sound_values(tabs)
+        self.sound_index = 0
+        self.sound_focus = 0
+        self.level_select_open = False
+        self.file_menu_open = False
+        self.view_menu_open = False
+        self.status = "声音：标题与结局写进 game.json，每一关的曲子写进它自己的关卡文件。"
+
+    def _read_sound_values(self, tabs: list) -> list:
+        """每一页现在的值：标题、结局在 game.json 里，关卡在各自的关卡文件里。"""
+        settings = game.load_settings(self.game_path) if self.game_path else {}
+        block = settings.get(sound.GAME_SOUNDS_KEY)
+        block = block if isinstance(block, dict) else {}
+        values = []
+        for tab in tabs:
+            if tab["kind"] == "game":
+                values.append(sound.fields_of(block.get(tab["key"])))
+            elif tab["kind"] == "level":
+                values.append(sound.read_fields(sound.read_definition(tab["path"])))
+            else:
+                values.append(sound.fields_of(None))
+        return values
+
+    def close_sound(self, commit: bool) -> None:
+        """关掉声音浮层；commit 时把每一页写回它该在的文件。"""
+        tabs, values = self.sound_tabs, self.sound_values
+        self.sound_tabs = None
+        self.sound_values = []
+        self.sound_index = 0
+        self.sound_focus = 0
+        self.preview.stop()
+        if tabs is None or not commit or self.game_path is None:
+            return
+
+        problems: list[str] = []
+        # game.json：标题和结局两页；和原来一样就不重写这个文件
+        settings = game.load_settings(self.game_path)
+        original = settings.get(sound.GAME_SOUNDS_KEY)
+        original_block = dict(original) if isinstance(original, dict) else {}
+        block = dict(original_block)
+        for index, tab in enumerate(tabs):
+            if tab["kind"] != "game":
+                continue
+            spec = sound.to_object(self._rebase_sound(values[index]))
+            if spec is None:
+                block.pop(tab["key"], None)
+            else:
+                block[tab["key"]] = spec
+        if block != original_block:
+            if block:
+                settings[sound.GAME_SOUNDS_KEY] = block
+            else:
+                settings.pop(sound.GAME_SOUNDS_KEY, None)
+            try:
+                game.save_settings(settings, self.game_path)
+            except OSError as error:
+                problems.append(f"game.json 保存失败：{error}")
+
+        # 每一关：只换它文件里的 sound，关卡别的内容原样留着
+        level_count = 0
+        current = os.path.normpath(self.path) if self.path else None
+        for index, tab in enumerate(tabs):
+            if tab["kind"] != "level":
+                continue
+            spec = sound.to_object(self._rebase_sound(values[index]))
+            error = sound.write_level_sound(tab["path"], spec)
+            if error is not None:
+                problems.append(f"「{tab['label']}」保存失败：{error}")
+                continue
+            level_count += 1
+            if current is not None and os.path.normpath(tab["path"]) == current:
+                # 当前打开的这关：内存里也改成一样的，保存关卡时不会把音乐写丢
+                self.level.sound = spec
+
+        if problems:
+            self.status = "声音：" + "；".join(problems) + "。"
+            return
+        self.status = (
+            f"声音已保存：标题与结局在 {display_path(self.game_path)}，"
+            f"{level_count} 个关卡文件已同步。"
+        )
+
+    def sound_available(self) -> bool:
+        """当前这一页能不能编辑：玩家音效还没有内容，那一页是空的。"""
+        if not self.sound_tabs:
+            return False
+        return self.sound_tabs[self.sound_index]["kind"] != "player"
+
+    def _rebase_sound(self, fields: dict) -> dict:
+        """曲子能解析到就改成相对 game.json 的正斜杠写法，和背景、贴图一样。"""
+        path = resolve_level_path(fields.get("bgm"), self.media_base_dir)
+        if path is None:
+            return fields
+        rebased = dict(fields)
+        rebased["bgm"] = relative_level_path(path, self.media_base_dir)
+        return rebased
+
+    def current_sound(self) -> dict:
+        """当前这一页编辑中的四项。"""
+        if not self.sound_tabs or not self.sound_values:
+            return sound.fields_of(None)
+        return self.sound_values[self.sound_index]
+
+    def select_sound_tab(self, index: int) -> None:
+        """切到另一页：停下试听，选中项回到 BGM 路径。"""
+        if not self.sound_tabs or not 0 <= index < len(self.sound_tabs):
+            return
+        if index == self.sound_index:
+            return
+        self.preview.stop()
+        self.sound_index = index
+        self.sound_focus = 0
+
+    def move_sound_focus(self, delta: int) -> None:
+        """上下键在 BGM 路径、循环、淡入、淡出之间走。"""
+        if not self.sound_available():
+            return
+        self.sound_focus = max(0, min(self.sound_focus + delta, 3))
+
+    def toggle_sound_loop(self) -> None:
+        """循环在「是 / 否」之间切。"""
+        if not self.sound_available():
+            return
+        values = self.current_sound()
+        values["loop"] = not bool(values["loop"])
+        self.sound_focus = 1
+
+    def adjust_sound_value(self, delta: int) -> None:
+        """左右键和面板上的加减：循环切是/否，淡入淡出按 0.5 秒一格。"""
+        if not self.sound_available() or not delta:
+            return
+        if self.sound_focus == 1:
+            self.toggle_sound_loop()
+            return
+        if self.sound_focus not in (2, 3):
+            return
+        key = "fade_in" if self.sound_focus == 2 else "fade_out"
+        fallback = sound.DEFAULT_FADE_IN if key == "fade_in" else sound.DEFAULT_FADE_OUT
+        values = self.current_sound()
+        current = clamp_float(values[key], 0.0, sound.MAX_FADE_SECONDS, fallback)
+        stepped = max(0.0, min(sound.MAX_FADE_SECONDS, current + sound.FADE_STEP * delta))
+        values[key] = f"{stepped:g}"
+
+    def type_sound_char(self, char: str) -> None:
+        """键盘输入：路径什么都能打，淡入淡出只吃数字和小数点。"""
+        if not self.sound_available():
+            return
+        values = self.current_sound()
+        if self.sound_focus == 0:
+            if char.isprintable() and len(values["bgm"]) < sound.BGM_PATH_MAX_LENGTH:
+                values["bgm"] += char
+        elif self.sound_focus in (2, 3):
+            key = "fade_in" if self.sound_focus == 2 else "fade_out"
+            if (char.isdigit() or char == ".") and len(str(values[key])) < 5:
+                values[key] = str(values[key]) + char
+
+    def erase_sound_char(self) -> None:
+        if not self.sound_available():
+            return
+        values = self.current_sound()
+        if self.sound_focus == 0:
+            values["bgm"] = values["bgm"][:-1]
+        elif self.sound_focus in (2, 3):
+            key = "fade_in" if self.sound_focus == 2 else "fade_out"
+            values[key] = str(values[key])[:-1]
+
+    def pick_audio(self) -> None:
+        """给当前这一页挑一首曲子：只记路径，不复制文件。"""
+        if not self.sound_available():
+            self.status = "玩家音效还没有内容，暂时不能选曲子。"
+            return
+        path = ask_audio_path("选择背景音乐", self.media_base_dir)
+        if not path:
+            self.status = "已取消选择曲子。"
+            return
+        self.current_sound()["bgm"] = relative_level_path(path, self.media_base_dir)
+        self.sound_focus = 0
+        self.status = "已选择曲子：只记录相对 game.json 的路径，不复制文件。"
+
+    def preview_sound(self) -> None:
+        """试听当前这一页：按这一页的循环与淡入放，再点一次停。"""
+        if not self.sound_available():
+            self.status = "玩家音效还没有内容，无法试听。"
+            return
+        values = self.current_sound()
+        path = resolve_level_path(values["bgm"], self.media_base_dir)
+        if path is None:
+            self.preview.stop()
+            self.status = f"找不到这首曲子：{values['bgm'] or '（未填写）'}。"
+            return
+        self.status = self.preview.toggle(
+            path,
+            bool(values["loop"]),
+            clamp_float(
+                values["fade_in"], 0.0, sound.MAX_FADE_SECONDS, sound.DEFAULT_FADE_IN
+            ),
+        )
+
 
     # ---- 新建状态 ---------------------------------------------------
     def open_create_menu(self, position: tuple) -> None:
@@ -1338,6 +1557,21 @@ class Editor:
         elif kind == KIND_TEXTURE:
             rows.append(("图片", entry.get("image") or "（未选择）"))
         return rows
+
+    def dialog_checkbox(self, index: int) -> bool | None:
+        """这一行是不是复选框：是的话返回当前勾没勾，不是返回 None。
+
+        只有「是 / 否」的两项是可移动方块的「仅触发一次」和道具的「变重」。
+        """
+        if self.dialog is None:
+            return None
+        kind = self.dialog["kind"]
+        entry = self.dialog["entry"]
+        if kind == KIND_MOVABLE and index == 7:
+            return bool(entry.get("once", False))
+        if kind == KIND_ITEM and index == 4:
+            return bool(entry.get("heavy", False))
+        return None
 
     def dialog_title(self) -> str:
         if self.dialog is None:

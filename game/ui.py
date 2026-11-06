@@ -24,6 +24,16 @@ LEVEL_ROW_GAP = 12
 LEVEL_LIST_MARGIN = 48
 DEBUG_ROW_HEIGHT = 26     # 设置里那一行勾选框的高度
 
+# 设置浮层里的音量：总音量、音乐、音效，各一行「标签 | 滑条 | − ＋ | 百分比」
+VOLUME_KEYS = ("master", "music", "sfx")
+VOLUME_LABELS = {"master": "总音量", "music": "音乐", "sfx": "音效"}
+VOLUME_ROW_HEIGHT = 34
+VOLUME_ROW_GAP = 6
+VOLUME_LABEL_WIDTH = 84
+VOLUME_STEP_WIDTH = 26
+VOLUME_VALUE_WIDTH = 48
+SETTINGS_PANEL_SIZE = (460, 356)
+
 _FONTS: dict[int, pygame.font.Font] = {}
 
 
@@ -186,13 +196,48 @@ def pause_rects(surface: pygame.Surface) -> dict:
 
 
 def settings_rects(surface: pygame.Surface) -> dict:
-    """设置浮层：一个调试显示开关，加上返回按钮。"""
+    """设置浮层：三档音量、一个调试显示开关，加上返回按钮。
+
+    音量每行是「标签 | 滑条 | − ＋ | 百分比」：点滑条直接跳到那个位置，点加减按
+    10% 一格走。滑条的 hit 比画出来的条高，整行都能点中。
+    """
     width, height = surface.get_size()
-    panel = pygame.Rect(0, 0, 380, 228)
+    panel = pygame.Rect(0, 0, *SETTINGS_PANEL_SIZE)
     panel.center = (width // 2, height // 2)
+
+    rows = {}
+    top = panel.top + 92
+    for index, key in enumerate(VOLUME_KEYS):
+        row = pygame.Rect(
+            panel.left + 24,
+            top + index * (VOLUME_ROW_HEIGHT + VOLUME_ROW_GAP),
+            panel.width - 48,
+            VOLUME_ROW_HEIGHT,
+        )
+        plus = pygame.Rect(row.right - VOLUME_STEP_WIDTH, row.centery - 11, VOLUME_STEP_WIDTH, 22)
+        minus = pygame.Rect(plus.left - 6 - VOLUME_STEP_WIDTH, plus.top, VOLUME_STEP_WIDTH, 22)
+        value = pygame.Rect(
+            minus.left - 8 - VOLUME_VALUE_WIDTH, row.top, VOLUME_VALUE_WIDTH, row.height
+        )
+        track = pygame.Rect(
+            row.left + VOLUME_LABEL_WIDTH,
+            row.centery - 5,
+            max(1, value.left - 8 - (row.left + VOLUME_LABEL_WIDTH)),
+            10,
+        )
+        rows[key] = {
+            "row": row,
+            "track": track,
+            "hit": pygame.Rect(track.left, row.top, track.width, row.height),
+            "minus": minus,
+            "plus": plus,
+            "value": value,
+        }
+
     return {
         "panel": panel,
-        "debug": pygame.Rect(panel.left + 24, panel.top + 92, panel.width - 48, DEBUG_ROW_HEIGHT),
+        "volume": rows,
+        "debug": pygame.Rect(panel.left + 24, panel.top + 236, panel.width - 48, DEBUG_ROW_HEIGHT),
         "back": pygame.Rect(
             panel.left + 30, panel.bottom - 20 - BUTTON_SIZE[1], panel.width - 60, BUTTON_SIZE[1]
         ),

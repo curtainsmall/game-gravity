@@ -2,7 +2,16 @@
 
 import pygame
 
-from core.constants import BUTTON_BG, DIALOG_BG, DIALOG_BORDER, FOOTER, HEADER, MARGIN, TEXT
+from core.constants import (
+    BUTTON_BG,
+    DIALOG_BG,
+    DIALOG_BORDER,
+    FOOTER,
+    HEADER,
+    HIGHLIGHT,
+    MARGIN,
+    TEXT,
+)
 
 
 def draw_arrow(surface: pygame.Surface, rect: pygame.Rect, direction: int) -> None:
@@ -37,6 +46,38 @@ def draw_button(
     pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
     text = font.render(caption, True, TEXT)
     surface.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+
+
+def draw_checkbox(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    rect: pygame.Rect,
+    label: str,
+    checked: bool,
+    selected: bool = False,
+    inset: int = 0,
+) -> None:
+    """复选框：一个小方框加说明文字，整行（rect）都是它的热区。
+
+    勾没勾上只看 checked；selected 只改颜色，表示键盘光标停在这一行。
+    """
+    box = pygame.Rect(rect.left + inset, rect.centery - 8, 16, 16)
+    pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), box)
+    pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), box, 1)
+    if checked:
+        pygame.draw.lines(
+            surface,
+            HIGHLIGHT if selected else TEXT,
+            False,
+            [
+                (box.left + 3, box.centery),
+                (box.centerx, box.bottom - 4),
+                (box.right - 3, box.top + 4),
+            ],
+            2,
+        )
+    text = font.render(label, True, HIGHLIGHT if selected else TEXT)
+    surface.blit(text, (box.right + 8, rect.centery - text.get_height() // 2))
 
 
 def stepper_rects(cell: pygame.Rect) -> tuple:

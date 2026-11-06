@@ -10,6 +10,7 @@ from view.modals import (
     game_settings_geometry,
     level_select_geometry,
     settings_geometry,
+    sound_geometry,
     switch_geometry,
 )
 from view.panel import (
@@ -41,6 +42,8 @@ def handle_toolbar(editor: Editor, position: tuple, window_width: int) -> str | 
             editor.undo()
         elif action == "settings":
             editor.open_settings()
+        elif action == "sound":
+            editor.open_sound()
         elif action == "view":
             editor.view_menu_open = not editor.view_menu_open
             editor.file_menu_open = False
@@ -129,6 +132,10 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         editor.blur_name()
         editor.blur_number()
         editor.dialog_field = index
+        if editor.dialog_checkbox(index) is not None:
+            # 复选框：点整行就地勾上或取消
+            editor.adjust_dialog(1)
+            return
         if editor.toggle_dropdown(index):
             return
         left, right = stepper_rects(rect)
@@ -257,6 +264,50 @@ def handle_game_settings_click(
                 return
     if not panel.collidepoint(position):
         editor.close_game_settings(False)
+
+
+def handle_sound_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
+    """声音浮层：切页签、改这一页的字段、浏览、试听、应用/取消。
+
+    玩家那一页还没有内容，点它只有页签和按钮有用。
+    """
+    geometry = sound_geometry(surface, editor.sound_tabs or [], editor.sound_index)
+    panel = geometry["panel"]
+    if geometry["apply"].collidepoint(position):
+        editor.close_sound(True)
+        return
+    if geometry["cancel"].collidepoint(position):
+        editor.close_sound(False)
+        return
+    for rect, index in geometry["tabs"]:
+        if rect.collidepoint(position):
+            editor.select_sound_tab(index)
+            return
+    if editor.sound_available():
+        if geometry["path"].collidepoint(position):
+            editor.sound_focus = 0
+            return
+        if geometry["browse"].collidepoint(position):
+            editor.pick_audio()
+            return
+        if geometry["preview"].collidepoint(position):
+            editor.preview_sound()
+            return
+        if geometry["loop"].collidepoint(position):
+            editor.toggle_sound_loop()
+            return
+        for field, rect in ((2, geometry["fade_in"]), (3, geometry["fade_out"])):
+            if not rect.collidepoint(position):
+                continue
+            editor.sound_focus = field
+            left, right = stepper_rects(rect)
+            if left.collidepoint(position):
+                editor.adjust_sound_value(-1)
+            elif right.collidepoint(position):
+                editor.adjust_sound_value(1)
+            return
+    if not panel.collidepoint(position):
+        editor.close_sound(False)
 
 
 def handle_switch_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
