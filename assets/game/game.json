@@ -11,16 +11,7 @@
   "player": {
     "jump_height": 8,
     "move_speed": 8.0,
-    "animations": {
-      "idle": {
-        "frames": [
-          "textures/level1/4-5（1）.png",
-          "textures/level1/4-5（2）.png"
-        ],
-        "fps": 8.0,
-        "loop": true
-      }
-    }
+    "animation": {}
   },
   "sounds": {
     "title": {

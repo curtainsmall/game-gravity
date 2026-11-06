@@ -2,73 +2,743 @@
   "width": 240,
   "height": 16,
   "flip_area_offsets": [8.0, 8.0],
-  "blocks": [],
-  "planks": [],
+  "blocks": [
+    {
+      "pos": [4.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [10.0, 0.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [16.0, 0.0],
+      "size": [2.0, 10.0]
+    },
+    {
+      "pos": [26.0, 0.0],
+      "size": [2.0, 10.0]
+    },
+    {
+      "pos": [32.0, 6.0],
+      "size": [4.0, 10.0]
+    },
+    {
+      "pos": [40.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [44.0, 0.0],
+      "size": [2.0, 12.0]
+    },
+    {
+      "pos": [50.0, 12.0],
+      "size": [2.0, 4.0]
+    },
+    {
+      "pos": [56.0, 4.0],
+      "size": [2.0, 12.0]
+    },
+    {
+      "pos": [64.0, 0.0],
+      "size": [2.0, 6.0]
+    },
+    {
+      "pos": [68.0, 0.0],
+      "size": [2.0, 8.0]
+    },
+    {
+      "pos": [70.0, 6.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [72.0, 6.0],
+      "size": [0.05, 0.05]
+    },
+    {
+      "pos": [74.0, 6.0],
+      "size": [3.95, 2.0]
+    },
+    {
+      "pos": [78.0, 6.0],
+      "size": [2.0, 10.0]
+    },
+    {
+      "pos": [82.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [86.0, 4.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [92.0, 6.0],
+      "size": [8.0, 2.0]
+    },
+    {
+      "pos": [102.0, 6.0],
+      "size": [8.0, 2.0]
+    },
+    {
+      "pos": [108.0, 0.0],
+      "size": [2.0, 6.0]
+    },
+    {
+      "pos": [114.0, 6.0],
+      "size": [2.0, 10.0]
+    },
+    {
+      "pos": [116.0, 6.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [124.0, 6.0],
+      "size": [8.0, 2.0]
+    },
+    {
+      "pos": [134.0, 6.0],
+      "size": [12.0, 2.0]
+    },
+    {
+      "pos": [144.0, 0.0],
+      "size": [2.0, 6.0]
+    },
+    {
+      "pos": [132.0, 12.0],
+      "size": [8.0, 2.0]
+    },
+    {
+      "pos": [142.0, 12.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [148.0, 6.0],
+      "size": [2.0, 10.0]
+    },
+    {
+      "pos": [150.0, 6.0],
+      "size": [16.0, 2.0]
+    },
+    {
+      "pos": [154.0, 2.0],
+      "size": [10.0, 2.0]
+    },
+    {
+      "pos": [162.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [168.0, 0.0],
+      "size": [2.0, 4.0]
+    },
+    {
+      "pos": [154.0, 10.0],
+      "size": [2.0, 3.5]
+    },
+    {
+      "pos": [156.0, 10.0],
+      "size": [12.0, 2.0]
+    },
+    {
+      "pos": [168.0, 10.0],
+      "size": [4.0, 3.0]
+    },
+    {
+      "pos": [162.0, 14.0],
+      "size": [4.0, 2.0]
+    },
+    {
+      "pos": [170.0, 6.0],
+      "size": [2.0, 4.0]
+    },
+    {
+      "pos": [172.0, 6.0],
+      "size": [6.0, 1.0]
+    },
+    {
+      "pos": [174.0, 10.0],
+      "size": [2.0, 6.0]
+    },
+    {
+      "pos": [176.0, 0.0],
+      "size": [2.0, 6.0]
+    },
+    {
+      "pos": [178.0, 0.0],
+      "size": [2.0, 4.0]
+    },
+    {
+      "pos": [183.0, 6.0],
+      "size": [9.0, 1.0]
+    },
+    {
+      "pos": [192.5, 6.0],
+      "size": [3.5, 5.0]
+    },
+    {
+      "pos": [196.0, 10.0],
+      "size": [3.5, 2.0]
+    },
+    {
+      "pos": [200.0, 4.0],
+      "size": [10.0, 2.0]
+    },
+    {
+      "pos": [208.0, 8.0],
+      "size": [4.0, 2.0]
+    },
+    {
+      "pos": [212.0, 4.0],
+      "size": [4.0, 2.0]
+    },
+    {
+      "pos": [216.0, 6.0],
+      "size": [2.0, 10.0]
+    },
+    {
+      "pos": [218.0, 0.0],
+      "size": [2.0, 2.5]
+    },
+    {
+      "pos": [220.0, 2.0],
+      "size": [2.0, 12.0]
+    },
+    {
+      "pos": [224.0, 2.0],
+      "size": [2.0, 14.0]
+    },
+    {
+      "pos": [228.0, 0.0],
+      "size": [12.0, 2.0]
+    },
+    {
+      "pos": [230.0, 2.0],
+      "size": [10.0, 2.0]
+    },
+    {
+      "pos": [232.0, 4.0],
+      "size": [8.0, 2.0]
+    },
+    {
+      "pos": [50.0, 4.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [52.0, 4.0],
+      "size": [4.0, 1.5]
+    },
+    {
+      "pos": [54.35, 2.31],
+      "size": [0.05, 0.05]
+    },
+    {
+      "pos": [90.0, 6.0],
+      "size": [2.0, 1.0]
+    },
+    {
+      "pos": [90.5, 7.0],
+      "size": [1.5, 0.5]
+    },
+    {
+      "pos": [91.0, 7.5],
+      "size": [1.0, 0.5]
+    },
+    {
+      "pos": [166.0, 6.0],
+      "size": [2.0, 0.5]
+    },
+    {
+      "pos": [182.0, 6.0],
+      "size": [1.0, 1.5]
+    },
+    {
+      "pos": [192.0, 6.0],
+      "size": [0.5, 1.0]
+    },
+    {
+      "pos": [193.0, 11.0],
+      "size": [3.0, 1.0]
+    },
+    {
+      "pos": [192.0, 9.0],
+      "size": [0.5, 1.5]
+    },
+    {
+      "pos": [206.5, 10.0],
+      "size": [3.5, 2.0]
+    },
+    {
+      "pos": [199.5, 11.0],
+      "size": [7.0, 1.0]
+    }
+  ],
+  "planks": [
+    {
+      "pos": [72.0, 6.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [140.0, 12.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [146.0, 6.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [100.0, 6.0],
+      "size": [2.0, 2.0]
+    }
+  ],
   "movable_blocks": [
     {
-      "name": "",
-      "pos": [28.97, 5.03],
-      "size": [1.6, 3.36],
-      "offset": [0, -2.5],
+      "name": "gate_5",
+      "pos": [210.0, 0.0],
+      "size": [2.0, 6.0],
+      "offset": [0, 6.0],
       "triggers": [
         {
-          "source": "b1",
+          "source": "b5",
           "behavior": "move",
-          "once": false
+          "once": true
+        }
+      ]
+    },
+    {
+      "name": "gate_4",
+      "pos": [142.0, 8.0],
+      "size": [2.0, 4.0],
+      "offset": [0, 4.0],
+      "triggers": [
+        {
+          "source": "button_4",
+          "behavior": "move",
+          "once": true
+        }
+      ]
+    },
+    {
+      "name": "gate_3",
+      "pos": [130.0, 12.0],
+      "size": [2.0, 4.0],
+      "offset": [0, -4.0],
+      "triggers": [
+        {
+          "source": "button_3",
+          "behavior": "move",
+          "once": true
+        }
+      ]
+    },
+    {
+      "name": "gate_2",
+      "pos": [122.0, 8.0],
+      "size": [2.0, 4.0],
+      "offset": [0, -8.0],
+      "triggers": [
+        {
+          "source": "button_2",
+          "behavior": "move",
+          "once": true
+        }
+      ]
+    },
+    {
+      "name": "gate_1",
+      "pos": [104.0, 8.0],
+      "size": [2.0, 8.0],
+      "offset": [0, -8.0],
+      "triggers": [
+        {
+          "source": "button1",
+          "behavior": "move",
+          "once": true
         }
       ]
     }
   ],
   "buttons": [
     {
-      "name": "b1",
-      "pos": [22.42, 0.03],
-      "size": [2.27, 1.42],
-      "face": ""
+      "name": "button_5",
+      "pos": [215.5, 6.0],
+      "size": [1.0, 0.3],
+      "face": "up"
+    },
+    {
+      "name": "button_4",
+      "pos": [139.0, 14.0],
+      "size": [1.0, 0.3],
+      "face": "up"
+    },
+    {
+      "name": "button_3",
+      "pos": [116.0, 8.5],
+      "size": [1.0, 0.3],
+      "face": "right"
+    },
+    {
+      "name": "button_2",
+      "pos": [119.0, 0.0],
+      "size": [1.0, 0.3],
+      "face": "up"
+    },
+    {
+      "name": "button_1",
+      "pos": [108.0, 0.5],
+      "size": [1.0, 0.3],
+      "face": "left"
     }
   ],
   "portals": [],
-  "items": [],
-  "nozzles": [],
+  "items": [
+    {
+      "name": "prop1",
+      "pos": [53.0, 13.0],
+      "size": [2.0, 2.0],
+      "heavy": true
+    },
+    {
+      "name": "",
+      "pos": [139.0, 0.0],
+      "size": [3.0, 3.0],
+      "heavy": true
+    }
+  ],
+  "nozzles": [
+    {
+      "pos": [199.0, 0.0],
+      "face": "up",
+      "power": 7.0,
+      "size": [1.0, 5.0]
+    },
+    {
+      "pos": [153.0, 0.0],
+      "face": "up",
+      "power": 4.0,
+      "size": [1.0, 3.0]
+    },
+    {
+      "pos": [101.0, 0.0],
+      "face": "up",
+      "power": 10.0,
+      "size": [1.0, 4.0]
+    },
+    {
+      "pos": [14.5, 0.0],
+      "face": "up",
+      "power": 12.0,
+      "size": [1.0, 6.0]
+    }
+  ],
   "textures": [
     {
-      "pos": [22.35, 7.25],
-      "size": [3.26, 3.38],
-      "image": "textures/level1/3x3.png",
+      "pos": [4.0, 0.0],
+      "size": [2.0, 2.0],
+      "image": "textures/level1/1-1.png",
+      "smooth": false
+    },
+    {
+      "pos": [228.0, 0.0],
+      "size": [12.0, 6.0],
+      "image": "textures/level1/7x3.png",
+      "smooth": false
+    },
+    {
+      "pos": [50.0, 4.0],
+      "size": [8.0, 12.0],
+      "image": "textures/level1/4-6.png",
+      "smooth": false
+    },
+    {
+      "pos": [68.0, 0.0],
+      "size": [4.0, 8.0],
+      "image": "textures/level1/2x4.png",
+      "smooth": false
+    },
+    {
+      "pos": [74.0, 6.0],
+      "size": [6.0, 10.0],
+      "image": "textures/level1/3x5.png",
+      "smooth": false
+    },
+    {
+      "pos": [71.5, 6.0],
+      "size": [3.0, 2.0],
+      "image": "textures/level1/1.5x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [81.0, 0.0],
+      "size": [4.0, 4.0],
+      "image": "textures/level1/2x2 1.png",
+      "smooth": false
+    },
+    {
+      "pos": [90.0, 6.0],
+      "size": [10.0, 2.0],
+      "image": "textures/level1/5x1 1.png",
+      "smooth": false
+    },
+    {
+      "pos": [63.5, 0.0],
+      "size": [3.0, 7.5],
+      "image": "textures/level1/3-4.png",
+      "smooth": false
+    },
+    {
+      "pos": [99.75, 5.99],
+      "size": [2.5, 2.0],
+      "image": "textures/level1/1.5x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [102.0, 0.0],
+      "size": [8.0, 8.0],
+      "image": "textures/level1/4x4.png",
+      "smooth": false
+    },
+    {
+      "pos": [103.5, 8.0],
+      "size": [3.0, 8.79],
+      "image": "textures/level1/1.5x4.5(会动机关).png",
       "smooth": false,
-      "triggers": [
-        {
-          "source": "b1",
-          "behavior": "hide"
-        }
-      ]
+      "follow": "gate_1"
+    },
+    {
+      "pos": [142.03, 4.5],
+      "size": [26.0, 12.5],
+      "image": "textures/level1/13x5.png",
+      "smooth": false
+    },
+    {
+      "pos": [134.0, 0.0],
+      "size": [12.0, 8.0],
+      "image": "textures/level1/6x3.5.png",
+      "smooth": false
+    },
+    {
+      "pos": [132.0, 11.5],
+      "size": [8.0, 3.0],
+      "image": "textures/level1/4x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [139.5, 12.0],
+      "size": [3.0, 2.0],
+      "image": "textures/level1/1.5x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [86.0, 4.0],
+      "size": [2.0, 2.0],
+      "image": "textures/level1/1-1.png",
+      "smooth": false
+    },
+    {
+      "pos": [121.0, 6.0],
+      "size": [4.0, 8.0],
+      "image": "textures/level1/2x4(会动).png",
+      "smooth": false,
+      "follow": "gate_2"
+    },
+    {
+      "pos": [129.0, 10.0],
+      "size": [4.0, 8.0],
+      "image": "textures/level1/2x4(会动).png",
+      "smooth": false,
+      "follow": "gate_3"
+    },
+    {
+      "pos": [138.5, 0.0],
+      "size": [4.0, 4.0],
+      "image": "textures/level1/2x2.png",
+      "smooth": false
+    },
+    {
+      "pos": [145.5, 6.0],
+      "size": [3.0, 2.0],
+      "image": "textures/level1/1.5x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [154.0, 0.0],
+      "size": [10.0, 4.0],
+      "image": "textures/level1/5x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [152.88, -0.06],
+      "size": [28.0, 13.5],
+      "image": "textures/level1/14x6.5.png",
+      "smooth": false
+    },
+    {
+      "pos": [173.5, 9.5],
+      "size": [3.0, 6.5],
+      "image": "textures/level1/1.5x3.png",
+      "smooth": false
+    },
+    {
+      "pos": [181.0, 6.0],
+      "size": [31.5, 6.5],
+      "image": "textures/level1/16x2.5.png",
+      "smooth": false
+    },
+    {
+      "pos": [200.0, 4.0],
+      "size": [16.0, 2.0],
+      "image": "textures/level1/8x_1.png",
+      "smooth": false
+    },
+    {
+      "pos": [209.5, 0.0],
+      "size": [3.0, 7.0],
+      "image": "textures/level1/15x3.5.png",
+      "smooth": false,
+      "follow": "gate_4"
+    },
+    {
+      "pos": [215.5, 4.0],
+      "size": [3.0, 12.0],
+      "image": "textures/level1/1x6 1.png",
+      "smooth": false
+    },
+    {
+      "pos": [218.0, 0.0],
+      "size": [4.0, 14.5],
+      "image": "textures/level1/1x6.png",
+      "smooth": false
+    },
+    {
+      "pos": [31.5, 4.5],
+      "size": [5.0, 11.5],
+      "image": "textures/level1/3-6(主体).png",
+      "smooth": false
+    },
+    {
+      "pos": [234.0, 6.0],
+      "size": [3.5, 3.0],
+      "image": "textures/level1/3.5x3(洞口).png",
+      "smooth": false
+    },
+    {
+      "pos": [124.0, 5.5],
+      "size": [8.0, 3.0],
+      "image": "textures/level1/4x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [15.0, 0.0],
+      "size": [4.0, 11.0],
+      "image": "textures/level1/4-5（1）.png",
+      "smooth": false
+    },
+    {
+      "pos": [24.5, 0.0],
+      "size": [5.0, 10.5],
+      "image": "textures/level1/4-5（2）.png",
+      "smooth": false
+    },
+    {
+      "pos": [39.0, 0.0],
+      "size": [4.0, 2.0],
+      "image": "textures/level1/2-1.png",
+      "smooth": false
+    },
+    {
+      "pos": [162.0, 13.0],
+      "size": [4.0, 3.0],
+      "image": "textures/level1/2x1.png",
+      "smooth": false
+    },
+    {
+      "pos": [114.0, 2.0],
+      "size": [8.0, 14.0],
+      "image": "textures/level1/4x7.png",
+      "smooth": false
+    },
+    {
+      "pos": [13.5, 0.0],
+      "size": [2.04, 0.96],
+      "image": "textures/level1/2-1(喷气口).png",
+      "smooth": false
+    },
+    {
+      "pos": [152.0, 0.0],
+      "size": [2.04, 0.96],
+      "image": "textures/level1/2-1(喷气口).png",
+      "smooth": false
+    },
+    {
+      "pos": [100.0, 0.0],
+      "size": [2.04, 0.96],
+      "image": "textures/level1/2-1(喷气口).png",
+      "smooth": false
+    },
+    {
+      "pos": [43.0, 0.0],
+      "size": [4.0, 14.5],
+      "image": "textures/level1/2-6.png",
+      "smooth": false
+    },
+    {
+      "pos": [49.28, 11.45],
+      "size": [3.5, 4.5],
+      "image": "textures/level1/2-2.png",
+      "smooth": false,
+      "face": "down"
+    },
+    {
+      "pos": [8.0, 0.0],
+      "size": [6.0, 7.17],
+      "image": "textures/level1/3-3.png",
+      "smooth": false
+    },
+    {
+      "pos": [167.5, 0.0],
+      "size": [3.0, 4.0],
+      "image": "textures/level1/1.5x1.5.png",
+      "smooth": false
+    },
+    {
+      "pos": [215.0, 6.0],
+      "size": [1.0, 1.0],
+      "image": "textures/level1/按钮.png",
+      "smooth": false
+    },
+    {
+      "pos": [138.5, 14.0],
+      "size": [1.0, 1.0],
+      "image": "textures/level1/按钮.png",
+      "smooth": false
+    },
+    {
+      "pos": [118.5, 0.0],
+      "size": [1.0, 1.0],
+      "image": "textures/level1/按钮.png",
+      "smooth": false
+    },
+    {
+      "pos": [116.0, 8.0],
+      "size": [1.0, 1.0],
+      "image": "textures/level1/按钮.png",
+      "smooth": false,
+      "face": "right"
     }
   ],
   "player": {
-    "pos": [5.435257764197799, 0.9917355371900847],
+    "pos": [0.5, 0.5],
     "size": [1.0, 1.0]
   },
   "destination": {
-    "pos": [34.757571813784566, 0.5619834710743845],
+    "pos": [235.0, 6.0],
     "size": [1.0, 1.0]
   },
   "background": "textures/level1/background.png",
-  "cutscene": {
-    "pictures": [
-      {
-        "path": "textures/QQ图片20261106201340.jpeg",
-        "fade_in": 0.5,
-        "hold": 2.0,
-        "fade_out": 0.5
-      },
-      {
-        "path": "textures/QQ图片20261106201355(1).jpeg",
-        "fade_in": 0.5,
-        "hold": 2.0,
-        "fade_out": 0.5
-      }
-    ],
-    "cascade": true,
-    "sound": true
+  "sound": {
+    "bgm": "sounds/开场曲beta.mp3",
+    "loop": true,
+    "fade_in": 0.5,
+    "fade_out": 1.0
   }
 }
