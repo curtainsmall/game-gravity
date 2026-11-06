@@ -1,7 +1,13 @@
-"""关卡清单：game/levels/ 下每个文件夹是一关，按文件夹名排字母序。"""
+"""关卡清单：game/levels/ 下每个文件夹是一关，按文件夹名排字母序。
+
+没有起点（player）或没有终点（destination）的关卡不算可玩：选关里照样列出来，
+但是半透明显示，开局和过关都会跳过它。
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
+
+import json
 
 import pygame
 
@@ -17,21 +23,41 @@ SCENE_FILE = "scene.json"
 class LevelEntry:
     folder: Path
     name: str
+    playable: bool = True      # 起点和终点都在才算可玩
 
     @property
     def scene_path(self) -> Path:
         return self.folder / SCENE_FILE
 
 
+def definition_is_playable(definition: dict) -> bool:
+    """有起点也有终点才算能玩的一关。"""
+    player = definition.get("player")
+    destination = definition.get("destination")
+    return isinstance(player, dict) and isinstance(destination, dict)
+
+
+def read_definition(path: str | Path) -> dict | None:
+    """读 scene.json；读不出来返回 None。"""
+    try:
+        with open(path, encoding="utf-8") as file:
+            value = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def discover_levels() -> list[LevelEntry]:
     """扫 levels/ 下带 scene.json 的文件夹，按文件夹名不分大小写排字母序。"""
     if not LEVELS_DIR.is_dir():
         return []
-    entries = [
-        LevelEntry(folder=folder, name=folder.name)
-        for folder in LEVELS_DIR.iterdir()
-        if folder.is_dir() and (folder / SCENE_FILE).is_file()
-    ]
+    entries = []
+    for folder in LEVELS_DIR.iterdir():
+        if not folder.is_dir() or not (folder / SCENE_FILE).is_file():
+            continue
+        definition = read_definition(folder / SCENE_FILE)
+        playable = definition is not None and definition_is_playable(definition)
+        entries.append(LevelEntry(folder=folder, name=folder.name, playable=playable))
     return sorted(entries, key=lambda entry: entry.name.lower())
 
 

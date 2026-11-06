@@ -63,11 +63,22 @@ def draw_level_select(surface: pygame.Surface, app) -> None:
         pygame.draw.rect(surface, ui.BUTTON, badge)
         pygame.draw.rect(surface, ui.BORDER, badge, 1)
         surface.blit(label, (badge.left + 9, badge.top + 5))
+        if not entry.playable:
+            _fade_row(surface, rect, badge, entry)
     surface.set_clip(previous_clip)
 
     if ui.max_level_scroll(surface, len(app.levels)):
         hint = ui.font(16).render("可使用滚轮滚动列表", True, ui.DIM_TEXT)
         surface.blit(hint, (area.right - hint.get_width(), area.bottom + 6))
+
+
+def _fade_row(surface: pygame.Surface, rect: pygame.Rect, badge: pygame.Rect, entry) -> None:
+    """没有起点或终点的关卡：整行压一层半透明白，再标一句「缺少起点或终点」。"""
+    layer = pygame.Surface(rect.size, pygame.SRCALPHA)
+    layer.fill((*ui.BACKGROUND, 170))
+    surface.blit(layer, rect.topleft)
+    note = ui.font(16).render("缺少起点或终点，不参与通关", True, ui.DIM_TEXT)
+    surface.blit(note, (badge.right + 12, badge.centery - note.get_height() // 2))
 
 
 def draw_ending(surface: pygame.Surface, app) -> None:

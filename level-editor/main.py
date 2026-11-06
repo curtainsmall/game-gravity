@@ -94,6 +94,12 @@ def run() -> None:
                         running = False
                     elif cancel_rect.collidepoint(event.pos) or not panel.collidepoint(event.pos):
                         editor.confirm_quit = False
+            elif editor.save_notice:
+                # 存完的一句提示（缺起点/终点）：任何键或点击都关掉它，保存早就完成了
+                if event.type == pygame.KEYDOWN or (
+                    event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                ):
+                    editor.close_save_notice()
             elif editor.startup:
                 # 启动窗：先要一份 game.json（新建或打开），之后才有游戏和关卡
                 if event.type == pygame.KEYDOWN:

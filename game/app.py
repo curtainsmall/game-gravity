@@ -86,14 +86,14 @@ class App:
     def handle_title_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
-                self.start_level(0)
+                self.start_first_level()
             elif event.key == pygame.K_ESCAPE:
                 self.running = False
             return
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             rects = ui.title_rects(self.surface)
             if rects["start"].collidepoint(event.pos):
-                self.start_level(0)
+                self.start_first_level()
             elif rects["levels"].collidepoint(event.pos):
                 self.level_scroll = 0
                 self.screen = Screen.LEVEL_SELECT
@@ -120,7 +120,11 @@ class App:
             for index in range(len(self.levels)):
                 rect = ui.level_row_rect(self.surface, index, self.level_scroll)
                 if rect.collidepoint(event.pos):
-                    self.start_level(index)
+                    if self.levels[index].playable:
+                        self.start_level(index)
+                    else:
+                        # 半透明的关卡点不开，只提示一句
+                        self.show_toast(f"{self.levels[index].name} 没有起点或终点，已跳过")
                     return
 
     def handle_playing_event(self, event: pygame.event.Event) -> None:
@@ -189,6 +193,10 @@ class App:
             self.show_toast("该关卡不存在")
             self.screen = Screen.TITLE
             return
+        if not self.levels[index].playable:
+            # 没有起点或终点的关卡不进游戏，只在选关里半透明列出来
+            self.show_toast(f"{self.levels[index].name} 没有起点或终点，已跳过")
+            return
         scene = load_scene(self.levels[index])
         if scene is None:
             self.show_toast(f"无法读取关卡：{self.levels[index].name}")
@@ -206,12 +214,28 @@ class App:
         self.jump_edge = False
         self.flip_edge = False
 
+    def next_playable_index(self, start: int) -> int | None:
+        """从 start 起往后第一个能玩的关卡（不往回绕）。"""
+        for index in range(max(0, start), len(self.levels)):
+            if self.levels[index].playable:
+                return index
+        return None
+
+    def start_first_level(self) -> None:
+        """开始游戏：从第一关能玩的那关开始，都玩不了就提示。"""
+        index = self.next_playable_index(0)
+        if index is None:
+            self.show_toast("没有可玩的关卡：每一关都需要起点和终点")
+            self.screen = Screen.TITLE
+            return
+        self.start_level(index)
+
     def advance_level(self) -> None:
-        next_index = self.level_index + 1
-        if next_index >= len(self.levels):
+        index = self.next_playable_index(self.level_index + 1)
+        if index is None:
             self.screen = Screen.ENDING
             return
-        self.start_level(next_index)
+        self.start_level(index)
 
     def quit_to_title(self) -> None:
         if self.scene is not None:

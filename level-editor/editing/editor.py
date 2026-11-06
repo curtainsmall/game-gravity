@@ -127,6 +127,7 @@ class Editor:
         self.level_select_open = False             # 关卡列表浮层
         self.level_select_scroll = 0               # 列表滚到第几行
         self.pending_switch: tuple[str, str] | None = None  # 等确认的切换：("level"/"game"/"new", 目标)
+        self.save_notice = ""                      # 存完弹的那句提示：这关缺起点/终点（空串=不弹）
         self.confirm_quit = False
         self.startup = True
         self.status = "请打开或新建游戏配置文件（game.json）。"
@@ -536,16 +537,20 @@ class Editor:
     def resolve_pending_switch(self, save: bool | None) -> None:
         """等确认的那一步的结果：True 先保存再走，False 直接走，None 取消。"""
         action = self.pending_switch
-        self.pending_switch = None
         if action is None:
             return
         if save is None:
+            self.pending_switch = None
             self.status = "已取消操作。"
             return
-        if save:
-            self.save()
-            if self.dirty:              # 保存失败：留在原来这关
-                return
+        if save and not self.save():     # 写盘失败：留在原来这关
+            self.pending_switch = None
+            return
+        self.pending_switch = None
+        self.perform_switch(action)
+
+    def perform_switch(self, action: tuple) -> None:
+        """真正执行那次切换：打开另一关、换一个游戏，或者新建关卡。"""
         kind, value = action
         if kind == "level":
             self.load(value)
@@ -595,15 +600,19 @@ class Editor:
         self.drag_start = self.drag_current = None
         self.status = f"已打开关卡 {display_path(folder)}。"
 
-    def save(self) -> None:
-        """保存当前关卡：写进游戏根里 levels/<关卡名>/scene.json，图片只记相对路径。"""
+    def save(self) -> bool:
+        """保存当前关卡：写进游戏根里 levels/<关卡名>/scene.json，图片只记相对路径。
+
+        缺起点或终点照样写，只是存完弹一句提示（游戏里会跳过这种关卡）。
+        返回有没有写下去。
+        """
         if not self.level_in_view:
             self.status = "当前视图中没有关卡。"
-            return
+            return False
         if self.path is None:
             if self.levels_dir is None:
                 self.status = "尚未打开游戏配置，无法保存关卡。"
-                return
+                return False
             folder = game.unique_level_folder(self.levels_dir, folder_name_for(self.level.name))
             if not self.level.name:
                 self.level.name = os.path.basename(folder)
@@ -618,10 +627,30 @@ class Editor:
                 file.write(dump_level(self.level.to_definition()))
         except OSError as error:
             self.status = f"保存失败：{error}。"
-            return
+            return False
         self.path = folder
         self.dirty = False
         self.status = f"已保存至 {display_path(folder)}。"
+        missing = self.missing_for_play()
+        if missing:
+            # 游戏里会把这种关卡跳过：状态栏留一句，另外弹个小提示
+            self.status += f" 注意：这一关{missing}，游戏里会跳过它。"
+            self.save_notice = missing
+        return True
+
+    def close_save_notice(self) -> None:
+        """关掉「这关缺起点/终点」的提示。"""
+        self.save_notice = ""
+
+    def missing_for_play(self) -> str:
+        """这一关还缺什么才能玩：没有起点、没有终点，或者两样都缺。"""
+        if self.level.player is None and self.level.destination is None:
+            return "既没有起点也没有终点"
+        if self.level.player is None:
+            return "没有起点"
+        if self.level.destination is None:
+            return "没有终点"
+        return ""
 
     def normalize_media_paths(self, folder: str) -> None:
         """背景和贴图都只记相对 scene.json 的路径，一个文件都不复制。

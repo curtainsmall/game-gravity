@@ -12,6 +12,7 @@ from view.modals import (
     draw_game_settings,
     draw_level_select,
     draw_quit_confirm,
+    draw_save_notice,
     draw_settings,
     draw_startup,
     draw_switch_confirm,
@@ -51,5 +52,7 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_level_select(surface, editor, font)
     if editor.pending_switch is not None:
         draw_switch_confirm(surface, editor, font)
+    if editor.save_notice:
+        draw_save_notice(surface, editor, font)
     if editor.confirm_quit:
         draw_quit_confirm(surface, editor, font)

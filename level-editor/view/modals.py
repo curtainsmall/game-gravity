@@ -559,6 +559,40 @@ def draw_switch_confirm(surface: pygame.Surface, editor: Editor, font: pygame.fo
     draw_button(surface, font, cancel_rect, "取消")
 
 
+def save_notice_geometry(surface: pygame.Surface) -> tuple:
+    """存完弹的那句提示：这关缺起点/终点，游戏里会跳过它。只是个消息框。"""
+    panel = place_panel(surface, pygame.Rect(0, 0, 470, 158))
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    ok_rect = pygame.Rect(panel.right - 12 - 110, button_y, 110, BUTTON_HEIGHT)
+    return panel, ok_rect
+
+
+def draw_save_notice(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    panel, ok_rect = save_notice_geometry(surface)
+    draw_panel(surface, panel)
+
+    surface.blit(font.render("关卡还缺起点或终点", True, HIGHLIGHT), (panel.left + 14, panel.top + 12))
+    surface.blit(
+        font.render(
+            display_path(editor.path) if editor.path else "新关卡（未保存）", True, DIM_TEXT
+        ),
+        (panel.left + 14, panel.top + 40),
+    )
+    surface.blit(
+        font.render(
+            f"这一关{editor.save_notice or '缺部分内容'}，游戏里会跳过它。", True, TEXT
+        ),
+        (panel.left + 14, panel.top + 62),
+    )
+    surface.blit(
+        font.render("已经保存，关掉这条提示即可。", True, DIM_TEXT), (panel.left + 14, panel.top + 84)
+    )
+    hint = font.render("Enter / Esc / 点击任意位置关闭", True, DIM_TEXT)
+    surface.blit(hint, (panel.left + 14, panel.top + 106))
+
+    draw_button(surface, font, ok_rect, "知道了")
+
+
 def quit_geometry(surface: pygame.Surface) -> tuple:
     panel = place_panel(surface, pygame.Rect(0, 0, 430, 152))
     button_y = panel.bottom - 12 - BUTTON_HEIGHT
