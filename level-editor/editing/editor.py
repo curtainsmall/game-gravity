@@ -106,12 +106,14 @@ class Editor:
         self.last_mouse = (0, 0)
         self.view_menu_open = False
         # 视图设置：只影响编辑器自己的显示，从不写进关卡数据、不落盘
-        self.view_settings: dict = {"background": True}
+        self.view_settings: dict = {"background": True, "debug": True}
         self.menu_open = False
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
         self.settings: dict | None = None
         self.settings_field = 0
+        self.player_settings: dict | None = None   # 玩家设置浮层：跳高、速度
+        self.player_settings_field = 0
         self.confirm_quit = False
         self.startup = True
         self.status = "新建关卡或打开一个已有关卡"
@@ -1099,8 +1101,6 @@ class Editor:
             "name": self.level.name,
             "width": str(self.level.width),
             "height": str(self.level.height),
-            "jump_height": str(self.level.jump_height),
-            "move_speed": str(self.level.move_speed),
             "flip_up": f"{flip_up:g}",
             "flip_down": f"{flip_down:g}",
             "background": self.level.background,
@@ -1110,37 +1110,35 @@ class Editor:
 
     def close_settings(self, commit: bool) -> None:
         if self.settings is not None and commit:
-            self.level.name = self.settings["name"]
+            name = self.settings["name"]
+            self.level.name = name
             self.level.width = clamp_int(
                 self.settings["width"], LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS
             )
             self.level.height = clamp_int(
                 self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS
             )
-            self.level.jump_height = clamp_int(
-                self.settings["jump_height"],
-                JUMP_HEIGHT_MIN,
-                self._jump_height_limit(self.level.height),
-                JUMP_HEIGHT_DEFAULT,
-            )
-            self.level.move_speed = clamp_float(
-                self.settings["move_speed"], MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
-            )
-            # 翻转区起点按「离关卡顶多少格」记，最多到关卡高度（等于这一侧翻不了）
+            # 翻转带的高度最多到关卡高度
             flip_limit = float(self.level.height)
             self.level.flip_area_offsets = [
                 clamp_float(self.settings["flip_up"], 0.0, flip_limit, 0.0),
                 clamp_float(self.settings["flip_down"], 0.0, flip_limit, 0.0),
             ]
             self.level.background = self.settings["background"]
+            # 关卡变矮时跳高可能超了，顺手夹回来
+            self.level.jump_height = clamp_int(
+                self.level.jump_height,
+                JUMP_HEIGHT_MIN,
+                self._jump_height_limit(self.level.height),
+                JUMP_HEIGHT_DEFAULT,
+            )
             self.dirty = True
             background = self.level.background or "无"
             flip_up, flip_down = self.level.flip_area_offsets
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
                 f"尺寸 {self.level.width}×{self.level.height}，"
-                f"跳高 {self.level.jump_height}，速度 {self.level.move_speed}，"
-                f"翻转区 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}"
+                f"翻转带 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}"
             )
         self.settings = None
 
@@ -1153,7 +1151,7 @@ class Editor:
             self.status = "选择背景已取消"
             return
         self.settings["background"] = relative_level_path(path, self.path)
-        self.settings_field = 7
+        self.settings_field = 5
         self.status = "背景已选：只记相对 scene.json 的路径，不复制文件"
 
     def pick_texture_image(self) -> None:
@@ -1178,24 +1176,9 @@ class Editor:
             self._step_size("width", delta, LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
         elif field == 2:
             self._step_size("height", delta, LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
-        elif field == 3:
-            # 跳高上限跟着设置里的高度走：不能高过关卡高度 - 1
-            height = clamp_int(
-                self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, self.level.height
-            )
-            limit = self._jump_height_limit(height)
-            current = clamp_int(self.settings["jump_height"], JUMP_HEIGHT_MIN, limit, JUMP_HEIGHT_DEFAULT)
-            self.settings["jump_height"] = str(max(JUMP_HEIGHT_MIN, min(limit, current + delta)))
-        elif field == 4:
-            # 移动速度按 0.5 一格加减
-            current = clamp_float(
-                self.settings["move_speed"], MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
-            )
-            stepped = max(MOVE_SPEED_MIN, min(MOVE_SPEED_MAX, current + 0.5 * delta))
-            self.settings["move_speed"] = f"{stepped:g}"
-        elif field in (5, 6):
-            # 翻转区起点：离关卡顶的格数，按 0.5 加减，最多到关卡高度
-            key = "flip_up" if field == 5 else "flip_down"
+        elif field in (3, 4):
+            # 翻转带高度：按 0.5 加减，最多到关卡高度
+            key = "flip_up" if field == 3 else "flip_down"
             height = clamp_int(
                 self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, self.level.height
             )
@@ -1219,21 +1202,17 @@ class Editor:
         if field == 0:
             if char.isprintable() and len(self.settings["name"]) < 24:
                 self.settings["name"] += char
-        elif field in (1, 2, 3):
-            # 数字项只吃数字：宽度最多 4 位（1000 格上限），高度和跳高 2 位够用
-            key = {1: "width", 2: "height", 3: "jump_height"}[field]
+        elif field in (1, 2):
+            # 数字项只吃数字：宽度最多 4 位（1000 格上限），高度 2 位够用
+            key = {1: "width", 2: "height"}[field]
             if char.isdigit() and len(str(self.settings[key])) < (4 if field == 1 else 2):
                 self.settings[key] = str(self.settings[key]) + char
-        elif field == 4:
-            # 移动速度：数字和小数点，最多 5 位
-            if (char.isdigit() or char == ".") and len(str(self.settings["move_speed"])) < 5:
-                self.settings["move_speed"] = str(self.settings["move_speed"]) + char
-        elif field in (5, 6):
-            # 翻转区起点：数字和小数点，同样最多 5 位
-            key = "flip_up" if field == 5 else "flip_down"
+        elif field in (3, 4):
+            # 翻转带高度：数字和小数点，最多 5 位
+            key = "flip_up" if field == 3 else "flip_down"
             if (char.isdigit() or char == ".") and len(str(self.settings[key])) < 5:
                 self.settings[key] = str(self.settings[key]) + char
-        elif field == 7:
+        elif field == 5:
             # 背景是路径：可打印字符都能打
             if char.isprintable() and len(self.settings["background"]) < BACKGROUND_MAX_LENGTH:
                 self.settings["background"] += char
@@ -1244,16 +1223,84 @@ class Editor:
         field = self.settings_field
         if field == 0:
             self.settings["name"] = self.settings["name"][:-1]
-        elif field in (1, 2, 3):
-            key = {1: "width", 2: "height", 3: "jump_height"}[field]
+        elif field in (1, 2):
+            key = {1: "width", 2: "height"}[field]
             self.settings[key] = str(self.settings[key])[:-1]
-        elif field == 4:
-            self.settings["move_speed"] = str(self.settings["move_speed"])[:-1]
-        elif field in (5, 6):
-            key = "flip_up" if field == 5 else "flip_down"
+        elif field in (3, 4):
+            key = "flip_up" if field == 3 else "flip_down"
             self.settings[key] = str(self.settings[key])[:-1]
-        elif field == 7:
+        elif field == 5:
             self.settings["background"] = self.settings["background"][:-1]
+
+    # ---- 玩家设置 ---------------------------------------------------
+    def open_player_settings(self) -> None:
+        """玩家自己的几项：初始跳高、移动速度（以后还有动画）。"""
+        self.player_settings = {
+            "jump_height": str(self.level.jump_height),
+            "move_speed": str(self.level.move_speed),
+        }
+        self.player_settings_field = 0
+        self.push_undo()
+
+    def close_player_settings(self, commit: bool) -> None:
+        if self.player_settings is not None and commit:
+            self.level.jump_height = clamp_int(
+                self.player_settings["jump_height"],
+                JUMP_HEIGHT_MIN,
+                self._jump_height_limit(self.level.height),
+                JUMP_HEIGHT_DEFAULT,
+            )
+            self.level.move_speed = clamp_float(
+                self.player_settings["move_speed"],
+                MOVE_SPEED_MIN,
+                MOVE_SPEED_MAX,
+                MOVE_SPEED_DEFAULT,
+            )
+            self.dirty = True
+            self.status = (
+                f"玩家设置：跳高 {self.level.jump_height}，速度 {self.level.move_speed}"
+            )
+        self.player_settings = None
+
+    def adjust_player_settings(self, delta: int) -> None:
+        if self.player_settings is None:
+            return
+        if self.player_settings_field == 0:
+            # 跳高按 1 格加减，上限是关卡高度 - 1
+            limit = self._jump_height_limit(self.level.height)
+            current = clamp_int(
+                self.player_settings["jump_height"], JUMP_HEIGHT_MIN, limit, JUMP_HEIGHT_DEFAULT
+            )
+            self.player_settings["jump_height"] = str(
+                max(JUMP_HEIGHT_MIN, min(limit, current + delta))
+            )
+        else:
+            # 移动速度按 0.5 一格加减
+            current = clamp_float(
+                self.player_settings["move_speed"], MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
+            )
+            stepped = max(MOVE_SPEED_MIN, min(MOVE_SPEED_MAX, current + 0.5 * delta))
+            self.player_settings["move_speed"] = f"{stepped:g}"
+
+    def type_player_settings(self, char: str) -> None:
+        if self.player_settings is None:
+            return
+        if self.player_settings_field == 0:
+            # 跳高是整数：只吃数字，最多 2 位
+            current = str(self.player_settings["jump_height"])
+            if char.isdigit() and len(current) < 2:
+                self.player_settings["jump_height"] = current + char
+        else:
+            # 移动速度：数字和小数点，最多 5 位
+            current = str(self.player_settings["move_speed"])
+            if (char.isdigit() or char == ".") and len(current) < 5:
+                self.player_settings["move_speed"] = current + char
+
+    def erase_player_settings_char(self) -> None:
+        if self.player_settings is None:
+            return
+        key = "jump_height" if self.player_settings_field == 0 else "move_speed"
+        self.player_settings[key] = str(self.player_settings[key])[:-1]
 
 
 # ---- 绘制 -----------------------------------------------------------

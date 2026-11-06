@@ -44,6 +44,9 @@ PLAYER_COLOR = (255, 140, 0)
 DESTINATION_COLOR = (34, 139, 34)
 PIVOT_COLOR = (255, 70, 70)
 RANGE_COLOR = (200, 120, 130)
+# 翻转带：向上翻贴顶画红、向下翻贴底画蓝（和游戏里的调试显示同一套颜色）
+FLIP_UP_COLOR = (235, 70, 70, 70)
+FLIP_DOWN_COLOR = (70, 120, 235, 70)
 GROUND_COLOR = (120, 120, 120)
 DIALOG_BG = (55, 55, 60)
 DIALOG_BORDER = (200, 200, 200)
@@ -131,8 +134,10 @@ MOVE_SPEED_MIN, MOVE_SPEED_MAX = 0.5, 40.0
 # 翻转带高度：第一个贴着关卡顶（向上翻），第二个贴着关卡底（向下翻）；0 表示翻不了
 FLIP_AREA_OFFSETS_DEFAULT = (0.0, 0.0)
 
-# 关卡设置里的字段数：名称、宽度、高度、初始跳高、移动速度、翻转区上/下、背景
-SETTINGS_FIELD_COUNT = 8
+# 关卡设置里的字段数：名称、宽度、高度、翻转带上下、背景
+SETTINGS_FIELD_COUNT = 6
+# 玩家设置里的字段数：初始跳高、移动速度（以后还有动画）
+PLAYER_SETTINGS_FIELD_COUNT = 2
 BACKGROUND_MAX_LENGTH = 120
 
 # ---- 对象种类 ----
@@ -188,6 +193,7 @@ TOOLBAR_ITEMS = [
     ("保存", "save", 56),
     ("撤销", "undo", 56),
     ("关卡设置", "settings", 88),
+    ("玩家设置", "player_settings", 88),
     ("视图", "view", 56),
 ]
 

@@ -30,16 +30,15 @@ def startup_rects(surface: pygame.Surface) -> list:
 
 
 def settings_geometry(surface: pygame.Surface) -> tuple:
-    panel = place_panel(surface, pygame.Rect(0, 0, 560, 350))
+    """关卡设置：名称、宽高、翻转带、背景。"""
+    panel = place_panel(surface, pygame.Rect(0, 0, 560, 282))
     name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
     width_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
     height_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT + 2)
-    jump_rect = pygame.Rect(panel.left + 12, panel.top + 140, panel.width - 24, ROW_HEIGHT + 2)
-    speed_rect = pygame.Rect(panel.left + 12, panel.top + 174, panel.width - 24, ROW_HEIGHT + 2)
-    flip_up_rect = pygame.Rect(panel.left + 12, panel.top + 208, panel.width - 24, ROW_HEIGHT + 2)
-    flip_down_rect = pygame.Rect(panel.left + 12, panel.top + 242, panel.width - 24, ROW_HEIGHT + 2)
+    flip_up_rect = pygame.Rect(panel.left + 12, panel.top + 140, panel.width - 24, ROW_HEIGHT + 2)
+    flip_down_rect = pygame.Rect(panel.left + 12, panel.top + 174, panel.width - 24, ROW_HEIGHT + 2)
     background_rect = pygame.Rect(
-        panel.left + 12, panel.top + 276, panel.width - 24, ROW_HEIGHT + 2
+        panel.left + 12, panel.top + 208, panel.width - 24, ROW_HEIGHT + 2
     )
     browse_rect = pygame.Rect(
         background_rect.right - 76, background_rect.top + 1, 76, background_rect.height - 2
@@ -52,8 +51,6 @@ def settings_geometry(surface: pygame.Surface) -> tuple:
         name_rect,
         width_rect,
         height_rect,
-        jump_rect,
-        speed_rect,
         flip_up_rect,
         flip_down_rect,
         background_rect,
@@ -61,6 +58,18 @@ def settings_geometry(surface: pygame.Surface) -> tuple:
         apply_rect,
         cancel_rect,
     )
+
+
+def player_settings_geometry(surface: pygame.Surface) -> tuple:
+    """玩家设置：初始跳高、移动速度（以后还有动画）。"""
+    panel = place_panel(surface, pygame.Rect(0, 0, 460, 196))
+    jump_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
+    speed_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
+    hint_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT)
+    button_y = panel.bottom - BUTTON_HEIGHT - 8
+    apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
+    cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
+    return panel, jump_rect, speed_rect, hint_rect, apply_rect, cancel_rect
 
 
 def _draw_settings_row(
@@ -83,8 +92,6 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         name_rect,
         width_rect,
         height_rect,
-        jump_rect,
-        speed_rect,
         flip_up_rect,
         flip_down_rect,
         background_rect,
@@ -122,27 +129,11 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
 
-    jump_selected = editor.settings_field == 3
-    _draw_settings_row(
-        surface, font, jump_rect, "初始跳高", editor.settings["jump_height"], jump_selected
-    )
-    left, right = stepper_rects(jump_rect)
-    draw_stepper(surface, left, -1)
-    draw_stepper(surface, right, 1)
-
-    speed_selected = editor.settings_field == 4
-    _draw_settings_row(
-        surface, font, speed_rect, "移动速度", editor.settings["move_speed"], speed_selected
-    )
-    left, right = stepper_rects(speed_rect)
-    draw_stepper(surface, left, -1)
-    draw_stepper(surface, right, 1)
-
     # 翻转带：脚边落在带子里才翻得动。向上翻贴着关卡顶、向下翻贴着关卡底，
     # 数字是带子的高度，0 表示这一侧翻不了
     for field, rect, label, key in (
-        (5, flip_up_rect, "向上翻带（贴顶）", "flip_up"),
-        (6, flip_down_rect, "向下翻带（贴底）", "flip_down"),
+        (3, flip_up_rect, "向上翻带（贴顶）", "flip_up"),
+        (4, flip_down_rect, "向下翻带（贴底）", "flip_down"),
     ):
         selected = editor.settings_field == field
         _draw_settings_row(surface, font, rect, label, editor.settings[key], selected)
@@ -151,7 +142,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         draw_stepper(surface, right, 1)
 
     # 背景：直接敲路径，或点右边「选择…」挑一张图；存的是相对关卡目录的路径
-    background_selected = editor.settings_field == 7
+    background_selected = editor.settings_field == 5
     pygame.draw.rect(
         surface, (62, 62, 72) if background_selected else (48, 48, 54), background_rect
     )
@@ -172,6 +163,36 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
         (0, 0, min(text.get_width(), clip), text.get_height()),
     )
     draw_button(surface, font, browse_rect, "选择…")
+
+    draw_button(surface, font, apply_rect, "应用")
+    draw_button(surface, font, cancel_rect, "取消")
+
+
+def draw_player_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    """玩家设置：初始跳高、移动速度，以后动画也放这儿。"""
+    panel, jump_rect, speed_rect, hint_rect, apply_rect, cancel_rect = player_settings_geometry(
+        surface
+    )
+    draw_panel(surface, panel)
+
+    surface.blit(font.render("玩家设置", True, TEXT), (panel.left + 12, panel.top + 8))
+    hint = font.render("点击面板外取消", True, DIM_TEXT)
+    surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
+
+    for field, rect, label, key in (
+        (0, jump_rect, "初始跳高（格）", "jump_height"),
+        (1, speed_rect, "移动速度（格/秒）", "move_speed"),
+    ):
+        selected = editor.player_settings_field == field
+        _draw_settings_row(surface, font, rect, label, editor.player_settings[key], selected)
+        left, right = stepper_rects(rect)
+        draw_stepper(surface, left, -1)
+        draw_stepper(surface, right, 1)
+
+    # 没有起点时这几项存不进去，提醒一句
+    if editor.level.player is None:
+        tip = font.render("关卡里还没有起点：这几项只在有起点时才写进 scene.json", True, HIGHLIGHT)
+        surface.blit(tip, (hint_rect.left + 6, hint_rect.centery - tip.get_height() // 2))
 
     draw_button(surface, font, apply_rect, "应用")
     draw_button(surface, font, cancel_rect, "取消")

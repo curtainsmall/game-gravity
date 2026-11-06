@@ -10,6 +10,7 @@ from core.constants import (
     HEADER,
     MARGIN,
     MIN_WINDOW,
+    PLAYER_SETTINGS_FIELD_COUNT,
     SETTINGS_FIELD_COUNT,
     ZOOM_STEP,
 )
@@ -18,6 +19,7 @@ from editing.handlers import (
     handle_create_menu,
     handle_detail_click,
     handle_dropdown_click,
+    handle_player_settings_click,
     handle_settings_click,
     handle_toolbar,
 )
@@ -125,6 +127,30 @@ def run() -> None:
                         editor.type_settings(event.unicode)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
+            elif editor.player_settings is not None:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        editor.close_player_settings(False)
+                    elif event.key == pygame.K_RETURN:
+                        editor.close_player_settings(True)
+                    elif event.key == pygame.K_UP:
+                        editor.player_settings_field = (
+                            editor.player_settings_field - 1
+                        ) % PLAYER_SETTINGS_FIELD_COUNT
+                    elif event.key == pygame.K_DOWN:
+                        editor.player_settings_field = (
+                            editor.player_settings_field + 1
+                        ) % PLAYER_SETTINGS_FIELD_COUNT
+                    elif event.key == pygame.K_LEFT:
+                        editor.adjust_player_settings(-1)
+                    elif event.key == pygame.K_RIGHT:
+                        editor.adjust_player_settings(1)
+                    elif event.key == pygame.K_BACKSPACE:
+                        editor.erase_player_settings_char()
+                    else:
+                        editor.type_player_settings(event.unicode)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    handle_player_settings_click(screen, editor, event.pos)
             elif editor.view_menu_open:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     editor.view_menu_open = False

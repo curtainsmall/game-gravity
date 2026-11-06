@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from view.chrome import create_menu_rects, toolbar_rects
-from view.modals import settings_geometry
+from view.modals import player_settings_geometry, settings_geometry
 from view.panel import (
     detail_button_rects,
     detail_image_rect,
@@ -34,6 +34,8 @@ def handle_toolbar(editor: Editor, position: tuple) -> str | None:
             editor.undo()
         elif action == "settings":
             editor.open_settings()
+        elif action == "player_settings":
+            editor.open_player_settings()
         elif action == "view":
             editor.view_menu_open = not editor.view_menu_open
         return action
@@ -116,8 +118,6 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         name_rect,
         width_rect,
         height_rect,
-        jump_rect,
-        speed_rect,
         flip_up_rect,
         flip_down_rect,
         background_rect,
@@ -138,15 +138,13 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         editor.pick_background()
         return
     if background_rect.collidepoint(position):
-        editor.settings_field = 7
+        editor.settings_field = 5
         return
     for field, rect in (
         (1, width_rect),
         (2, height_rect),
-        (3, jump_rect),
-        (4, speed_rect),
-        (5, flip_up_rect),
-        (6, flip_down_rect),
+        (3, flip_up_rect),
+        (4, flip_down_rect),
     ):
         if not rect.collidepoint(position):
             continue
@@ -159,3 +157,28 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         return
     if not panel.collidepoint(position):
         editor.close_settings(False)
+
+
+def handle_player_settings_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """玩家设置浮层：跳高、移动速度，加减和「应用 / 取消」都在这里。"""
+    panel, jump_rect, speed_rect, _, apply_rect, cancel_rect = player_settings_geometry(surface)
+    if apply_rect.collidepoint(position):
+        editor.close_player_settings(True)
+        return
+    if cancel_rect.collidepoint(position):
+        editor.close_player_settings(False)
+        return
+    for field, rect in ((0, jump_rect), (1, speed_rect)):
+        if not rect.collidepoint(position):
+            continue
+        editor.player_settings_field = field
+        left, right = stepper_rects(rect)
+        if left.collidepoint(position):
+            editor.adjust_player_settings(-1)
+        elif right.collidepoint(position):
+            editor.adjust_player_settings(1)
+        return
+    if not panel.collidepoint(position):
+        editor.close_player_settings(False)

@@ -8,7 +8,12 @@ from core.constants import BACKGROUND, FOOTER, MARGIN, STATUS_TEXT
 from view.canvas import draw_canvas, draw_ruler
 from view.chrome import draw_create_menu, draw_header, draw_view_menu
 from view.layout import Layout
-from view.modals import draw_quit_confirm, draw_settings, draw_startup
+from view.modals import (
+    draw_player_settings,
+    draw_quit_confirm,
+    draw_settings,
+    draw_startup,
+)
 from view.panel import draw_detail_panel, draw_selection_panel
 
 if TYPE_CHECKING:
@@ -32,6 +37,8 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_selection_panel(surface, editor, font)
     if editor.settings is not None:
         draw_settings(surface, editor, font)
+    if editor.player_settings is not None:
+        draw_player_settings(surface, editor, font)
     if editor.startup:
         draw_startup(surface, font)
     if editor.confirm_quit:
