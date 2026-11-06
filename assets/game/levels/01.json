@@ -306,5 +306,5 @@
     "pos": [17.0, 0.0],
     "size": [1.0, 1.0]
   },
-  "background": "textures/background.png"
+  "background": "textures/level1/background.png"
 }

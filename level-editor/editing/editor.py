@@ -40,6 +40,7 @@ from core.constants import (
     MOVE_SPEED_MIN,
     NAME_MAX_LENGTH,
     NOZZLE_DEFAULT_POWER,
+    NOZZLE_DEFAULT_SIZE,
     NUMBER_TEXT_MAX_LENGTH,
     PORTAL_SIZE,
     ROWS,
@@ -57,6 +58,7 @@ from core.constants import (
 from core.helpers import (
     clamp_float,
     clamp_int,
+    clamp_nozzle_power,
     display_path,
     file_name_for,
     level_name_of,
@@ -371,14 +373,14 @@ class Editor:
             level.items.append({"name": "", "pos": [x, y], "size": list(size), "heavy": False})
         elif self.tool == TOOL_NOZZLE:
             # 喷口的 size 就是风区（宽 × 长），face 是伸出的方向，power 是目标离底面多远
-            level.nozzles.append(
-                {
-                    "pos": [x, y],
-                    "face": FACE_ORDER[0],
-                    "power": 0,
-                    "size": list(NOZZLE_DEFAULT_SIZE),
-                }
-            )
+            nozzle = {
+                "pos": [x, y],
+                "face": FACE_ORDER[0],
+                "power": 0,
+                "size": list(NOZZLE_DEFAULT_SIZE),
+            }
+            clamp_nozzle_power(nozzle)     # 力度至少比风区长 0.5 格
+            level.nozzles.append(nozzle)
         elif self.tool == TOOL_PLAYER:
             # 起点只有一份：再放一次就是把它挪过去
             level.player = {"pos": [x, y], "size": list(size)}
@@ -1215,12 +1217,13 @@ class Editor:
         x, y = grab["pos"]
         corner = grab["corner"]
         if corner == "power":
-            # 拖力度箭头末端：末端到 pos 的距离（沿朝向）就是 power，不给负的
+            # 拖力度箭头末端：末端到 pos 的距离（沿朝向）就是 power，目标点必须留在风区外
             step_x, step_y = nozzle_face_axis(entry)
             reach = (point[0] - x) * step_x + (point[1] - y) * step_y
             if self.snapping:
                 reach = snap(reach)
-            entry["power"] = round(clamp_float(reach, 0.0, 8.0, 0.0), 2)
+            entry["power"] = round(reach, 2)
+            clamp_nozzle_power(entry)
             return
         if corner is None:
             entry["pos"] = [round(x + dx, 2), round(y + dy, 2)]
@@ -1284,6 +1287,8 @@ class Editor:
                 entry["size"] = [round(width, 2), round(height, 2)]
                 edge = bottom + height if face == "down" else bottom
                 entry["pos"] = [round(left + width / 2.0, 2), round(edge, 2)]
+            if kind == KIND_NOZZLE:
+                clamp_nozzle_power(entry)  # 风区拉长了，力度跟着顶上去
             return
         entry["pos"] = [round(left, 2), round(bottom, 2)]
         entry["size"] = [width, height]
@@ -1760,13 +1765,16 @@ class Editor:
             size = list(entry.get("size", [1.0, 1.0]))
             size[field - 2] = max(MIN_SIZE, round(value, 2))
             entry["size"] = size
+            if kind == KIND_NOZZLE:
+                clamp_nozzle_power(entry)  # 风区变长，力度至少要比它多 0.5 格
         elif kind == KIND_MOVABLE and field in (4, 5):
             offset = list(entry.get("offset", [0, -3]))
             offset[field - 4] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
             entry["offset"] = offset
         elif kind == KIND_NOZZLE and field == 5:
-            # 力度是沿着朝向走出去多远，不给负的
-            entry["power"] = round(clamp_float(value, 0.0, 8.0, 0.0), 2)
+            # 力度是沿着朝向走出去多远：下限是风区长度 + 0.5 格
+            entry["power"] = round(value, 2)
+            clamp_nozzle_power(entry)
 
     def type_dialog_number(self, char: str) -> bool:
         """数字字段键盘输入：第一次敲键起一个新值，之后追加，可以带一个小数点。

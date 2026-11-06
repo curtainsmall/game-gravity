@@ -12,6 +12,7 @@ from core.constants import (
     LEVEL_BACKGROUND_NAME,
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_SIZE,
+    NOZZLE_POWER_MARGIN,
     PORTAL_SIZE,
     ROOT,
 )
@@ -120,6 +121,38 @@ def nozzle_power_tip(entry: dict) -> tuple[float, float]:
     step_x, step_y = nozzle_face_axis(entry)
     power = max(0.0, float(entry.get("power", 0)))
     return float(x) + step_x * power, float(y) + step_y * power
+
+
+def nozzle_power_min(entry: dict) -> float:
+    """力度的下限：风区沿朝向的长度 + 0.5 格。
+
+    风区长边是 size[1]（左右朝向时它在屏幕上横过来，但数据里还是第二个数）。
+    """
+    size = entry.get("size", [1.0, 1.0]) if isinstance(entry, dict) else [1.0, 1.0]
+    try:
+        length = float(size[1])
+    except (IndexError, TypeError, ValueError):
+        length = 1.0
+    return round(max(0.0, length) + NOZZLE_POWER_MARGIN, 2)
+
+
+def clamp_nozzle_power(entry: dict) -> float:
+    """力度只往上顶：低于「风区长度 + 0.5」就抬到下限，别的值原样留着。
+
+    改风区和改力度都要过一遍这里；风区缩短时力度不动（不会自动往回缩）。
+    力度没有上限：风区愿意多长，力度就至少要比它多 0.5 格。
+    """
+    if not isinstance(entry, dict):
+        return 0.0
+    minimum = nozzle_power_min(entry)
+    try:
+        power = float(entry.get("power", NOZZLE_DEFAULT_POWER))
+    except (TypeError, ValueError):
+        power = minimum
+    if power < minimum:
+        power = minimum
+        entry["power"] = round(power, 2)
+    return power
 
 
 def display_path(path: str | None) -> str:

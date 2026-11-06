@@ -13,7 +13,8 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
     buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供可移动方块引用
     portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
     items                    道具：heavy 表示变重
-    nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的），
+    nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的；
+                             编辑器保证它至少比风区沿朝向的长度多 0.5 格，目标点落在风区外），
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
     textures                 贴图：浮点矩形 + image（相对 game.json 的路径）
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖
