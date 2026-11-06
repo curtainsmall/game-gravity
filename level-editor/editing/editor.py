@@ -116,7 +116,7 @@ class Editor:
         self.file_menu_open = False             # 工具栏「文件」下拉菜单
         self.view_menu_open = False
         # 视图设置：只影响编辑器自己的显示，从不写进关卡数据、不落盘
-        self.view_settings: dict = {"background": True, "debug": True}
+        self.view_settings: dict = {"background": True, "grid": True, "debug": True}
         self.menu_open = False
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
@@ -1487,6 +1487,16 @@ class Editor:
             return bool(entry.get("heavy", False))
         return None
 
+    def dialog_focusable(self, index: int) -> bool:
+        """这一行能不能选中：数字、下拉、开关可以，纯显示的行（贴图路径）不行。"""
+        if self.dialog is None:
+            return False
+        return (
+            self.dialog_number_value(index) is not None
+            or self.dialog_options(index) is not None
+            or self.dialog_checkbox(index) is not None
+        )
+
     def dialog_title(self) -> str:
         if self.dialog is None:
             return ""
@@ -1737,10 +1747,17 @@ class Editor:
         self.number_buffer = None
 
     def move_dialog_field(self, delta: int) -> None:
+        """上下键换一行，跳过纯显示的行（贴图路径这种点不中也调不了的）。"""
         self.number_buffer = None
         count = len(self.dialog_rows())
-        if count:
-            self.dialog_field = (self.dialog_field + delta) % count
+        if not count:
+            return
+        field = self.dialog_field
+        for _ in range(count):
+            field = (field + delta) % count
+            if self.dialog_focusable(field):
+                self.dialog_field = field
+                return
 
     # ---- 关卡设置 ---------------------------------------------------
     def settings_override(self, key: str) -> str:

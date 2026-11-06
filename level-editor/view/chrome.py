@@ -115,6 +115,7 @@ def view_menu_rects(editor: Editor, window_width: int) -> list:
     anchor = next(rect for rect, _, action in toolbar_rects(editor, window_width) if action == "view")
     items = [
         ("background", "显示背景"),
+        ("grid", "显示网格"),
         ("debug", "调试显示"),
     ]
     return [

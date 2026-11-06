@@ -100,14 +100,17 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
             pygame.draw.rect(surface, GROUND_COLOR, (layout.left, top, layout.width, tile))
 
     # 网格先画：所有对象（方块、贴图、机关标记）都压在它上面，别被辅助线切开。
-    # 网格还是按整格画（吸附细到半格，但不改网格的样子）
-    for col in range(layout.cols + 1):
-        x = layout.left + col * tile
-        if -tile <= x <= layout.window[0] + tile:
-            pygame.draw.line(surface, GRID, (x, layout.top), (x, layout.top + layout.height))
-    for row in range(layout.rows + 3):
-        y = layout.top + row * tile
-        pygame.draw.line(surface, GRID, (layout.left, y), (layout.left + layout.width, y))
+    # 网格还是按整格画（吸附细到半格，但不改网格的样子）；「视图 → 显示网格」可以关掉
+    if editor.view_settings.get("grid", True):
+        for col in range(layout.cols + 1):
+            x = layout.left + col * tile
+            if -tile <= x <= layout.window[0] + tile:
+                pygame.draw.line(
+                    surface, GRID, (x, layout.top), (x, layout.top + layout.height)
+                )
+        for row in range(layout.rows + 3):
+            y = layout.top + row * tile
+            pygame.draw.line(surface, GRID, (layout.left, y), (layout.left + layout.width, y))
 
     # 调试显示也包含翻转带：画在对象下面，标出区域但不盖住方块
     if debug:
@@ -119,8 +122,8 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for entry in level.movable_blocks:
             pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
-    # 贴图压在所有方块之上（方块、木板、可移动方块）
-    draw_textures(surface, layout, level, editor.media_base_dir)
+    # 贴图压在所有方块之上（方块、木板、可移动方块）；缺图时调试显示里铺黑紫棋盘格
+    draw_textures(surface, layout, level, editor.media_base_dir, debug)
 
     if debug:
         for entry in level.buttons:

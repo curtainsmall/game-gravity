@@ -6,11 +6,11 @@ import pygame
 
 import debug_display
 from controller.flip_rule import flip_area
-from core.game_object import GameObject
+from core.game_object import GameObject, GameObjectKind
 from physics.body import Body
 from renderer.background import draw_background
 from renderer.render_spec import PlaceholderFace, PlaceholderShape
-from renderer.texture import load_scaled
+from renderer.texture import draw_missing_texture, load_scaled
 from renderer.viewport import ViewMode, Viewport
 from world.world import World
 
@@ -45,10 +45,10 @@ class RenderSystem:
             if body is None or render is None:
                 continue
             rect = self.viewport.to_screen_rect(body, world)
-            if render.texture_path:
-                # 贴图是美术，任何时候都画；图读不出来时留个淡框兜底
-                if not self._texture(surface, rect, render, playable):
-                    self._shape(surface, rect, render)
+            if game_object.kind == GameObjectKind.TEXTURE:
+                # 贴图是美术，任何时候都画；图找不到时在调试显示里铺黑紫棋盘格
+                if not self._texture(surface, rect, render, playable) and debug:
+                    draw_missing_texture(surface, rect.clip(playable))
                 continue
             # 其余对象只有占位几何体可画，那就是调试显示：没勾就什么都不画
             if not debug:
@@ -60,6 +60,8 @@ class RenderSystem:
     @staticmethod
     def _texture(surface: pygame.Surface, rect: pygame.Rect, render, playable: pygame.Rect) -> bool:
         """贴图按世界矩形整张缩放铺上去，超出可玩区的部分裁掉。没图返回 False。"""
+        if not render.texture_path:
+            return False
         image = load_scaled(render.texture_path, rect.size, render.texture_smooth)
         if image is None:
             return False

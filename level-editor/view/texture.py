@@ -1,12 +1,16 @@
 """编辑器画布里的贴图：和游戏同一套规则。
 
 整张图按世界矩形缩放（浮点、不吸格子），画在方块和木板之上，超出可玩区的部分裁掉；
-后画的盖住先画的，数组顺序就是绘制顺序。
+后画的盖住先画的，数组顺序就是绘制顺序。找不到图时（调试显示打开）铺黑紫棋盘格。
 """
 
 import pygame
 
 from core.helpers import resolve_texture
+
+# 缺图的棋盘格：黑紫相间，一格 8 像素
+MISSING_COLORS = ((0, 0, 0), (128, 0, 128))
+MISSING_SQUARE = 8
 
 # (路径, 宽, 高, 是否平滑) -> 缩放好的图；None 表示加载失败，坏图只尝试一次
 _CACHE: dict[tuple[str, int, int, bool], pygame.Surface | None] = {}
@@ -42,20 +46,41 @@ def texture_rect(layout, entry: dict) -> pygame.Rect:
     return layout.world_rect(x, y, width, height)
 
 
+def draw_missing_texture(surface: pygame.Surface, rect: pygame.Rect) -> None:
+    """找不到图时铺一块黑紫棋盘格，一看就知道这里缺图（只在调试显示里画）。"""
+    if rect.width <= 0 or rect.height <= 0:
+        return
+    for row in range(0, rect.height, MISSING_SQUARE):
+        for col in range(0, rect.width, MISSING_SQUARE):
+            color = MISSING_COLORS[(row // MISSING_SQUARE + col // MISSING_SQUARE) % 2]
+            pygame.draw.rect(
+                surface,
+                color,
+                (
+                    rect.left + col,
+                    rect.top + row,
+                    min(MISSING_SQUARE, rect.width - col),
+                    min(MISSING_SQUARE, rect.height - row),
+                ),
+            )
+
+
 def draw_textures(
-    surface: pygame.Surface, layout, level, base_dir: str | None
+    surface: pygame.Surface, layout, level, base_dir: str | None, debug: bool = True
 ) -> None:
     """按数组顺序画，后一个盖前一个。
 
     编辑器里不裁剪：超出可玩区的部分照样画出来，方便看清整张图对到哪，
-    游戏里才裁到可玩区。
+    游戏里才裁到可玩区。图找不到时，调试显示打开就画黑紫棋盘格。
     """
     for entry in level.textures:
-        path = resolve_texture(entry.get("image"), base_dir)
-        if path is None:
-            continue
         rect = texture_rect(layout, entry)
-        image = load_scaled(path, rect.size, bool(entry.get("smooth", False)))
+        path = resolve_texture(entry.get("image"), base_dir)
+        image = None
+        if path is not None:
+            image = load_scaled(path, rect.size, bool(entry.get("smooth", False)))
         if image is None:
+            if debug:
+                draw_missing_texture(surface, rect)
             continue
         surface.blit(image, rect.topleft)

@@ -192,16 +192,16 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
             value = f"{editor.number_buffer}|"
         left, right = stepper_rects(rect)
         text = font.render(f"{label}：{value}", True, HIGHLIGHT if selected else TEXT)
-        clip = max(1, left.left - rect.left - 8)
+        options = editor.dialog_options(index)
+        is_number = editor.dialog_number_value(index) is not None
+        # 只有数字字段让出右边的加减按钮；下拉和纯显示的行用满整行
+        clip = max(1, left.left - rect.left - 8) if (options is not None or is_number) else rect.width - 12
         surface.blit(
             text,
             (rect.left + 6, rect.centery - text.get_height() // 2),
             (0, 0, min(text.get_width(), clip), text.get_height()),
         )
-        if editor.dialog_options(index) is None:
-            draw_stepper(surface, left, -1)
-            draw_stepper(surface, right, 1)
-        else:
+        if options is not None:
             # 选择型字段：右边画个向下的小三角，点开是一列选项
             pygame.draw.polygon(
                 surface,
@@ -212,6 +212,10 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
                     (right.centerx, right.centery + 3),
                 ],
             )
+        elif is_number:
+            draw_stepper(surface, left, -1)
+            draw_stepper(surface, right, 1)
+        # 纯显示的行（比如贴图路径）不画加减、也点不中
 
     name_rect = detail_slot_rect(surface, editor, "name")
     if name_rect is not None:

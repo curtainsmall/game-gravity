@@ -128,6 +128,8 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
             continue
         editor.blur_name()
         editor.blur_number()
+        if not editor.dialog_focusable(index):
+            return                      # 纯显示的行（贴图路径）点不中
         editor.dialog_field = index
         if editor.dialog_checkbox(index) is not None:
             # 复选框：点整行就地勾上或取消
