@@ -16,6 +16,7 @@ from core.constants import (
     LEVEL_SELECT_WIDTH,
     MARGIN,
     ROW_HEIGHT,
+    SETTINGS_TABS,
     TEXT,
 )
 from core.helpers import display_path, level_name_of
@@ -124,43 +125,115 @@ def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font
     draw_button(surface, font, close_rect, "关闭")
 
 
-def settings_geometry(surface: pygame.Surface) -> tuple:
-    """关卡设置：名称、宽高、翻转带、背景，以及玩家参数的本关覆盖。"""
-    panel = place_panel(surface, pygame.Rect(0, 0, 560, 368))
-    name_rect = pygame.Rect(panel.left + 12, panel.top + 38, panel.width - 24, ROW_HEIGHT + 2)
-    width_rect = pygame.Rect(panel.left + 12, panel.top + 72, panel.width - 24, ROW_HEIGHT + 2)
-    height_rect = pygame.Rect(panel.left + 12, panel.top + 106, panel.width - 24, ROW_HEIGHT + 2)
-    flip_up_rect = pygame.Rect(panel.left + 12, panel.top + 140, panel.width - 24, ROW_HEIGHT + 2)
-    flip_down_rect = pygame.Rect(panel.left + 12, panel.top + 174, panel.width - 24, ROW_HEIGHT + 2)
-    background_rect = pygame.Rect(
-        panel.left + 12, panel.top + 208, panel.width - 24, ROW_HEIGHT + 2
+# ---- 页签（关卡设置和声音浮层共用） --------------------------------
+TAB_HEIGHT = 24
+TAB_GAP = 4
+TAB_PADDING = 12
+TAB_MAX_WIDTH = 180
+
+_TAB_FONT: pygame.font.Font | None = None
+
+
+def _tab_text_width(text: str) -> int:
+    """页签宽度要按文字量算；几何和绘制用同一个字体，两边才对得上。"""
+    global _TAB_FONT
+    if _TAB_FONT is None:
+        _TAB_FONT = pygame.font.SysFont("microsoftyahei", 14)
+    return _TAB_FONT.size(text)[0]
+
+
+def _tab_width(label: str) -> int:
+    return min(TAB_MAX_WIDTH, _tab_text_width(label) + TAB_PADDING * 2)
+
+
+def _pack_tabs(widths: list, limit: int) -> list:
+    """页签一行放不下就换行；limit 是一行最多多宽，返回每行里有哪几页（下标）。"""
+    rows: list[list[int]] = [[]]
+    used = 0
+    for index, width in enumerate(widths):
+        if rows[-1] and used + width > limit:
+            rows.append([])
+            used = 0
+        rows[-1].append(index)
+        used += width + TAB_GAP
+    return rows
+
+
+SETTINGS_PANEL_WIDTH = 560
+SETTINGS_PANEL_HEIGHT = 320    # 三页固定一样高：切页时面板不跳
+SETTINGS_PANEL_TOP = 30        # 标题下面这一行是页签
+SETTINGS_CONTENT_TOP = 64      # 页签下面开始排字段
+
+
+def settings_geometry(surface: pygame.Surface, tab: int) -> dict:
+    """关卡设置：常规 / 玩家 / 声音三页，底下是应用和取消。
+
+    每页的字段都排成同高的行：常规是名称、宽高、翻转带、背景，玩家是跳高与速度的覆盖，
+    声音是这一关的 BGM、循环和淡入淡出。只有当前页的那些行有矩形。
+    """
+    panel = place_panel(
+        surface, pygame.Rect(0, 0, SETTINGS_PANEL_WIDTH, SETTINGS_PANEL_HEIGHT)
     )
-    browse_rect = pygame.Rect(
-        background_rect.right - 76, background_rect.top + 1, 76, background_rect.height - 2
-    )
-    player_hint_rect = pygame.Rect(
-        panel.left + 12, panel.top + 242, panel.width - 24, ROW_HEIGHT
-    )
-    jump_rect = pygame.Rect(panel.left + 12, panel.top + 264, panel.width - 24, ROW_HEIGHT + 2)
-    speed_rect = pygame.Rect(panel.left + 12, panel.top + 298, panel.width - 24, ROW_HEIGHT + 2)
-    button_y = panel.bottom - BUTTON_HEIGHT - 8
-    apply_rect = pygame.Rect(panel.right - 12 - 140, button_y, 68, BUTTON_HEIGHT)
-    cancel_rect = pygame.Rect(panel.right - 12 - 68, button_y, 68, BUTTON_HEIGHT)
-    return (
-        panel,
-        name_rect,
-        width_rect,
-        height_rect,
-        flip_up_rect,
-        flip_down_rect,
-        background_rect,
-        browse_rect,
-        player_hint_rect,
-        jump_rect,
-        speed_rect,
-        apply_rect,
-        cancel_rect,
-    )
+    tab_rects = []
+    x = panel.left + MARGIN
+    for index, (label, _) in enumerate(SETTINGS_TABS):
+        width = _tab_width(label)
+        tab_rects.append(
+            (pygame.Rect(x, panel.top + SETTINGS_PANEL_TOP, width, TAB_HEIGHT), index)
+        )
+        x += width + TAB_GAP
+    content_top = panel.top + SETTINGS_CONTENT_TOP
+
+    row_width = panel.width - 2 * MARGIN
+    rows: dict[int, pygame.Rect] = {}
+    browse = None
+    audio_browse = None
+    audio_preview = None
+    hint = None
+
+    def row(offset: int, width: int = row_width) -> pygame.Rect:
+        return pygame.Rect(
+            panel.left + MARGIN, content_top + offset, width, ROW_HEIGHT + 2
+        )
+
+    if tab == 0:                    # 常规
+        for field, offset in ((0, 0), (1, 34), (2, 68), (3, 102), (4, 136), (5, 170)):
+            rows[field] = row(offset)
+        browse = pygame.Rect(rows[5].right - 76, rows[5].top + 1, 76, rows[5].height - 2)
+        rows[5].width -= 82         # 背景格让出「浏览…」的位置
+    elif tab == 1:                  # 玩家
+        hint = pygame.Rect(panel.left + MARGIN, content_top, row_width, ROW_HEIGHT)
+        rows[6] = row(24)
+        rows[7] = row(58)
+    else:                           # 声音
+        rows[8] = row(0)
+        audio_preview = pygame.Rect(rows[8].right - 76, rows[8].top, 76, rows[8].height)
+        audio_browse = pygame.Rect(
+            audio_preview.left - 6 - 76, rows[8].top, 76, rows[8].height
+        )
+        rows[8].width = audio_browse.left - 6 - rows[8].left
+        rows[9] = row(34, 260)
+        fade_width = min(260, (row_width - 16) // 2)
+        rows[10] = pygame.Rect(
+            panel.left + MARGIN, content_top + 68, fade_width, ROW_HEIGHT + 2
+        )
+        rows[11] = pygame.Rect(rows[10].right + 16, rows[10].top, fade_width, ROW_HEIGHT + 2)
+        hint = pygame.Rect(panel.left + MARGIN, content_top + 100, row_width, 44)
+
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    apply_rect = pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT)
+    cancel_rect = pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT)
+    return {
+        "panel": panel,
+        "tabs": tab_rects,
+        "rows": rows,
+        "browse": browse,
+        "audio_browse": audio_browse,
+        "audio_preview": audio_preview,
+        "hint": hint,
+        "apply": apply_rect,
+        "cancel": cancel_rect,
+    }
 
 
 def _draw_settings_row(
@@ -177,111 +250,176 @@ def _draw_settings_row(
     surface.blit(text, (rect.left + 6, rect.centery - text.get_height() // 2))
 
 
-def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    (
-        panel,
-        name_rect,
-        width_rect,
-        height_rect,
-        flip_up_rect,
-        flip_down_rect,
-        background_rect,
-        browse_rect,
-        player_hint_rect,
-        jump_rect,
-        speed_rect,
-        apply_rect,
-        cancel_rect,
-    ) = settings_geometry(surface)
-    draw_panel(surface, panel)
-
-    surface.blit(font.render("关卡设置", True, TEXT), (panel.left + 12, panel.top + 8))
-    hint = font.render("点击面板外区域即取消", True, DIM_TEXT)
-    surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 8))
-
-    name = editor.settings["name"]
-    name_selected = editor.settings_field == 0
-    pygame.draw.rect(surface, (62, 62, 72) if name_selected else (48, 48, 54), name_rect)
-    pygame.draw.rect(surface, HIGHLIGHT if name_selected else (86, 86, 94), name_rect, 1)
-    caret = "|" if name_selected else ""
-    # 名字就是文件名：改了名字，保存时写到 levels/<新名字>.json
-    text = font.render(
-        f"名称（即文件名）：{name if name else '（空）'}{caret}",
-        True,
-        HIGHLIGHT if name_selected else TEXT,
-    )
-    clip = max(1, name_rect.width - 12)
+def _draw_settings_text_row(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    rect: pygame.Rect,
+    text: str,
+    selected: bool,
+    clip: int,
+) -> None:
+    """一格可编辑的路径 / 名称：选中时高亮，末尾带光标，长了就截断。"""
+    pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), rect)
+    pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
+    label = f"{text}|" if selected else text
+    rendered = font.render(label, True, HIGHLIGHT if selected else TEXT)
     surface.blit(
-        text,
-        (name_rect.left + 6, name_rect.centery - text.get_height() // 2),
-        (0, 0, min(text.get_width(), clip), text.get_height()),
+        rendered,
+        (rect.left + 6, rect.centery - rendered.get_height() // 2),
+        (0, 0, min(rendered.get_width(), max(1, clip)), rendered.get_height()),
+    )
+
+
+def _draw_general_settings(
+    surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
+) -> None:
+    """常规页：名称（即文件名）、宽高、翻转带、背景。"""
+    rows = geometry["rows"]
+    _draw_settings_text_row(
+        surface,
+        font,
+        rows[0],
+        f"名称（即文件名）：{editor.settings['name'] or '（空）'}",
+        editor.settings_field == 0,
+        rows[0].width - 12,
     )
 
     # 宽高决定画布大小：游戏里可玩行固定 400px，所以高度越大格子越小
-    for field, rect, label, key in (
-        (1, width_rect, "宽度（格）", "width"),
-        (2, height_rect, "高度（格）", "height"),
+    for field, label, key in (
+        (1, "宽度（格）", "width"),
+        (2, "高度（格）", "height"),
     ):
         selected = editor.settings_field == field
-        _draw_settings_row(surface, font, rect, label, editor.settings[key], selected)
-        left, right = stepper_rects(rect)
+        _draw_settings_row(surface, font, rows[field], label, editor.settings[key], selected)
+        left, right = stepper_rects(rows[field])
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
 
     # 翻转带：脚边落在带子里才翻得动。向上翻贴着关卡顶、向下翻贴着关卡底，
     # 数字是带子的高度，0 表示这一侧翻不了
-    for field, rect, label, key in (
-        (3, flip_up_rect, "向上翻带（贴顶）", "flip_up"),
-        (4, flip_down_rect, "向下翻带（贴底）", "flip_down"),
+    for field, label, key in (
+        (3, "向上翻带（贴顶）", "flip_up"),
+        (4, "向下翻带（贴底）", "flip_down"),
     ):
         selected = editor.settings_field == field
-        _draw_settings_row(surface, font, rect, label, editor.settings[key], selected)
-        left, right = stepper_rects(rect)
+        _draw_settings_row(surface, font, rows[field], label, editor.settings[key], selected)
+        left, right = stepper_rects(rows[field])
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
 
-    # 背景：直接敲路径，或点右边「选择…」挑一张图；存的是相对关卡目录的路径
-    background_selected = editor.settings_field == 5
-    pygame.draw.rect(
-        surface, (62, 62, 72) if background_selected else (48, 48, 54), background_rect
+    # 背景：直接敲路径，或点右边「浏览…」挑一张图；存的是相对 game.json 的路径
+    _draw_settings_text_row(
+        surface,
+        font,
+        rows[5],
+        f"背景：{editor.settings['background'] or '（无）'}",
+        editor.settings_field == 5,
+        geometry["browse"].left - rows[5].left - 12,
     )
-    pygame.draw.rect(
-        surface, HIGHLIGHT if background_selected else (86, 86, 94), background_rect, 1
-    )
-    path = editor.settings["background"]
-    caret = "|" if background_selected else ""
-    text = font.render(
-        f"背景：{path if path else '（无）'}{caret}",
-        True,
-        HIGHLIGHT if background_selected else TEXT,
-    )
-    clip = max(1, browse_rect.left - background_rect.left - 12)
-    surface.blit(
-        text,
-        (background_rect.left + 6, background_rect.centery - text.get_height() // 2),
-        (0, 0, min(text.get_width(), clip), text.get_height()),
-    )
-    draw_button(surface, font, browse_rect, "浏览…")
+    draw_button(surface, font, geometry["browse"], "浏览…")
 
-    # 玩家参数默认来自游戏配置；这两格填了就是本关的覆盖值，空着跟随游戏配置
+
+def _draw_player_settings(
+    surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
+) -> None:
+    """玩家页：这一关对游戏配置里跳高、速度的覆盖。"""
     surface.blit(
-        font.render("玩家（留空跟随游戏配置，填了就覆盖本关）", True, DIM_TEXT),
-        (player_hint_rect.left, player_hint_rect.top + 2),
+        font.render("留空跟随游戏配置，填了就覆盖本关。", True, DIM_TEXT),
+        (geometry["hint"].left, geometry["hint"].top + 2),
     )
-    for field, rect, label, key, fallback, unit in (
-        (6, jump_rect, "跳高", "jump_height", editor.player_stats()[0], "格"),
-        (7, speed_rect, "速度", "move_speed", editor.player_stats()[1], "格/秒"),
+    for field, label, key, fallback, unit in (
+        (6, "跳高", "jump_height", editor.player_stats()[0], "格"),
+        (7, "速度", "move_speed", editor.player_stats()[1], "格/秒"),
     ):
         selected = editor.settings_field == field
         raw = editor.settings[key]
         value = raw if raw else f"跟随（{fallback:g}）"
-        _draw_settings_row(surface, font, rect, f"{label}（{unit}）", value, selected)
-        left, right = stepper_rects(rect)
+        _draw_settings_row(
+            surface, font, geometry["rows"][field], f"{label}（{unit}）", value, selected
+        )
+        left, right = stepper_rects(geometry["rows"][field])
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
 
-    draw_button(surface, font, apply_rect, "应用")
-    draw_button(surface, font, cancel_rect, "取消")
+
+def _draw_level_sound_settings(
+    surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
+) -> None:
+    """声音页：这一关自己的 BGM、循环、淡入淡出。"""
+    rows = geometry["rows"]
+    _draw_settings_text_row(
+        surface,
+        font,
+        rows[8],
+        f"BGM 路径：{editor.settings['bgm'] or '（无）'}",
+        editor.settings_field == 8,
+        geometry["audio_browse"].left - rows[8].left - 12,
+    )
+    draw_button(surface, font, geometry["audio_browse"], "浏览…")
+    draw_button(surface, font, geometry["audio_preview"], "试听")
+
+    pygame.draw.rect(surface, (48, 48, 54), rows[9])
+    pygame.draw.rect(
+        surface, HIGHLIGHT if editor.settings_field == 9 else (86, 86, 94), rows[9], 1
+    )
+    draw_checkbox(
+        surface,
+        font,
+        rows[9],
+        "循环播放",
+        bool(editor.settings["loop"]),
+        editor.settings_field == 9,
+        inset=6,
+    )
+
+    for field, label, key in ((10, "淡入（秒）", "fade_in"), (11, "淡出（秒）", "fade_out")):
+        selected = editor.settings_field == field
+        _draw_settings_row(surface, font, rows[field], label, editor.settings[key], selected)
+        left, right = stepper_rects(rows[field])
+        draw_stepper(surface, left, -1)
+        draw_stepper(surface, right, 1)
+
+    for line_index, line in enumerate(
+        (
+            "曲子路径相对 game.json；「应用」记进这一关，保存关卡时一起写盘。",
+            "循环关闭只放一遍；没有曲子就是这一关不放音乐。",
+        )
+    ):
+        surface.blit(
+            font.render(line, True, DIM_TEXT),
+            (geometry["hint"].left, geometry["hint"].top + line_index * 22),
+        )
+
+
+def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    geometry = settings_geometry(surface, editor.settings_tab)
+    panel = geometry["panel"]
+    draw_panel(surface, panel)
+
+    surface.blit(font.render("关卡设置", True, TEXT), (panel.left + MARGIN, panel.top + 8))
+    tip = font.render("Tab 切换分页；点击面板外区域即取消", True, DIM_TEXT)
+    surface.blit(tip, (panel.right - MARGIN - tip.get_width(), panel.top + 8))
+
+    # 页签：常规 / 玩家 / 声音
+    for rect, index in geometry["tabs"]:
+        selected = index == editor.settings_tab
+        pygame.draw.rect(surface, (80, 80, 90) if selected else BUTTON_BG, rect)
+        pygame.draw.rect(surface, HIGHLIGHT if selected else DIALOG_BORDER, rect, 1)
+        label = font.render(SETTINGS_TABS[index][0], True, HIGHLIGHT if selected else TEXT)
+        surface.blit(
+            label,
+            (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2),
+        )
+
+    if editor.settings_tab == 0:
+        _draw_general_settings(surface, editor, font, geometry)
+    elif editor.settings_tab == 1:
+        _draw_player_settings(surface, editor, font, geometry)
+    else:
+        _draw_level_sound_settings(surface, editor, font, geometry)
+
+    draw_button(surface, font, geometry["apply"], "应用")
+    draw_button(surface, font, geometry["cancel"], "取消")
 
 
 GAME_PANEL_WIDTH = 620
@@ -539,51 +677,21 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
 
 
 SOUND_PANEL_WIDTH = 620       # 和游戏配置面板同宽：最小窗口下按钮也够得着
-SOUND_TAB_HEIGHT = 24
-SOUND_TAB_GAP = 4
-SOUND_TAB_PADDING = 12
-SOUND_TAB_MAX_WIDTH = 180
 SOUND_FIELD_HEIGHT = ROW_HEIGHT + 2
 SOUND_ROW_STEP = 32            # 一页里两行字段之间的行距
 SOUND_CONTENT_HEIGHT = 178     # 一页内容的固定高度：路径、循环、淡入淡出、三行说明
 SOUND_FOOTER_HEIGHT = 40
 
-_TAB_FONT: pygame.font.Font | None = None
-
-
-def _tab_text_width(text: str) -> int:
-    """页签宽度要按文字量算；几何和绘制用同一个字体，两边才对得上。"""
-    global _TAB_FONT
-    if _TAB_FONT is None:
-        _TAB_FONT = pygame.font.SysFont("microsoftyahei", 14)
-    return _TAB_FONT.size(text)[0]
-
-
-def _tab_width(label: str) -> int:
-    return min(SOUND_TAB_MAX_WIDTH, _tab_text_width(label) + SOUND_TAB_PADDING * 2)
-
-
-def _pack_tabs(widths: list) -> list:
-    """页签一行放不下就换行；返回每行里有哪几页（下标）。"""
-    limit = SOUND_PANEL_WIDTH - 2 * MARGIN
-    rows: list[list[int]] = [[]]
-    used = 0
-    for index, width in enumerate(widths):
-        if rows[-1] and used + width > limit:
-            rows.append([])
-            used = 0
-        rows[-1].append(index)
-        used += width + SOUND_TAB_GAP
-    return rows
-
 
 def sound_geometry(surface: pygame.Surface, tabs: list, index: int) -> dict:
-    """声音浮层：一排页签（标题、结局、玩家、每个关卡一页），下面是当前页的四个字段。
+    """声音浮层：标题、结局、玩家三页，下面是当前页的四个字段。
 
     页签按文字宽度排，一行放不下就换行，面板高度跟着行数长。
     """
-    rows = _pack_tabs([_tab_width(tab["label"]) for tab in tabs])
-    header = 32 + len(rows) * (SOUND_TAB_HEIGHT + SOUND_TAB_GAP) + 8
+    rows = _pack_tabs(
+        [_tab_width(tab["label"]) for tab in tabs], SOUND_PANEL_WIDTH - 2 * MARGIN
+    )
+    header = 32 + len(rows) * (TAB_HEIGHT + TAB_GAP) + 8
     panel = place_panel(
         surface,
         pygame.Rect(
@@ -595,12 +703,12 @@ def sound_geometry(surface: pygame.Surface, tabs: list, index: int) -> dict:
     tab_rects = []
     for row_index, row in enumerate(rows):
         x = panel.left + MARGIN
-        y = tabs_top + row_index * (SOUND_TAB_HEIGHT + SOUND_TAB_GAP)
+        y = tabs_top + row_index * (TAB_HEIGHT + TAB_GAP)
         for tab_index in row:
             width = _tab_width(tabs[tab_index]["label"])
-            tab_rects.append((pygame.Rect(x, y, width, SOUND_TAB_HEIGHT), tab_index))
-            x += width + SOUND_TAB_GAP
-    content_top = tabs_top + len(rows) * (SOUND_TAB_HEIGHT + SOUND_TAB_GAP) + 8
+            tab_rects.append((pygame.Rect(x, y, width, TAB_HEIGHT), tab_index))
+            x += width + TAB_GAP
+    content_top = tabs_top + len(rows) * (TAB_HEIGHT + TAB_GAP) + 8
 
     row = pygame.Rect(
         panel.left + MARGIN, content_top, panel.width - 2 * MARGIN, SOUND_FIELD_HEIGHT
@@ -704,7 +812,7 @@ def draw_sound(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) 
     for line_index, line in enumerate(
         (
             "循环关闭时只放一遍；没有 BGM 的一幕就不写进去。",
-            "「应用」把标题与结局写进 game.json 的 sounds，把每一关写进该关文件里的 sound。",
+            "「应用」把标题与结局写进 game.json 的 sounds；每一关的音乐在「关卡设置」的声音页里。",
             "Tab 切换分页；Enter 应用；Esc 取消。",
         )
     ):

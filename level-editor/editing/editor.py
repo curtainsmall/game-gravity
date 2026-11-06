@@ -44,6 +44,7 @@ from core.constants import (
     NUMBER_TEXT_MAX_LENGTH,
     PORTAL_SIZE,
     ROWS,
+    SETTINGS_TABS,
     TOOL_BLOCK,
     TOOL_BUTTON,
     TOOL_DEST,
@@ -119,6 +120,7 @@ class Editor:
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
         self.settings: dict | None = None
+        self.settings_tab = 0                      # 关卡设置停在哪一页：常规/玩家/声音
         self.settings_field = 0
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
@@ -686,6 +688,10 @@ class Editor:
             path = rebased(self.level.background)
             if path is not None:
                 self.level.background = path
+        if self.level.sound and self.level.sound.get("bgm"):
+            path = rebased(self.level.sound["bgm"])
+            if path is not None:
+                self.level.sound["bgm"] = path
         for entry in self.level.textures:
             value = entry.get("image")
             if not value:
@@ -899,9 +905,12 @@ class Editor:
         self.game_field = min(self.game_field, len(self.game_cells()) - 1)
         self.status = "已删除一个名字。"
 
-    # ---- 声音（每一幕一首 BGM） -------------------------------------
+    # ---- 声音（标题与结局） -----------------------------------------
     def open_sound(self) -> None:
-        """声音浮层：标题、结局、玩家，然后每个关卡文件一页（按文件名排序）。"""
+        """声音浮层：标题、结局、玩家三页。
+
+        每一关自己的音乐不在这里，在「关卡设置」的声音页里——那一页只改当前打开的关卡。
+        """
         if self.game_path is None:
             self.status = "尚未打开游戏配置，无法编辑声音。"
             return
@@ -910,10 +919,6 @@ class Editor:
             {"key": sound.ENDING_KEY, "label": "结局", "kind": "game"},
             {"key": sound.PLAYER_KEY, "label": "玩家", "kind": "player"},
         ]
-        for path in self.level_files():
-            tabs.append(
-                {"key": path, "label": level_name_of(path), "kind": "level", "path": path}
-            )
         self.sound_tabs = tabs
         self.sound_values = self._read_sound_values(tabs)
         self.sound_index = 0
@@ -921,10 +926,10 @@ class Editor:
         self.level_select_open = False
         self.file_menu_open = False
         self.view_menu_open = False
-        self.status = "声音：标题与结局写进 game.json，每一关的曲子写进它自己的关卡文件。"
+        self.status = "声音：标题与结局写进 game.json；每一关的音乐在「关卡设置」的声音页里。"
 
     def _read_sound_values(self, tabs: list) -> list:
-        """每一页现在的值：标题、结局在 game.json 里，关卡在各自的关卡文件里。"""
+        """每一页现在的值：标题、结局在 game.json 里，玩家音效还没有内容。"""
         settings = game.load_settings(self.game_path) if self.game_path else {}
         block = settings.get(sound.GAME_SOUNDS_KEY)
         block = block if isinstance(block, dict) else {}
@@ -932,14 +937,12 @@ class Editor:
         for tab in tabs:
             if tab["kind"] == "game":
                 values.append(sound.fields_of(block.get(tab["key"])))
-            elif tab["kind"] == "level":
-                values.append(sound.read_fields(sound.read_definition(tab["path"])))
             else:
                 values.append(sound.fields_of(None))
         return values
 
     def close_sound(self, commit: bool) -> None:
-        """关掉声音浮层；commit 时把每一页写回它该在的文件。"""
+        """关掉声音浮层；commit 时把标题与结局写回 game.json。"""
         tabs, values = self.sound_tabs, self.sound_values
         self.sound_tabs = None
         self.sound_values = []
@@ -949,8 +952,7 @@ class Editor:
         if tabs is None or not commit or self.game_path is None:
             return
 
-        problems: list[str] = []
-        # game.json：标题和结局两页；和原来一样就不重写这个文件
+        # 和原来一样就不重写 game.json
         settings = game.load_settings(self.game_path)
         original = settings.get(sound.GAME_SOUNDS_KEY)
         original_block = dict(original) if isinstance(original, dict) else {}
@@ -971,31 +973,9 @@ class Editor:
             try:
                 game.save_settings(settings, self.game_path)
             except OSError as error:
-                problems.append(f"game.json 保存失败：{error}")
-
-        # 每一关：只换它文件里的 sound，关卡别的内容原样留着
-        level_count = 0
-        current = os.path.normpath(self.path) if self.path else None
-        for index, tab in enumerate(tabs):
-            if tab["kind"] != "level":
-                continue
-            spec = sound.to_object(self._rebase_sound(values[index]))
-            error = sound.write_level_sound(tab["path"], spec)
-            if error is not None:
-                problems.append(f"「{tab['label']}」保存失败：{error}")
-                continue
-            level_count += 1
-            if current is not None and os.path.normpath(tab["path"]) == current:
-                # 当前打开的这关：内存里也改成一样的，保存关卡时不会把音乐写丢
-                self.level.sound = spec
-
-        if problems:
-            self.status = "声音：" + "；".join(problems) + "。"
-            return
-        self.status = (
-            f"声音已保存：标题与结局在 {display_path(self.game_path)}，"
-            f"{level_count} 个关卡文件已同步。"
-        )
+                self.status = f"声音：game.json 保存失败：{error}。"
+                return
+        self.status = f"声音已保存：标题与结局在 {display_path(self.game_path)}。"
 
     def sound_available(self) -> bool:
         """当前这一页能不能编辑：玩家音效还没有内容，那一页是空的。"""
@@ -1844,6 +1824,7 @@ class Editor:
     def open_settings(self) -> None:
         # 名称以外的数字项都按字符串编辑：可以直接敲数字，也可以点右边的加减
         flip_up, flip_down = self.level.flip_area_offsets
+        music = sound.fields_of(self.level.sound)
         self.settings = {
             "name": self.level.name,
             "width": str(self.level.width),
@@ -1854,11 +1835,43 @@ class Editor:
             # 玩家参数默认来自 game.json；这两格空着就是跟随，填了就覆盖
             "jump_height": self.settings_override("jump_height"),
             "move_speed": self.settings_override("move_speed"),
+            # 这一关的音乐跟着关卡文件走，在「声音」页里改
+            "bgm": music["bgm"],
+            "loop": music["loop"],
+            "fade_in": music["fade_in"],
+            "fade_out": music["fade_out"],
         }
+        self.settings_tab = 0
         self.settings_field = 0
+        self.preview.stop()
         self.push_undo()
 
+    # ---- 关卡设置的分页 ---------------------------------------------
+    def settings_fields(self) -> tuple:
+        """当前这一页有哪几个字段（下标）。"""
+        tab = max(0, min(self.settings_tab, len(SETTINGS_TABS) - 1))
+        return SETTINGS_TABS[tab][1]
+
+    def select_settings_tab(self, index: int) -> None:
+        """点页签切页；换页时把试听停下。"""
+        if not 0 <= index < len(SETTINGS_TABS) or index == self.settings_tab:
+            return
+        self.preview.stop()
+        self.settings_tab = index
+        self.settings_field = self.settings_fields()[0]
+
+    def switch_settings_tab(self, delta: int) -> None:
+        """Tab / Shift+Tab：在常规、玩家、声音之间转。"""
+        self.select_settings_tab((self.settings_tab + delta) % len(SETTINGS_TABS))
+
+    def move_settings_field(self, delta: int) -> None:
+        """上下键只在当前这一页里走。"""
+        fields = self.settings_fields()
+        index = fields.index(self.settings_field) if self.settings_field in fields else 0
+        self.settings_field = fields[(index + delta) % len(fields)]
+
     def close_settings(self, commit: bool) -> None:
+        self.preview.stop()                # 试听只在面板开着的时候有意义
         if self.settings is not None and commit:
             name = self.settings["name"]
             self.level.name = name
@@ -1876,16 +1889,27 @@ class Editor:
             ]
             self.level.background = self.settings["background"]
             self._apply_player_override()
+            # 这一关的音乐：填了曲子才写 sound，空着就把它删掉
+            self.level.sound = sound.to_object(
+                {
+                    "bgm": self.settings["bgm"],
+                    "loop": self.settings["loop"],
+                    "fade_in": self.settings["fade_in"],
+                    "fade_out": self.settings["fade_out"],
+                }
+            )
             self.dirty = True
             background = self.level.background or "无"
             flip_up, flip_down = self.level.flip_area_offsets
             jump, speed, overridden = self.player_stats()
+            music = self.level.sound["bgm"] if self.level.sound else "无"
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
                 f"尺寸 {self.level.width}×{self.level.height}，"
                 f"翻转带 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}，"
                 f"跳高 {jump} / 速度 {speed:g}"
-                f"{'（本关覆盖游戏配置）' if overridden else '（跟随游戏配置）'}。"
+                f"{'（本关覆盖游戏配置）' if overridden else '（跟随游戏配置）'}，"
+                f"音乐 {music}。"
             )
         self.settings = None
 
@@ -1926,6 +1950,38 @@ class Editor:
         self.settings["background"] = relative_level_path(path, self.media_base_dir)
         self.settings_field = 5
         self.status = "已选择背景：仅记录相对 game.json 的路径，不复制文件。"
+
+    def pick_level_audio(self) -> None:
+        """给这一关挑一首 BGM：只记路径，不复制文件。"""
+        if self.settings is None:
+            return
+        path = ask_audio_path("选择背景音乐", self.media_base_dir)
+        if not path:
+            self.status = "已取消选择曲子。"
+            return
+        self.settings["bgm"] = relative_level_path(path, self.media_base_dir)
+        self.settings_field = 8
+        self.status = "已选择曲子：仅记录相对 game.json 的路径，不复制文件。"
+
+    def preview_level_audio(self) -> None:
+        """试听这一关的声音页：按这一页的循环与淡入放，再点一次停。"""
+        if self.settings is None:
+            return
+        path = resolve_level_path(self.settings["bgm"], self.media_base_dir)
+        if path is None:
+            self.preview.stop()
+            self.status = f"找不到这首曲子：{self.settings['bgm'] or '（未填写）'}。"
+            return
+        self.status = self.preview.toggle(
+            path,
+            bool(self.settings["loop"]),
+            clamp_float(
+                self.settings["fade_in"],
+                0.0,
+                sound.MAX_FADE_SECONDS,
+                sound.DEFAULT_FADE_IN,
+            ),
+        )
 
     def pick_texture_image(self) -> None:
         """给当前贴图换一张图：只记相对 game.json 的路径，不复制文件。"""
@@ -1979,6 +2035,18 @@ class Editor:
             )
             stepped = max(MOVE_SPEED_MIN, min(MOVE_SPEED_MAX, current + 0.5 * delta))
             self.settings["move_speed"] = f"{stepped:g}"
+        elif field == 9:
+            # 循环播放：左右键（或点整行）切换
+            self.settings["loop"] = not bool(self.settings["loop"])
+        elif field in (10, 11):
+            # 淡入淡出：按 0.5 秒一步，0~10 秒
+            key = "fade_in" if field == 10 else "fade_out"
+            fallback = sound.DEFAULT_FADE_IN if field == 10 else sound.DEFAULT_FADE_OUT
+            current = clamp_float(self.settings[key], 0.0, sound.MAX_FADE_SECONDS, fallback)
+            stepped = max(
+                0.0, min(sound.MAX_FADE_SECONDS, current + sound.FADE_STEP * delta)
+            )
+            self.settings[key] = f"{stepped:g}"
 
     def _step_size(self, key: str, delta: int, low: int, high: int, fallback: int) -> None:
         """宽高在编辑期间是字符串：先夹回合法区间再加，空字符串按默认值算。"""
@@ -2014,6 +2082,15 @@ class Editor:
             # 速度覆盖：数字和小数点，最多 5 位
             if (char.isdigit() or char == ".") and len(self.settings["move_speed"]) < 5:
                 self.settings["move_speed"] += char
+        elif field == 8:
+            # BGM 也是路径：可打印字符都能打
+            if char.isprintable() and len(self.settings["bgm"]) < sound.BGM_PATH_MAX_LENGTH:
+                self.settings["bgm"] += char
+        elif field in (10, 11):
+            # 淡入淡出：数字和小数点，最多 5 位
+            key = "fade_in" if field == 10 else "fade_out"
+            if (char.isdigit() or char == ".") and len(str(self.settings[key])) < 5:
+                self.settings[key] = str(self.settings[key]) + char
 
     def erase_settings_char(self) -> None:
         if self.settings is None:
@@ -2033,6 +2110,11 @@ class Editor:
             self.settings["jump_height"] = self.settings["jump_height"][:-1]
         elif field == 7:
             self.settings["move_speed"] = self.settings["move_speed"][:-1]
+        elif field == 8:
+            self.settings["bgm"] = self.settings["bgm"][:-1]
+        elif field in (10, 11):
+            key = "fade_in" if field == 10 else "fade_out"
+            self.settings[key] = str(self.settings[key])[:-1]
 
 
 # ---- 绘制 -----------------------------------------------------------

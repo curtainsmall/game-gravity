@@ -10,7 +10,6 @@ from core.constants import (
     HEADER,
     MARGIN,
     MIN_WINDOW,
-    SETTINGS_FIELD_COUNT,
     ZOOM_STEP,
 )
 from editing.editor import Editor
@@ -132,15 +131,19 @@ def run() -> None:
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_level_select_click(screen, editor, event.pos)
             elif editor.settings is not None:
+                # 关卡设置：Tab 切常规/玩家/声音，↑↓ 选字段，←→ 调值，敲字改路径
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_settings(False)
                     elif event.key == pygame.K_RETURN:
                         editor.close_settings(True)
+                    elif event.key == pygame.K_TAB:
+                        step = -1 if event.mod & pygame.KMOD_SHIFT else 1
+                        editor.switch_settings_tab(step)
                     elif event.key == pygame.K_UP:
-                        editor.settings_field = (editor.settings_field - 1) % SETTINGS_FIELD_COUNT
+                        editor.move_settings_field(-1)
                     elif event.key == pygame.K_DOWN:
-                        editor.settings_field = (editor.settings_field + 1) % SETTINGS_FIELD_COUNT
+                        editor.move_settings_field(1)
                     elif event.key == pygame.K_LEFT:
                         editor.adjust_settings(-1)
                     elif event.key == pygame.K_RIGHT:

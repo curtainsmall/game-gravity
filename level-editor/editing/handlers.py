@@ -147,54 +147,41 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
 
 
 def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
-    (
-        panel,
-        name_rect,
-        width_rect,
-        height_rect,
-        flip_up_rect,
-        flip_down_rect,
-        background_rect,
-        browse_rect,
-        _,
-        jump_rect,
-        speed_rect,
-        apply_rect,
-        cancel_rect,
-    ) = settings_geometry(surface)
-    if apply_rect.collidepoint(position):
+    """关卡设置浮层：切页签、点字段、浏览图片/曲子、试听、应用/取消。"""
+    geometry = settings_geometry(surface, editor.settings_tab)
+    if geometry["apply"].collidepoint(position):
         editor.close_settings(True)
         return
-    if cancel_rect.collidepoint(position):
+    if geometry["cancel"].collidepoint(position):
         editor.close_settings(False)
         return
-    if name_rect.collidepoint(position):
-        editor.settings_field = 0
-        return
-    if browse_rect.collidepoint(position):
+    for rect, index in geometry["tabs"]:
+        if rect.collidepoint(position):
+            editor.select_settings_tab(index)
+            return
+    if geometry["browse"] is not None and geometry["browse"].collidepoint(position):
         editor.pick_background()
         return
-    if background_rect.collidepoint(position):
-        editor.settings_field = 5
+    if geometry["audio_browse"] is not None and geometry["audio_browse"].collidepoint(position):
+        editor.pick_level_audio()
         return
-    for field, rect in (
-        (1, width_rect),
-        (2, height_rect),
-        (3, flip_up_rect),
-        (4, flip_down_rect),
-        (6, jump_rect),
-        (7, speed_rect),
-    ):
+    if geometry["audio_preview"] is not None and geometry["audio_preview"].collidepoint(position):
+        editor.preview_level_audio()
+        return
+    for field, rect in geometry["rows"].items():
         if not rect.collidepoint(position):
             continue
         editor.settings_field = field
+        if field == 9:                      # 循环播放：点整行切换
+            editor.adjust_settings(1)
+            return
         left, right = stepper_rects(rect)
         if left.collidepoint(position):
             editor.adjust_settings(-1)
         elif right.collidepoint(position):
             editor.adjust_settings(1)
         return
-    if not panel.collidepoint(position):
+    if not geometry["panel"].collidepoint(position):
         editor.close_settings(False)
 
 

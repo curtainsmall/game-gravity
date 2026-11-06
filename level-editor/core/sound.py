@@ -1,17 +1,14 @@
 """声音：每一幕一首背景音乐。
 
 写法和游戏端一致（见 game/sound/bgm.py）：
-    标题、结局   game.json 的 sounds.title / sounds.ending
-    每一关       关卡 json 的 sound：曲子跟着关卡文件走，改名、删关都不牵连别人
+    标题、结局   game.json 的 sounds.title / sounds.ending，在工具栏「声音」里改
+    每一关       关卡 json 的 sound：曲子跟着关卡文件走，在「关卡设置」的声音页里改
 一首 BGM 的键：
     bgm       曲子文件，相对 game.json 的路径
     loop      是否循环，缺省 true
     fade_in   切入时淡入几秒，缺省 0.5
     fade_out  离开这一幕时淡出几秒，缺省 1.0
 没有 bgm 的这一幕就不写这一项。玩家音效还没有内容，玩家那一页先空着。
-
-编辑器只改这四项，别的键原样保留；改别的关卡文件时先读出来、只换 sound 再写回，
-所以那个文件里没打开的内容不会被覆盖。
 """
 
 import json
@@ -21,10 +18,8 @@ import pygame
 
 from core.constants import ROOT, SETTING_DIR_NAME, SETTING_FILE_NAME
 from core.helpers import clamp_float
-from core.level import dump_level
 
 GAME_SOUNDS_KEY = "sounds"   # game.json：一幕一首，标题、结局都在里面
-LEVEL_SOUND_KEY = "sound"    # 关卡 json：这一关自己的那一首
 TITLE_KEY = "title"
 ENDING_KEY = "ending"
 PLAYER_KEY = "player"        # 玩家音效：还没定义内容，先占一页
@@ -47,19 +42,13 @@ def setting_file() -> str:
 
 # ---- 一页的四项 -----------------------------------------------------
 def read_definition(path: str) -> dict | None:
-    """读一份 json（game.json 或关卡文件）；读不出来返回 None。"""
+    """读一份 json；读不出来返回 None。"""
     try:
         with open(path, encoding="utf-8") as file:
             value = json.load(file)
     except (OSError, json.JSONDecodeError):
         return None
     return value if isinstance(value, dict) else None
-
-
-def read_fields(container) -> dict:
-    """关卡 json 里 sound 那一幕的四项；没有 sound 就是空的一页。"""
-    value = container.get(LEVEL_SOUND_KEY) if isinstance(container, dict) else None
-    return fields_of(value)
 
 
 def fields_of(value) -> dict:
@@ -91,28 +80,6 @@ def to_object(fields: dict) -> dict | None:
             clamp_float(fields.get("fade_out"), 0.0, MAX_FADE_SECONDS, DEFAULT_FADE_OUT), 2
         ),
     }
-
-
-def write_level_sound(path: str, value: dict | None) -> str | None:
-    """只换一个关卡文件的 sound 键，别的键原样写回；返回错误说明，None 表示写成功。
-
-    先读后写：这个文件可能不是当前打开的那一关，编辑器内存里的内容不该把它覆盖掉。
-    """
-    definition = read_definition(path)
-    if definition is None:
-        return "读不出这个关卡文件"
-    if definition.get(LEVEL_SOUND_KEY) == value:
-        return None                      # 没有变化：不动这个文件
-    if value is None:
-        definition.pop(LEVEL_SOUND_KEY, None)
-    else:
-        definition[LEVEL_SOUND_KEY] = value
-    try:
-        with open(path, "w", encoding="utf-8", newline="\n") as file:
-            file.write(dump_level(definition))
-    except OSError as error:
-        return str(error)
-    return None
 
 
 def _read_bool(value, default: bool) -> bool:
