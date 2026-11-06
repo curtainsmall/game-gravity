@@ -150,9 +150,10 @@ SETTINGS_TABS = (
     ("过场", ()),
 )
 SETTINGS_CUTSCENE_TAB = 3
-# 游戏配置分四页：常规、制作名单、声音、过场。每页有哪些格子由 editor.game_cells 按页给。
-GAME_SETTINGS_TABS = ("常规", "制作名单", "声音", "过场")
-GAME_CUTSCENE_TAB = 3
+# 游戏配置分五页：常规、玩家动画、制作名单、声音、过场。每页有哪些格子由 editor.game_cells 按页给。
+GAME_SETTINGS_TABS = ("常规", "玩家动画", "制作名单", "声音", "过场")
+GAME_ANIMATION_TAB = 1
+GAME_CUTSCENE_TAB = 4
 BACKGROUND_MAX_LENGTH = 120
 
 # ---- 对象种类 ----

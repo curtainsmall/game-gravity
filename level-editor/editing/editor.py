@@ -5,13 +5,14 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-from core import cutscene, game, sound
+from core import animation, cutscene, game, sound
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
     BUTTON_SIZE,
     COLS,
     FACE_LABELS,
     FACE_ORDER,
+    GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
     GAME_SETTINGS_TABS,
     HANDLE_PIXELS,
@@ -147,8 +148,13 @@ class Editor:
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
         self.game_cards: list = []                 # 浮层里的制作名单卡片：{job, names: [名字…]}
         self.game_card_scroll = 0                  # 卡片列表滚到第几张
+        self.game_animations: dict = animation.new_state()  # 玩家动画：状态名 → {frames, fps, loop}
+        self.animation_state = 0                   # 动画页选中的状态行
+        self.animation_frame = 0                   # 该状态里选中的帧
+        self.animation_preview: dict | None = None  # 预览浮层：{index, frame, elapsed}
+        self.animation_drag: dict | None = None     # 拖动画帧：{index, from, slot, start, moved}
         self.game_field = 0                        # 浮层里选中的格：标题、跳高、速度、职位、名字…
-        self.game_tab = 0                          # 游戏配置停在哪一页：常规/制作名单/声音
+        self.game_tab = 0                          # 游戏配置停在哪一页：常规/玩家动画/制作名单/声音/过场
         self.game_sound: dict = {}                 # 声音页：键 → {bgm, loop, fade_in, fade_out}
         self.preview = sound.Preview()             # 试听（和游戏共用一个混音器）
         self.level_select_open = False             # 关卡列表浮层
@@ -769,7 +775,7 @@ class Editor:
 
     # ---- 游戏配置（game.json） --------------------------------------
     def open_game_settings(self) -> None:
-        """打开游戏配置：常规（标题、玩家参数）、制作名单、声音（标题与制作名单）。"""
+        """打开游戏配置：常规（标题、玩家参数）、动画、制作名单、声音与结尾过场。"""
         if self.game_path is None:
             self.status = "尚未打开游戏配置。"
             return
@@ -791,6 +797,11 @@ class Editor:
         self.game_sound = {
             key: sound.fields_of(block.get(key)) for key, _ in sound.SCENE_KEYS
         }
+        self.game_animations = animation.from_settings(settings)
+        self.animation_state = 0
+        self.animation_frame = 0
+        self.animation_preview = None
+        self.animation_drag = None
         self.game_card_scroll = 0
         self.game_tab = 0
         self.game_field = 0
@@ -800,7 +811,7 @@ class Editor:
         self.cutscene_scroll = 0
         self.preview.stop()
         self.level_select_open = False
-        self.status = "游戏配置：常规、制作名单、音乐与结尾过场将写入 game.json。"
+        self.status = "游戏配置：常规、玩家动画、制作名单、音乐与结尾过场将写入 game.json。"
 
     def close_game_settings(self, commit: bool) -> None:
         settings = self.game_settings
@@ -808,10 +819,14 @@ class Editor:
         numbers = self.game_numbers
         sounds = self.game_sound
         cutscene_state = self.cutscene
+        animations = self.game_animations
         self.game_settings = None
         self.game_cards = []
         self.game_numbers = {}
         self.game_sound = {}
+        self.game_animations = animation.new_state()
+        self.animation_preview = None
+        self.animation_drag = None
         self.cutscene = None
         self.preview.stop()                # 试听只在面板开着的时候有意义
         if settings is None or not commit or self.game_path is None:
@@ -829,7 +844,16 @@ class Editor:
             ),
             2,
         )
+        # 玩家动画：有帧的状态才写进 player.animations，一个都没有就把这个键删掉；
+        # 老的 player.animation（动作名 → 单张图）和顶层的 animations 迁移完就不再写
+        player.pop("animation", None)
+        animation_table = animation.to_table(animations)
+        if animation_table:
+            player["animations"] = animation_table
+        else:
+            player.pop("animations", None)
         settings["player"] = player
+        settings.pop("animations", None)
         # 声音：填了曲子的一幕才写进 sounds，一幕都没有就把这个键删掉
         block = {}
         for key, _ in sound.SCENE_KEYS:
@@ -855,15 +879,20 @@ class Editor:
         self.game_player = player
         names = sum(len(names) for names in settings["credits"].values())
         pictures = len(cutscene_value["pictures"]) if cutscene_value else 0
+        frames = sum(len(clip["frames"]) for clip in animation_table.values())
         self.status = (
             f"游戏配置已保存：{title}，跳高 {player['jump_height']}，"
-            f"速度 {player['move_speed']:g}，制作名单 {len(settings['credits'])} 个职位、"
+            f"速度 {player['move_speed']:g}，动画 {len(animation_table)} 个状态、"
+            f"{frames} 帧，制作名单 {len(settings['credits'])} 个职位、"
             f"{names} 个名字，音乐 {len(block)} 幕，结尾过场 {pictures} 张图。"
         )
 
     # ---- 游戏配置的分页 ---------------------------------------------
     def game_cutscene_tab(self) -> bool:
         return self.game_tab == GAME_CUTSCENE_TAB
+
+    def game_animation_tab(self) -> bool:
+        return self.game_tab == GAME_ANIMATION_TAB
 
     def select_game_tab(self, index: int) -> None:
         """点页签切页；换页时把试听停下，选中格回到这一页的第一格。"""
@@ -872,20 +901,26 @@ class Editor:
         self.preview.stop()
         self.game_tab = index
         self.game_field = 0
+        self.animation_drag = None
         if index == GAME_CUTSCENE_TAB:
             self.cutscene_field = 0
             self.cutscene_scroll = 0
+        elif index == GAME_ANIMATION_TAB:
+            self.animation_state = 0
+            self.animation_frame = 0
 
     def switch_game_tab(self, delta: int) -> None:
-        """Tab / Shift+Tab：在常规、制作名单、声音、过场之间转。"""
+        """Tab / Shift+Tab：在常规、玩家动画、制作名单、声音、过场之间转。"""
         self.select_game_tab((self.game_tab + delta) % len(GAME_SETTINGS_TABS))
 
-    # 每一页的格子：常规是标题与两个玩家参数；制作名单是每张卡片的职位、每个名字；
-    # 声音是标题和制作名单各四项（路径、循环、淡入、淡出）。
+    # 每一页的格子：常规是标题与两个玩家参数；玩家动画页是固定的五行（没有这种格子）；
+    # 制作名单是每张卡片的职位、每个名字；声音是标题和制作名单各四项（路径、循环、淡入淡出）。
     def game_cells(self) -> list[tuple]:
         if self.game_tab == 0:
             return [("title",), ("jump",), ("speed",)]
-        if self.game_tab == 1:
+        if self.game_tab in (GAME_ANIMATION_TAB, GAME_CUTSCENE_TAB):
+            return []
+        if self.game_tab == 2:              # 制作名单
             cells: list[tuple] = []
             for index, card in enumerate(self.game_cards):
                 cells.append(("job", index))
@@ -959,6 +994,8 @@ class Editor:
         if self.game_cutscene_tab():
             self.type_cutscene(char)
             return
+        if self.game_animation_tab():
+            return                      # 玩家动画页没有可敲的文字格
         cell = self.current_game_cell()
         text = self.game_field_text()
         kind = cell[0]
@@ -987,12 +1024,17 @@ class Editor:
         if self.game_cutscene_tab():
             self.erase_cutscene_char()
             return
+        if self.game_animation_tab():
+            return
         self.set_game_field_text(self.game_field_text()[:-1])
 
     def adjust_game_number(self, delta: int) -> None:
         """跳高按 1 格、速度和高低音淡入淡出按 0.5 一格，循环是开关。"""
         if self.game_cutscene_tab():
             self.adjust_cutscene(delta)
+            return
+        if self.game_animation_tab():
+            self.adjust_animation_fps(delta)
             return
         cell = self.current_game_cell()
         kind = cell[0]
@@ -1036,18 +1078,186 @@ class Editor:
             self.game_numbers["move_speed"] = f"{stepped:g}"
 
     def move_game_field(self, delta: int) -> None:
-        """上下键只在当前这一页的格子之间走。"""
+        """上下键只在当前这一页的格子之间走（玩家动画页是五个状态行）。"""
         if self.game_cutscene_tab():
             self.move_cutscene_field(delta)
             return
+        if self.game_animation_tab():
+            self.move_animation_state(delta)
+            return
         cells = self.game_cells()
         self.game_field = max(0, min(self.game_field + delta, len(cells) - 1))
+
+    # ---- 玩家动画页 -------------------------------------------------
+    def animation_clip(self, index: int | None = None) -> dict:
+        """某个状态（默认当前选中的）的剪辑：{frames, fps, loop}。"""
+        if index is None:
+            index = self.animation_state
+        index = max(0, min(index, len(animation.PLAYER_ANIMATIONS) - 1))
+        name = animation.PLAYER_ANIMATIONS[index][0]
+        return self.game_animations[name]
+
+    def animation_frames(self) -> list:
+        return self.animation_clip()["frames"]
+
+    def move_animation_state(self, delta: int) -> None:
+        self.select_animation_state(self.animation_state + delta)
+
+    def select_animation_state(self, index: int) -> None:
+        self.animation_state = max(0, min(index, len(animation.PLAYER_ANIMATIONS) - 1))
+        self.animation_frame = 0
+
+    def select_animation_frame(self, index: int) -> None:
+        frames = self.animation_frames()
+        self.animation_frame = 0 if not frames else max(0, min(index, len(frames) - 1))
+
+    def add_animation_frame(self) -> None:
+        """给当前状态加一帧：选图，只记相对 game.json 的路径。"""
+        path = ask_image_path("添加动画帧", self.media_base_dir)
+        if not path:
+            self.status = "已取消添加动画帧。"
+            return
+        clip = self.animation_clip()
+        clip["frames"].append(relative_level_path(path, self.media_base_dir))
+        self.animation_frame = len(clip["frames"]) - 1
+        self.status = f"已添加一帧（{len(clip['frames'])} 帧）：仅记录相对 game.json 的路径。"
+
+    def remove_animation_frame(self) -> None:
+        frames = self.animation_frames()
+        if not frames:
+            self.status = "当前状态还没有帧。"
+            return
+        index = max(0, min(self.animation_frame, len(frames) - 1))
+        del frames[index]
+        self.animation_frame = max(0, min(index, len(frames) - 1))
+        self.status = "已删除一帧。"
+
+    def move_animation_frame_to(self, index: int, frame_index: int, slot: int) -> bool:
+        """把某一行的某一帧挪到插槽上：slot 是挪动前列表里的插入点（0..帧数）。"""
+        frames = self.animation_clip(index)["frames"]
+        if not 0 <= frame_index < len(frames):
+            return False
+        target = slot - (1 if frame_index < slot else 0)
+        target = max(0, min(target, len(frames) - 1))
+        if target == frame_index:
+            return False
+        frames.insert(target, frames.pop(frame_index))
+        self.animation_state = index
+        self.animation_frame = target
+        return True
+
+    def begin_animation_drag(self, index: int, frame_index: int, position: tuple) -> None:
+        """在缩略图上按下：先记下来，鼠标挪开几个像素才算真的开始拖。"""
+        self.animation_drag = {
+            "index": index,
+            "from": frame_index,
+            "slot": frame_index,
+            "start": position,
+            "moved": False,
+        }
+
+    def update_animation_drag(self, position: tuple, page: dict) -> None:
+        """拖动中：鼠标落在哪两个缩略图之间，插入点就挪到哪儿。"""
+        drag = self.animation_drag
+        if drag is None:
+            return
+        if not drag["moved"]:
+            dx = position[0] - drag["start"][0]
+            dy = position[1] - drag["start"][1]
+            if abs(dx) < animation.DRAG_THRESHOLD and abs(dy) < animation.DRAG_THRESHOLD:
+                return
+            drag["moved"] = True
+        row = page["rows"][drag["index"]]
+        thumbs = row["thumbs"]
+        slot = len(thumbs)
+        for thumb in thumbs:
+            if position[0] < thumb["rect"].centerx:
+                slot = thumb["index"]
+                break
+        # 后面还有没画出来的帧：拖到缩略图条最右边就当作放到最后
+        if len(thumbs) < row["count"] and position[0] >= row["strip"].right:
+            slot = row["count"]
+        drag["slot"] = slot
+
+    def finish_animation_drag(self) -> None:
+        """松开鼠标：挪动过才改顺序；没挪动就只是一次普通选中。"""
+        drag = self.animation_drag
+        self.animation_drag = None
+        if drag is None or not drag["moved"]:
+            return
+        if self.move_animation_frame_to(drag["index"], drag["from"], drag["slot"]):
+            self.status = f"已把第 {drag['from'] + 1} 帧挪到第 {self.animation_frame + 1} 帧。"
+
+    def cancel_animation_drag(self) -> None:
+        self.animation_drag = None
+
+    def adjust_animation_fps(self, delta: int) -> None:
+        clip = self.animation_clip()
+        current = clamp_float(
+            clip["fps"], animation.FPS_MIN, animation.FPS_MAX, animation.DEFAULT_FPS
+        )
+        value = max(
+            animation.FPS_MIN,
+            min(animation.FPS_MAX, current + animation.FPS_STEP * delta),
+        )
+        clip["fps"] = f"{value:g}"
+        self.status = f"{animation.PLAYER_ANIMATIONS[self.animation_state][1]}：{value:g} fps。"
+
+    def toggle_animation_loop(self) -> None:
+        clip = self.animation_clip()
+        clip["loop"] = not bool(clip["loop"])
+        label = animation.PLAYER_ANIMATIONS[self.animation_state][1]
+        self.status = f"{label}：{'循环' if clip['loop'] else '不循环'}。"
+
+    def open_animation_preview(self, index: int) -> None:
+        """弹窗播放某个状态的帧动画：从第一帧开始，按 fps 往下走。"""
+        index = max(0, min(index, len(animation.PLAYER_ANIMATIONS) - 1))
+        label = animation.PLAYER_ANIMATIONS[index][1]
+        frames = self.animation_clip(index)["frames"]
+        if not frames:
+            self.animation_preview = None
+            self.status = f"{label}还没有帧：先点「添加帧」。"
+            return
+        self.animation_preview = {"index": index, "frame": 0, "elapsed": 0.0}
+        self.status = f"正在预览{label}（{len(frames)} 帧）：Esc 或点「关闭」结束预览。"
+
+    def close_animation_preview(self) -> None:
+        if self.animation_preview is None:
+            return
+        self.animation_preview = None
+        self.status = "已关闭动画预览。"
+
+    def advance_animation_preview(self, seconds: float) -> None:
+        """预览浮层的时间推进：按 fps 换帧，循环的回到第一帧，不循环的停在最后一帧。"""
+        preview = self.animation_preview
+        if preview is None:
+            return
+        clip = self.animation_clip(preview["index"])
+        frames = clip["frames"]
+        if not frames:
+            self.animation_preview = None
+            return
+        fps = clamp_float(clip["fps"], animation.FPS_MIN, animation.FPS_MAX, animation.DEFAULT_FPS)
+        preview["elapsed"] += max(0.0, seconds)
+        step = 1.0 / fps
+        while preview["elapsed"] >= step:
+            preview["elapsed"] -= step
+            if preview["frame"] + 1 < len(frames):
+                preview["frame"] += 1
+            elif clip["loop"]:
+                preview["frame"] = 0
+            else:
+                preview["frame"] = len(frames) - 1
+                preview["elapsed"] = 0.0
+                break
 
     def scroll_game_cards(self, delta: int, visible: int | None = None) -> None:
         """滚轮翻制作名单卡片；visible 是当前能看到的张数，用来夹住上界。"""
         if self.game_cutscene_tab():
             self.scroll_cutscene(delta)
             return
+        if self.game_animation_tab():
+            return                      # 玩家动画页是固定的五行，不用滚
         last = max(0, len(self.game_cards) - (visible or 1))
         self.game_card_scroll = max(0, min(self.game_card_scroll + delta, last))
 

@@ -22,7 +22,10 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              face 是朝向（up/right/down/left，顺时针转，缺省 up），
                              flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动；
                              hide 表示初始隐藏，triggers 的 hide / show 由按钮切换显示
-    player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖
+    player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖。
+                             animations 是玩家动画剪辑：名字固定（idle/run/jump/fall/flip），
+                             {"frames": [相对路径…], "fps": 8, "loop": true}；
+                             game.json 的 player.animations 也能写，关卡里的同名剪辑盖住它
     destination              终点
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
     sound                    这一关的音乐：bgm（相对 game.json 的路径）、loop、fade_in、fade_out
@@ -31,14 +34,16 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
 （传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是
 「底面」的中点、size 是没转过的宽高，face（up/right/down/left）决定从底面往哪边
 长出去，左右朝向时屏幕上的宽高是对调的。
-玩家参数一般写在 game.json 的 player 里（jump_height 格、move_speed 格/秒、
-animation 动作名 → 图片路径，动作名不预设；动画系统还没接，先读出来放着）；
-关卡 json 的 player 里写同名键就是这一关的覆盖值，两边的图片路径都相对游戏根。
+玩家参数一般写在 game.json 的 player 里（jump_height 格、move_speed 格/秒、animations 动画）；
+关卡 json 的 player 里写同名键就是这一关的覆盖值。老数据把玩家动画写在 player.animation
+里（动作名 → 单张图），读成只有一帧的剪辑；更早一版写在顶层的 animations，也当成同一张表。
+图片路径都相对游戏根。
 """
 
 import json
 from pathlib import Path
 
+from animation.clip import AnimationClip
 from controller.controller import Controller
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
@@ -151,26 +156,61 @@ def move_speed_of(level_definition: LevelDefinition, game_player: dict | None = 
     return max(0.0, value)
 
 
-def animation_of(
+def player_animations(
     level_definition: LevelDefinition,
-    game_player: dict | None = None,
+    game_settings: dict | None = None,
     base_dir: str | Path | None = None,
 ) -> dict:
-    """玩家动画：动作名 → 图的绝对路径（动画系统还没接，先读出来放着）。
+    """玩家的帧动画：game.json 的 player.animations，关卡 json 里的同名剪辑盖住它。
 
-    路径和别处一样相对 game.json 所在的文件夹；找不到的图直接跳过。
+    形状 {"idle": {"frames": [...], "fps": 8, "loop": true}, ...}，名字固定（见
+    animation.player.PLAYER_STATES）；帧路径相对 game.json，找不到的帧跳过，一帧都没剩的
+    剪辑不算数。老数据把动作写在 player.animation 里（动作名 → 单张图），读成单帧剪辑；
+    更早一版把动画表写在顶层 animations，也读。
     """
-    for source in (player_settings(level_definition), game_player or {}):
-        value = source.get("animation")
+    clips: dict = {}
+    settings = game_settings or {}
+    for source in (settings, level_definition):
+        if not isinstance(source, dict):
+            continue
+        clips.update(_animation_clips(source.get("animations"), base_dir))  # 顶层的旧位置
+        player = source.get("player")
+        if isinstance(player, dict):
+            clips.update(_animation_clips(player.get("animations"), base_dir))
+    # 老格式：player 里的 animation，动作名 → 单张图
+    for source in (settings.get("player"), player_settings(level_definition)):
+        legacy = source.get("animation") if isinstance(source, dict) else None
+        if not isinstance(legacy, dict):
+            continue
+        for action, value in legacy.items():
+            name = str(action)
+            if name in clips:
+                continue
+            path = resolve_texture(value, base_dir)
+            if path is not None:
+                clips[name] = AnimationClip([path])
+    return clips
+
+
+def _animation_clips(table, base_dir: str | Path | None) -> dict:
+    """player.animations 表 → 剪辑；空表、坏条目、一帧都找不到的剪辑都跳过。"""
+    clips: dict = {}
+    if not isinstance(table, dict):
+        return clips
+    for name, value in table.items():
         if not isinstance(value, dict):
             continue
-        animation = {}
-        for action, path in value.items():
-            found = resolve_texture(path, base_dir)
+        frames = []
+        for frame in value.get("frames") or []:
+            found = resolve_texture(frame, base_dir)
             if found is not None:
-                animation[str(action)] = found
-        return animation
-    return {}
+                frames.append(found)
+        if not frames:
+            continue
+        clips[str(name)] = AnimationClip(
+            frames, value.get("fps", 8), bool(value.get("loop", True))
+        )
+    return clips
 
 
 def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, float]:

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pygame
 
+from animation.player import PlayerAnimator
 from controller.controller_system import ControllerSystem
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
@@ -20,7 +21,6 @@ from trigger.trigger_system import TriggerSystem
 from world.follower import FollowSystem
 from world.level import (
     LevelDefinition,
-    animation_of,
     build_blocks,
     build_boundaries,
     build_buttons,
@@ -36,6 +36,7 @@ from world.level import (
     jump_height_of,
     load_level_file,
     move_speed_of,
+    player_animations,
 )
 from world.world import World
 
@@ -67,7 +68,8 @@ class Scene:
         # 调试显示：由 App 按设置里的那一个开关填进来
         self.debug: bool = False
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
-        self.player_animation: dict = {}
+        self.player_animation: dict = {}     # 玩家动画剪辑：状态名 → AnimationClip
+        self.player_animator: PlayerAnimator | None = None
         self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
         self.cutscene: Cutscene | None = None  # 进这一关之前的过场
 
@@ -112,8 +114,9 @@ class Scene:
         # 触发行为：来源名字解析一次，之后每帧派发事件
         scene.trigger_system.attach(objects)
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
-        # 玩家动画先读出来放着：还没有动画系统拿去用
-        scene.player_animation = animation_of(level_definition, game_player, base_dir)
+        # 玩家动画：game.json 的 player.animations（关卡里的同名项覆盖），按物理状态轮播
+        scene.player_animation = player_animations(level_definition, game_settings, base_dir)
+        scene.player_animator = PlayerAnimator(scene.player, scene.player_animation)
         # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐
         scene.bgm = level_bgm(level_definition, base_dir)
         # 进这一关之前的过场：没图就当作没有
@@ -142,7 +145,7 @@ class Scene:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
     def update(self, delta_seconds: float) -> None:
-        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 道具拾取 → 传送门。"""
+        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 玩家动画 → 拾取 → 传送门。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
@@ -150,6 +153,8 @@ class Scene:
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.follow_system.update()
         self.physics_system.update(self.objects, self.world, delta_seconds)
+        if self.player_animator is not None:
+            self.player_animator.update(delta_seconds)
         self.pickup_system.update(self.objects)
         self.portal_system.update(self.objects, self.player)
 

@@ -36,17 +36,18 @@ class RenderSystem:
         self.viewport.follow(focus_x, world, surface)
         draw_background(surface, world, self.viewport)
         playable = self.viewport.playable_rect(world)
-        # 先铺一层美术：调试显示整层压在贴图上面，开着调试时占位和翻转带都看得见
+        # 先铺一层美术：调试显示整层压在贴图上面，开着调试时占位和翻转带都看得见。
+        # 有贴图路径的对象都画图（贴图、带动画的玩家等），贴图没图时在调试里铺棋盘格
         for game_object in objects:
-            if game_object.kind != GameObjectKind.TEXTURE:
-                continue
             body = game_object.body
             render = game_object.render
             if body is None or render is None or not self._visible(game_object):
                 continue
+            texture = game_object.kind == GameObjectKind.TEXTURE
+            if not texture and not render.texture_path:
+                continue
             rect = self.viewport.to_screen_rect(body, world)
-            # 图找不到时在调试显示里铺黑紫棋盘格
-            if not self._texture(surface, rect, render, playable) and debug:
+            if not self._texture(surface, rect, render, playable) and debug and texture:
                 draw_missing_texture(surface, rect.clip(playable))
 
         # 调试显示：翻转带（半透明）铺在美术上面，其余对象的占位几何体再压上来

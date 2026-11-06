@@ -11,6 +11,7 @@ from core.constants import (
     DIALOG_BORDER,
     DIM_TEXT,
     FOOTER,
+    GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
     GAME_SETTINGS_TABS,
     HEADER,
@@ -24,6 +25,7 @@ from core.constants import (
 )
 from core.helpers import display_path, level_name_of
 from core.sound import SCENE_KEYS
+from view.animation import animation_geometry, animation_page_height, draw_animation_page
 from view.cutscene import cutscene_geometry, cutscene_page_height, draw_cutscene_page
 from view.widgets import (
     draw_button,
@@ -460,19 +462,22 @@ def _credit_card_height(card: dict) -> int:
 
 
 def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
-    """游戏配置：常规 / 制作名单 / 声音 / 过场四页，底下是应用和取消。
+    """游戏配置：常规 / 玩家动画 / 制作名单 / 声音 / 过场五页，底下是应用和取消。
 
-    常规页是标题与玩家参数；制作名单页每个职位一张卡片，装不下就用滚轮翻（滚到第几张
-    记在编辑器的 game_card_scroll 上）；声音页把标题与制作名单两块上下排开，每块是路径、
-    循环和淡入淡出；过场页和关卡设置里的是同一页（见 view.cutscene）。只有当前页的
-    那些矩形有值。
+    常规页是标题与玩家参数；玩家动画页是玩家那五个状态的帧动画（见 view.animation，
+    每行有「预览」弹出播放小窗）；
+    制作名单页每个职位一张卡片，装不下就用滚轮翻（滚到第几张记在编辑器的 game_card_scroll
+    上）；声音页把标题与制作名单两块上下排开，每块是路径、循环和淡入淡出；过场页和关卡设置
+    里的是同一页（见 view.cutscene）。只有当前页的那些矩形有值。
     """
     tab = editor.game_tab
     cards = editor.game_cards
     scroll = editor.game_card_scroll
     if tab == 0:
         height = GAME_GENERAL_HEIGHT
-    elif tab == 1:
+    elif tab == GAME_ANIMATION_TAB:
+        height = animation_page_height(GAME_CONTENT_TOP)
+    elif tab == 2:                      # 制作名单
         card_heights = [_credit_card_height(card) for card in cards]
         content = sum(card_height + CREDIT_CARD_GAP for card_height in card_heights)
         # 面板最高顶到信息栏下面、状态栏上面，剩下的靠滚轮翻
@@ -509,6 +514,7 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         "add": None,
         "remove": None,
         "cutscene": None,
+        "animation": None,
         "note_top": content_top,
         "apply": pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT),
         "cancel": pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT),
@@ -527,7 +533,9 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
             panel.left + MARGIN, content_top + 84, row_width, ROW_HEIGHT + 2
         )
         geometry["note_top"] = content_top + 118
-    elif tab == 1:
+    elif tab == GAME_ANIMATION_TAB:
+        geometry["animation"] = animation_geometry(surface, editor, panel, content_top)
+    elif tab == 2:                      # 制作名单
         geometry["section"] = pygame.Rect(
             panel.left + MARGIN, content_top, row_width, ROW_HEIGHT
         )
@@ -851,7 +859,7 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
     hint = font.render("Tab 切换分页；点击面板外区域即取消", True, DIM_TEXT)
     surface.blit(hint, (panel.right - MARGIN - hint.get_width(), panel.top + 8))
 
-    # 页签：常规 / 制作名单 / 声音 / 过场
+    # 页签：常规 / 玩家动画 / 制作名单 / 声音 / 过场
     for rect, index in geometry["tabs"]:
         selected = index == editor.game_tab
         pygame.draw.rect(surface, (80, 80, 90) if selected else BUTTON_BG, rect)
@@ -864,9 +872,11 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
 
     if editor.game_cutscene_tab():
         draw_cutscene_page(surface, editor, font, geometry["cutscene"])
+    elif editor.game_animation_tab():
+        draw_animation_page(surface, editor, font, geometry["animation"])
     elif editor.game_tab == 0:
         _draw_game_general(surface, editor, font, geometry)
-    elif editor.game_tab == 1:
+    elif editor.game_tab == 2:
         _draw_game_credits(surface, editor, font, geometry)
     else:
         _draw_game_sound(surface, editor, font, geometry)

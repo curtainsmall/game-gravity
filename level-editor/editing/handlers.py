@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from core.constants import ROW_HEIGHT
+from view.animation import animation_preview_geometry
 from view.chrome import create_menu_rects, toolbar_rects
 from view.modals import (
     game_settings_geometry,
@@ -302,6 +303,75 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         editor.close_settings(False)
 
 
+def handle_animation_click(editor: Editor, position: tuple, page: dict) -> None:
+    """玩家动画页：点行选中状态，点缩略图选中帧、按住可以拖动换顺序；
+    按钮管预览、加帧和删帧。"""
+    for row in page["rows"]:
+        index = row["index"]
+
+        def focus() -> None:
+            if editor.animation_state != index:
+                editor.select_animation_state(index)
+
+        if row["fps"].collidepoint(position):
+            focus()
+            left, right = stepper_rects(row["fps"])
+            if left.collidepoint(position):
+                editor.adjust_animation_fps(-1)
+            elif right.collidepoint(position):
+                editor.adjust_animation_fps(1)
+            return
+        if row["loop"].collidepoint(position):
+            focus()
+            editor.toggle_animation_loop()
+            return
+        if row["preview"].collidepoint(position):
+            focus()
+            editor.open_animation_preview(index)
+            return
+        if row["add"].collidepoint(position):
+            focus()
+            editor.add_animation_frame()
+            return
+        if row["remove"].collidepoint(position):
+            focus()
+            editor.remove_animation_frame()
+            return
+        for thumb in row["thumbs"]:
+            if thumb["rect"].collidepoint(position):
+                editor.select_animation_state(index)
+                editor.select_animation_frame(thumb["index"])
+                editor.begin_animation_drag(index, thumb["index"], position)
+                return
+        if row["rect"].collidepoint(position):
+            editor.select_animation_state(index)
+            return
+
+
+def handle_animation_drag_motion(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """拖动画帧：把鼠标位置换算成缩略图之间的插入点。"""
+    if not editor.game_animation_tab():
+        return
+    geometry = game_settings_geometry(surface, editor)
+    editor.update_animation_drag(position, geometry["animation"])
+
+
+def handle_animation_drag_release(editor: Editor) -> None:
+    """松开鼠标：真的拖动过就把这一帧插到新的位置。"""
+    editor.finish_animation_drag()
+
+
+def handle_animation_preview_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """动画预览浮层：点「关闭」或面板外都关掉它。"""
+    geometry = animation_preview_geometry(surface)
+    if geometry["close"].collidepoint(position) or not geometry["panel"].collidepoint(position):
+        editor.close_animation_preview()
+
+
 def handle_game_settings_click(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
@@ -327,6 +397,11 @@ def handle_game_settings_click(
         if not panel.collidepoint(position):
             editor.close_game_settings(False)
         return
+    if editor.game_animation_tab():
+        handle_animation_click(editor, position, geometry["animation"])
+        if not panel.collidepoint(position):
+            editor.close_game_settings(False)
+        return
 
     cells = editor.game_cells()
     if editor.game_tab == 0:
@@ -344,7 +419,7 @@ def handle_game_settings_click(
             elif right.collidepoint(position):
                 editor.adjust_game_number(1)
             return
-    elif editor.game_tab == 1:
+    elif editor.game_tab == 2:
         if geometry["add"].collidepoint(position):
             editor.add_credit_card()
             return
