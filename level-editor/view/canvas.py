@@ -163,11 +163,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         surface.blit(fill, rect.topleft)
         pygame.draw.rect(surface, HIGHLIGHT, rect, 1)
 
-    if editor.picking_offset:
-        # 选目标位置时：光标处画一个红点，和支点/目标点同一个红
-        position = pygame.mouse.get_pos()
-        pygame.draw.circle(surface, PIVOT_COLOR, position, 4)
-    elif editor.creating:
+    if editor.creating:
         # 新建状态：光标处用「要放的那种对象」的颜色描边；拖动时改画整个预览范围
         color = readable_color(TOOL_COLORS.get(editor.tool, HIGHLIGHT))
         if editor.drag_start is not None and editor.drag_current is not None:

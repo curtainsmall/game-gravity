@@ -191,12 +191,6 @@ def run() -> None:
                     editor.pan_drag = (event.pos[0], event.pos[1], editor.pan_x, editor.pan_y)
                     continue
                 sync_modifiers(editor)
-                if editor.picking_offset:
-                    if event.button == 1:
-                        editor.finish_pick_offset(layout.world_point(event.pos))
-                    elif event.button == 3:
-                        editor.cancel_pick_offset()
-                    continue
                 if event.button == 3:
                     if editor.creating:
                         if editor.drag_start is None:
@@ -232,8 +226,6 @@ def run() -> None:
                 elif event.key == pygame.K_ESCAPE:
                     if editor.dropdown_field is not None:
                         editor.close_dropdown()
-                    elif editor.picking_offset:
-                        editor.cancel_pick_offset()
                     elif editor.name_focused:
                         editor.blur_name()
                     elif editor.selection:

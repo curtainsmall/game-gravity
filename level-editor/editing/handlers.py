@@ -9,7 +9,6 @@ from view.modals import settings_geometry
 from view.panel import (
     detail_button_rects,
     detail_image_rect,
-    detail_pick_rect,
     detail_row_rects,
     detail_slot_rect,
     dropdown_rects,
@@ -84,11 +83,6 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         return
     if close_rect.collidepoint(position):
         editor.close_dialog()
-        return
-    pick_rect = detail_pick_rect(surface, editor)
-    if pick_rect is not None and pick_rect.collidepoint(position):
-        editor.blur_name()
-        editor.begin_pick_offset()
         return
     image_rect = detail_image_rect(surface, editor)
     if image_rect is not None and image_rect.collidepoint(position):

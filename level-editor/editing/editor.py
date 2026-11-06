@@ -97,7 +97,6 @@ class Editor:
         self.dialog: dict | None = None
         self.dialog_field = 0
         self.dropdown_field: int | None = None   # 正在展开下拉列表的选择型字段
-        self.picking_offset = False
         self.name_focused = False
         self.number_buffer: str | None = None   # 正在键盘输入的数字字段，None 表示没在输入
         self.object_grab: dict | None = None    # 正在用鼠标拖对象：移动或缩放
@@ -303,7 +302,6 @@ class Editor:
         self.dropdown_field = None
         self.selection = []
         self.hovered = None
-        self.picking_offset = False
         self.number_buffer = None
         self.status = f"已删除{KIND_TITLES.get(kind, '对象')}"
 
@@ -323,7 +321,6 @@ class Editor:
         self.selection = []
         self.marquee_start = None
         self.marquee_current = None
-        self.picking_offset = False
         self.dirty = True
         self.status = "已撤销"
 
@@ -338,7 +335,6 @@ class Editor:
         self.selection = []
         self.marquee_start = None
         self.marquee_current = None
-        self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
         self.startup = False
@@ -376,7 +372,6 @@ class Editor:
         self.selection = []                 # 上一个关卡的选中项不能带过来
         self.marquee_start = None
         self.marquee_current = None
-        self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
         self.startup = False
@@ -623,7 +618,6 @@ class Editor:
         self.dialog = {"kind": kind, "entry": entry}
         self.dialog_field = 0
         self.dropdown_field = None
-        self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
         self.status = f"已选中{KIND_TITLES.get(kind, '对象')}"
@@ -638,7 +632,6 @@ class Editor:
         else:
             self.dialog = None
         self.dropdown_field = None
-        self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
         self.status = f"已选中 {len(self.selection)} 个对象" if self.selection else "已取消选中"
@@ -780,7 +773,6 @@ class Editor:
     def close_dialog(self) -> None:
         self.dialog = None
         self.dropdown_field = None
-        self.picking_offset = False
         self.name_focused = False
         self.number_buffer = None
 
@@ -815,30 +807,7 @@ class Editor:
             self.dialog["entry"]["name"] = name[:-1]
             self.dirty = True
 
-    # ---- 拾取偏移 ---------------------------------------------------
-    def begin_pick_offset(self) -> None:
-        """等用户在关卡里点一下，用那一点和 pos 的差算出 offset。"""
-        if self.dialog is None or self.dialog["kind"] != KIND_MOVABLE:
-            return
-        self.picking_offset = True
-        self.status = "在关卡里左键点一下目标位置；右键或 Esc 取消"
-
-    def cancel_pick_offset(self) -> None:
-        self.picking_offset = False
-        self.status = "已取消拾取偏移"
-
-    def finish_pick_offset(self, point: tuple) -> None:
-        if not self.picking_offset or self.dialog is None:
-            return
-        entry = self.dialog["entry"]
-        pos = entry["pos"]
-        self.push_undo()
-        # 偏移按整格记，取点到对象左下角的差
-        entry["offset"] = [int(round(point[0] - pos[0])), int(round(point[1] - pos[1]))]
-        self.picking_offset = False
-        self.dirty = True
-        self.status = f"偏移设为 {entry['offset'][0]}, {entry['offset'][1]}"
-
+    # ---- 属性面板的字段 ---------------------------------------------
     def dialog_rows(self) -> list:
         if self.dialog is None:
             return []
