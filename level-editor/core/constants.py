@@ -185,10 +185,10 @@ else:
 DEFAULT_GAME_DIR = os.path.join(ROOT, "assets", "game")
 GAME_FILE_NAME = "game.json"
 LEVELS_DIR_NAME = "levels"
-# 一个关卡 = 一个文件夹，文件夹名就是关卡名
-LEVEL_SCENE_NAME = "scene.json"            # 关卡数据
-LEVEL_BACKGROUND_NAME = "background.png"   # 背景图进来后固定叫这个名字
-# 贴图没有专门的目录：image 只要求是相对 scene.json 的路径，放哪儿都行
+# 一个关卡 = levels/ 下的一个 <关卡名>.json；图片放哪儿都行，路径相对 game.json
+LEVEL_FILE_SUFFIX = ".json"
+LEVEL_BACKGROUND_NAME = "background.png"   # 没写 background 时在游戏根里找它兜底
+# 贴图没有专门的目录：image 只要求是相对 game.json 的路径，放哪儿都行
 BACKGROUND_FILTERS = [("图片文件", "*.png *.jpg *.jpeg *.bmp *.gif"), ("所有文件", "*.*")]
 GAME_FILTERS = [("游戏配置文件", "*.json"), ("所有文件", "*.*")]
 

@@ -1,13 +1,13 @@
-"""关卡清单：game/levels/ 下每个文件夹是一关，按文件夹名排字母序。
+"""关卡清单：game/levels/ 下每个 <关卡名>.json 是一关，按文件名排字母序。
 
+关卡名就是文件名（不含 .json）；图片等资源放在项目里任何地方，路径相对 game.json。
 没有起点（player）或没有终点（destination）的关卡不算可玩：选关里照样列出来，
 但是半透明显示，开局和过关都会跳过它。
 """
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
-
-import json
 
 import pygame
 
@@ -16,18 +16,14 @@ from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
 
-SCENE_FILE = "scene.json"
+SCENE_SUFFIX = ".json"
 
 
 @dataclass(frozen=True)
 class LevelEntry:
-    folder: Path
-    name: str
+    path: Path
+    name: str                  # 文件名去掉 .json
     playable: bool = True      # 起点和终点都在才算可玩
-
-    @property
-    def scene_path(self) -> Path:
-        return self.folder / SCENE_FILE
 
 
 def definition_is_playable(definition: dict) -> bool:
@@ -38,7 +34,7 @@ def definition_is_playable(definition: dict) -> bool:
 
 
 def read_definition(path: str | Path) -> dict | None:
-    """读 scene.json；读不出来返回 None。"""
+    """读关卡 json；读不出来返回 None。"""
     try:
         with open(path, encoding="utf-8") as file:
             value = json.load(file)
@@ -48,22 +44,22 @@ def read_definition(path: str | Path) -> dict | None:
 
 
 def discover_levels() -> list[LevelEntry]:
-    """扫 levels/ 下带 scene.json 的文件夹，按文件夹名不分大小写排字母序。"""
+    """扫 levels/ 下的 .json，按文件名不分大小写排字母序。"""
     if not LEVELS_DIR.is_dir():
         return []
     entries = []
-    for folder in LEVELS_DIR.iterdir():
-        if not folder.is_dir() or not (folder / SCENE_FILE).is_file():
+    for path in LEVELS_DIR.iterdir():
+        if not path.is_file() or path.suffix.lower() != SCENE_SUFFIX:
             continue
-        definition = read_definition(folder / SCENE_FILE)
+        definition = read_definition(path)
         playable = definition is not None and definition_is_playable(definition)
-        entries.append(LevelEntry(folder=folder, name=folder.name, playable=playable))
+        entries.append(LevelEntry(path=path, name=path.stem, playable=playable))
     return sorted(entries, key=lambda entry: entry.name.lower())
 
 
 def load_scene(entry: LevelEntry) -> Scene | None:
     try:
-        return Scene.from_level_file(str(entry.scene_path))
+        return Scene.from_level_file(str(entry.path))
     except (OSError, ValueError):
         return None
 
@@ -78,7 +74,7 @@ def level_preview(entry: LevelEntry, size: tuple[int, int]) -> pygame.Surface | 
     """整关缩略图：横竖都塞进给定尺寸，居中留白，按尺寸缓存。"""
     if size[0] <= 0 or size[1] <= 0:
         return None
-    key = (str(entry.scene_path), size[0], size[1])
+    key = (str(entry.path), size[0], size[1])
     if key in _PREVIEWS:
         return _PREVIEWS[key]
     scene = load_scene(entry)

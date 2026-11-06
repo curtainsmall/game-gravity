@@ -2,7 +2,8 @@
 
 键和形状与游戏端一一对应，细节见 game/world/level.py 的模块说明；这里只额外记着
 编辑器自己关心的事：玩家的跳高、速度、动画属于整个游戏（game.json，见 core.game），
-不归 Level 管；scene.json 的 player 里如果还留着这几个键，原样保留当这一关的覆盖值。
+不归 Level 管；关卡 json 的 player 里如果还留着这几个键，原样保留当这一关的覆盖值。
+关卡名就是文件名（levels/<名字>.json），json 里不再写 name。
 """
 
 import copy
@@ -72,10 +73,10 @@ def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
 
 class Level:
     def __init__(self) -> None:
-        self.name = ""
+        self.name = ""             # 关卡名 = 文件名（levels/<名字>.json）；不写进 json
         self.width = COLS          # 关卡宽度，格
         self.height = ROWS         # 关卡高度，格
-        self.background = ""       # 背景图，相对关卡目录的路径；空串表示没有背景
+        self.background = ""       # 背景图，相对游戏根的路径；空串表示没有背景
         self.flip_area_offsets = list(FLIP_AREA_OFFSETS_DEFAULT)  # 翻转带的高度
         self.blocks: list = []
         self.planks: list = []
@@ -90,7 +91,6 @@ class Level:
 
     def to_definition(self) -> dict:
         definition = {
-            "name": self.name,
             "width": self.width,
             "height": self.height,
             "flip_area_offsets": list(self.flip_area_offsets),
@@ -117,7 +117,7 @@ class Level:
     @classmethod
     def from_definition(cls, definition: dict) -> "Level":
         level = cls()
-        level.name = str(definition.get("name", ""))
+        # 关卡名来自文件名，json 里的 name 不读（老文件里还有，存回去时就没了）
         level.width = clamp_int(definition.get("width"), LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
         level.height = clamp_int(definition.get("height"), LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
         level.flip_area_offsets = _read_flip_area_offsets(definition, level.height)

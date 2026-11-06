@@ -18,7 +18,7 @@ from core.constants import (
     ROW_HEIGHT,
     TEXT,
 )
-from core.helpers import display_path
+from core.helpers import display_path, level_name_of
 from view.widgets import draw_button, draw_panel, draw_stepper, place_panel, stepper_rects
 
 if TYPE_CHECKING:
@@ -75,39 +75,39 @@ def level_select_geometry(surface: pygame.Surface, count: int) -> tuple:
 
 
 def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
-    folders = editor.level_folders()
-    panel, area, rows_visible, create_rect, close_rect = level_select_geometry(surface, len(folders))
+    files = editor.level_files()
+    panel, area, rows_visible, create_rect, close_rect = level_select_geometry(surface, len(files))
     draw_panel(surface, panel)
 
     surface.blit(font.render("选择关卡", True, TEXT), (panel.left + 12, panel.top + 10))
     hint = font.render(display_path(editor.levels_dir) if editor.levels_dir else "", True, DIM_TEXT)
     surface.blit(hint, (panel.right - 12 - hint.get_width(), panel.top + 10))
 
-    if not folders:
+    if not files:
         text = font.render("levels/ 目录中暂无关卡，请点击「新建关卡」创建。", True, DIM_TEXT)
         surface.blit(text, (area.left + 6, area.top + 6))
     else:
         # 列表超出窗口时按 scroll 翻页，只画能看见的几行
-        scroll = max(0, min(editor.level_select_scroll, max(0, len(folders) - rows_visible)))
+        scroll = max(0, min(editor.level_select_scroll, max(0, len(files) - rows_visible)))
         previous = surface.get_clip()
         surface.set_clip(area)
         mouse = pygame.mouse.get_pos()
         current = os.path.normpath(editor.path) if editor.path else None
         for row in range(rows_visible):
             index = scroll + row
-            if index >= len(folders):
+            if index >= len(files):
                 break
-            folder = folders[index]
+            path = files[index]
             rect = pygame.Rect(area.left, area.top + row * ROW_HEIGHT, area.width, ROW_HEIGHT)
             if rect.collidepoint(mouse):
                 pygame.draw.rect(surface, (100, 100, 110), rect)
-            mark = "✓" if current is not None and os.path.normpath(folder) == current else "  "
-            text = font.render(f"{mark} {os.path.basename(folder)}", True, TEXT)
+            mark = "✓" if current is not None and os.path.normpath(path) == current else "  "
+            text = font.render(f"{mark} {level_name_of(path)}", True, TEXT)
             surface.blit(text, (rect.left + 6, rect.centery - text.get_height() // 2))
         surface.set_clip(previous)
-        if len(folders) > rows_visible:
+        if len(files) > rows_visible:
             more = font.render(
-                f"{scroll + 1}-{min(scroll + rows_visible, len(folders))} / {len(folders)}（滚轮翻页）",
+                f"{scroll + 1}-{min(scroll + rows_visible, len(files))} / {len(files)}（滚轮翻页）",
                 True,
                 DIM_TEXT,
             )
@@ -197,7 +197,12 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
     pygame.draw.rect(surface, (62, 62, 72) if name_selected else (48, 48, 54), name_rect)
     pygame.draw.rect(surface, HIGHLIGHT if name_selected else (86, 86, 94), name_rect, 1)
     caret = "|" if name_selected else ""
-    text = font.render(f"名称：{name if name else '（空）'}{caret}", True, HIGHLIGHT if name_selected else TEXT)
+    # 名字就是文件名：改了名字，保存时写到 levels/<新名字>.json
+    text = font.render(
+        f"名称（即文件名）：{name if name else '（空）'}{caret}",
+        True,
+        HIGHLIGHT if name_selected else TEXT,
+    )
     clip = max(1, name_rect.width - 12)
     surface.blit(
         text,

@@ -72,8 +72,8 @@ class Scene:
     ) -> "Scene":
         """由关卡数据建场景：方块、机关与物件都成为 GameObject。
 
-        玩家的跳高、速度、动画以 game.json 为准，关卡里的 player 写了就覆盖它——
-        两份 json 各按自己所在的文件夹解析路径。
+        玩家的跳高、速度、动画以 game.json 为准，关卡里的 player 写了就覆盖它；
+        base_dir 就是 game.json 所在的文件夹，两份 json 里的相对路径都以它为基准。
         """
         game_player = player_of(game_settings or {})
         world = build_world(level_definition, base_dir)
@@ -101,17 +101,13 @@ class Scene:
         scene.player = players[0] if players else None
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
         # 玩家动画先读出来放着：还没有动画系统拿去用
-        scene.player_animation = animation_of(
-            level_definition, game_player, base_dir, game_root()
-        )
+        scene.player_animation = animation_of(level_definition, game_player, base_dir)
         return scene
 
     @classmethod
     def from_level_file(cls, path: str) -> "Scene":
-        """背景这类资源按关卡文件所在目录解析；玩家参数来自 game.json。"""
-        return cls.from_level(
-            load_level_file(path), Path(path).parent, load_game_settings()
-        )
+        """关卡里的相对路径都以 game.json 所在的文件夹为基准；玩家参数也来自它。"""
+        return cls.from_level(load_level_file(path), game_root(), load_game_settings())
 
     def enter(self) -> None:
         """进入场景。"""

@@ -52,8 +52,8 @@ def handle_level_select_click(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
     """关卡列表浮层：点一行就切过去，另有「新建关卡」和「关闭」。"""
-    folders = editor.level_folders()
-    panel, area, rows_visible, create_rect, close_rect = level_select_geometry(surface, len(folders))
+    files = editor.level_files()
+    panel, area, rows_visible, create_rect, close_rect = level_select_geometry(surface, len(files))
     if create_rect.collidepoint(position):
         editor.create_level()
         return
@@ -62,11 +62,11 @@ def handle_level_select_click(
         return
     if not area.collidepoint(position):
         return
-    scroll = max(0, min(editor.level_select_scroll, max(0, len(folders) - rows_visible)))
+    scroll = max(0, min(editor.level_select_scroll, max(0, len(files) - rows_visible)))
     row = (position[1] - area.top) // ROW_HEIGHT
     index = scroll + int(row)
-    if 0 <= index < len(folders):
-        editor.choose_level(folders[index])
+    if 0 <= index < len(files):
+        editor.choose_level(files[index])
 
 
 def handle_create_menu(editor: Editor, position: tuple, window_size: tuple, layout) -> bool:

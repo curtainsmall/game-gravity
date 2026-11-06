@@ -1,5 +1,4 @@
 {
-  "name": "01",
   "width": 240,
   "height": 16,
   "flip_area_offsets": [8.0, 8.0],
@@ -230,7 +229,6 @@
   ],
   "movable_blocks": [
     {
-      "name": "g1",
       "pos": [51, 4],
       "size": [1, 4],
       "offset": [0, -3],
@@ -238,7 +236,6 @@
       "once": true
     },
     {
-      "name": "g2",
       "pos": [60, 4],
       "size": [1, 2],
       "offset": [0, -4],
@@ -248,13 +245,11 @@
   ],
   "buttons": [
     {
-      "name": "b1",
       "pos": [53.0, 0.5],
       "face": "left",
       "size": [1.0, 0.3]
     },
     {
-      "name": "b2",
       "pos": [58, 0],
       "face": "up",
       "size": [1.0, 0.3]
@@ -262,14 +257,12 @@
   ],
   "portals": [
     {
-      "name": "p1",
       "pos": [8.5, 0],
       "size": [1.0, 0.3],
       "face": "up",
       "target": "p2"
     },
     {
-      "name": "p2",
       "pos": [13.0, 0.5],
       "size": [1.0, 0.3],
       "face": "right",
@@ -278,7 +271,6 @@
   ],
   "items": [
     {
-      "name": "i1",
       "pos": [26, 6],
       "heavy": true,
       "size": [1.0, 1.0]
@@ -309,7 +301,8 @@
     "pos": [0, 0]
   },
   "destination": {
-    "pos": [117, 3]
+    "pos": [17.0, 0.0],
+    "size": [1.0, 1.0]
   },
   "background": "textures/background.png"
 }

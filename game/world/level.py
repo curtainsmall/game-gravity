@@ -1,12 +1,11 @@
 """关卡数据：里面用设计者的词汇，程序里只有 GameObject。
 
-一个关卡是一个文件夹（放在 assets/game/levels/ 下），文件夹名就是关卡名：
-    <关卡名>/scene.json        关卡数据
-    <关卡名>/background.png    背景图（scene.json 里不写 background 时默认用它）
-background 和各种图片的路径都相对关卡文件夹（也就是相对 scene.json）；背景图按可玩区
-的高度等比缩放后横向重复，ground/ceiling 那两行不在它的覆盖范围里。
+一个关卡是 assets/game/levels/ 下的一个 <关卡名>.json，文件名就是关卡名。
+game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
+图片放哪儿都行，只要相对路径写得出来，游戏不要求有 textures/ 这样的目录。
+背景图按可玩区的高度等比缩放后横向重复，ground/ceiling 那两行不在它的覆盖范围里。
 
-scene.json 的键：
+关卡 json 的键：
     name, width, height      关卡名与尺寸，单位格
     flip_area_offsets        [向上翻带高度, 向下翻带高度]，见 controller.flip_rule
     blocks, planks           方块与木板
@@ -16,10 +15,10 @@ scene.json 的键：
     items                    道具：heavy 表示变重
     nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的），
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
-    textures                 贴图：浮点矩形 + image（相对 scene.json 的路径）
+    textures                 贴图：浮点矩形 + image（相对 game.json 的路径）
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖
     destination              终点
-    background               背景图，相对 scene.json 的路径；不写就用文件夹里的 background.png
+    background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
 
 有矩形的对象都写成 {"pos": [x, y], "size": [w, h]}：pos 是左下角，size 缺省 1×1
 （传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是
@@ -27,8 +26,7 @@ scene.json 的键：
 长出去，左右朝向时屏幕上的宽高是对调的。
 玩家参数一般写在 game.json 的 player 里（jump_height 格、move_speed 格/秒、
 animation 动作名 → 图片路径，动作名不预设；动画系统还没接，先读出来放着）；
-scene.json 的 player 里写同名键就是这一关的覆盖值，它的图片路径相对关卡文件夹，
-game.json 里写的相对游戏根。
+关卡 json 的 player 里写同名键就是这一关的覆盖值，两边的图片路径都相对游戏根。
 """
 
 import json
@@ -57,7 +55,7 @@ PLAYER_SIZE = (0.8, 1.0)   # 玩家比一格窄，过缝与贴墙时更宽容
 NOZZLE_DEFAULT_RANGE = 5   # 老数据没写 range 时的风区长度（新数据写 size）
 NOZZLE_DEFAULT_POWER = 7   # 喷口没写 power 时的目标偏移
 NOZZLE_DEFAULT_SIZE = (1.0, 5.0)   # 风区缺省尺寸：宽 1 格、长 5 格
-BACKGROUND_NAME = "background.png"  # 关卡文件夹里背景图的固定名字
+BACKGROUND_NAME = "background.png"  # 没写 background 时在游戏根里找它兜底
 
 
 def load_level_file(path: str) -> LevelDefinition:
@@ -76,7 +74,7 @@ def build_world(level_definition: LevelDefinition, base_dir: str | Path | None =
 
 
 def resolve_background(value, base_dir: str | Path | None) -> str | None:
-    """背景图：相对关卡文件夹解析；scene.json 没写就退回文件夹里的 background.png。"""
+    """背景图：相对 game.json 解析；关卡 json 没写就退回游戏根里的 background.png。"""
     base = Path(base_dir) if base_dir is not None else None
     candidates: list[Path] = []
     if value:
@@ -92,7 +90,7 @@ def resolve_background(value, base_dir: str | Path | None) -> str | None:
 
 
 def resolve_texture(value, base_dir: str | Path | None) -> str | None:
-    """贴图路径：相对关卡文件夹；没有兜底，scene.json 不写就是没图。"""
+    """贴图路径：相对 game.json；没有兜底，关卡 json 不写就是没图。"""
     if not value:
         return None
     path = Path(str(value))
@@ -150,23 +148,18 @@ def animation_of(
     level_definition: LevelDefinition,
     game_player: dict | None = None,
     base_dir: str | Path | None = None,
-    game_base_dir: str | Path | None = None,
 ) -> dict:
     """玩家动画：动作名 → 图的绝对路径（动画系统还没接，先读出来放着）。
 
-    用哪一份就看它写在哪：关卡 player 里的相对关卡文件夹解析，game.json 里的相对
-    游戏根解析；找不到的图直接跳过。
+    路径和别处一样相对 game.json 所在的文件夹；找不到的图直接跳过。
     """
-    for source, base in (
-        (player_settings(level_definition), base_dir),
-        (game_player or {}, game_base_dir),
-    ):
+    for source in (player_settings(level_definition), game_player or {}):
         value = source.get("animation")
         if not isinstance(value, dict):
             continue
         animation = {}
         for action, path in value.items():
-            found = resolve_texture(path, base)
+            found = resolve_texture(path, base_dir)
             if found is not None:
                 animation[str(action)] = found
         return animation

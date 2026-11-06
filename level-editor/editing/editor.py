@@ -31,7 +31,6 @@ from core.constants import (
     KIND_TITLES,
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
-    LEVEL_SCENE_NAME,
     LEVEL_WIDTH_MAX,
     LEVEL_WIDTH_MIN,
     MARGIN,
@@ -59,7 +58,8 @@ from core.helpers import (
     clamp_float,
     clamp_int,
     display_path,
-    folder_name_for,
+    file_name_for,
+    level_name_of,
     normalize_rect,
     nozzle_face_axis,
     nozzle_power_tip,
@@ -140,8 +140,8 @@ class Editor:
 
     @property
     def media_base_dir(self) -> str | None:
-        """关卡里图片路径的基准目录：已保存的关卡用自己的文件夹，新关卡先按 levels/ 算。"""
-        return self.path or self.levels_dir
+        """图片路径的基准目录：game.json 所在的文件夹（游戏根），关卡里的路径也相对它。"""
+        return game.game_root_of(self.game_path) if self.game_path else None
 
     def player_stats(self) -> tuple[int, float, bool]:
         """当前关卡实际用的跳高和速度：关卡 player 里写了就盖住 game.json 的玩家参数。
@@ -505,11 +505,11 @@ class Editor:
             return
         self.begin_new_level()
 
-    def level_folders(self) -> list[str]:
+    def level_files(self) -> list[str]:
         """当前游戏的 levels/ 里能打开的关卡（列表浮层的内容）。"""
         if self.game_path is None:
             return []
-        return game.level_folders(self.game_path)
+        return game.level_files(self.game_path)
 
     def open_level_select(self) -> None:
         """摊开关卡列表浮层。"""
@@ -521,18 +521,19 @@ class Editor:
     def scroll_level_select(self, delta: int) -> None:
         self.level_select_scroll = max(0, self.level_select_scroll + delta)
 
-    def choose_level(self, folder: str) -> None:
+    def choose_level(self, path: str) -> None:
         """在列表里选一关：有没保存的修改就先问，别直接丢掉。"""
-        if self.path is not None and os.path.normpath(folder) == os.path.normpath(self.path):
+        name = level_name_of(path)
+        if self.path is not None and os.path.normpath(path) == os.path.normpath(self.path):
             self.level_select_open = False
-            self.status = f"当前已打开关卡「{os.path.basename(folder)}」。"
+            self.status = f"当前已打开关卡「{name}」。"
             return
         if self.dirty:
-            self.pending_switch = ("level", folder)
+            self.pending_switch = ("level", path)
             self.level_select_open = False
-            self.status = f"「{os.path.basename(folder)}」：当前关卡尚未保存，是否先保存？"
+            self.status = f"「{name}」：当前关卡尚未保存，是否先保存？"
             return
-        self.load(folder)
+        self.load(path)
 
     def resolve_pending_switch(self, save: bool | None) -> None:
         """等确认的那一步的结果：True 先保存再走，False 直接走，None 取消。"""
@@ -565,24 +566,22 @@ class Editor:
             return ""
         kind, value = self.pending_switch
         if kind == "level":
-            return f"切换至「{os.path.basename(value)}」"
+            return f"切换至「{level_name_of(value)}」"
         if kind == "game":
             return f"打开「{display_path(value)}」"
         return "新建关卡"
 
-    def load(self, folder: str) -> None:
-        """打开一个关卡文件夹：数据在里面的 scene.json。"""
-        scene_path = os.path.join(folder, LEVEL_SCENE_NAME)
+    def load(self, path: str) -> None:
+        """打开关卡的 json：<关卡名>.json 就是这一关的全部数据。"""
         try:
-            with open(scene_path, encoding="utf-8") as file:
+            with open(path, encoding="utf-8") as file:
                 definition = json.load(file)
         except (OSError, json.JSONDecodeError) as error:
             self.status = f"打开失败：{error}。"
             return
         self.level = Level.from_definition(definition)
-        if not self.level.name:
-            self.level.name = os.path.basename(os.path.normpath(folder))
-        self.path = folder
+        self.level.name = level_name_of(path)      # 关卡名就是文件名，json 里不写
+        self.path = path
         self.level_in_view = True
         self.undo_stack.clear()
         self.dirty = False
@@ -598,39 +597,49 @@ class Editor:
         self.zoom = None
         self.pan_x = self.pan_y = 0.0
         self.drag_start = self.drag_current = None
-        self.status = f"已打开关卡 {display_path(folder)}。"
+        self.status = f"已打开关卡 {display_path(path)}。"
 
     def save(self) -> bool:
-        """保存当前关卡：写进游戏根里 levels/<关卡名>/scene.json，图片只记相对路径。
+        """保存当前关卡：写进游戏根里 levels/<关卡名>.json，图片只记相对路径。
 
+        关卡名就是文件名，所以在设置里改了名字，保存时会写到新文件、删掉旧文件。
         缺起点或终点照样写，只是存完弹一句提示（游戏里会跳过这种关卡）。
         返回有没有写下去。
         """
         if not self.level_in_view:
             self.status = "当前视图中没有关卡。"
             return False
-        if self.path is None:
-            if self.levels_dir is None:
-                self.status = "尚未打开游戏配置，无法保存关卡。"
-                return False
-            folder = game.unique_level_folder(self.levels_dir, folder_name_for(self.level.name))
-            if not self.level.name:
-                self.level.name = os.path.basename(folder)
+        old_path = os.path.normpath(self.path) if self.path else None
+        wanted = file_name_for(self.level.name)
+        if self.levels_dir is None:
+            self.status = "尚未打开游戏配置，无法保存关卡。"
+            return False
+        if old_path is None:
+            path = game.unique_level_path(self.levels_dir, wanted)
         else:
-            folder = os.path.normpath(self.path)
+            current_stem = level_name_of(old_path)
+            if wanted == current_stem:
+                path = old_path
+            else:
+                # 改了名字：写到新文件，旧文件等写成功再删
+                path = game.unique_level_path(self.levels_dir, wanted)
         try:
-            os.makedirs(folder, exist_ok=True)
-            self.normalize_media_paths(folder)
-            with open(
-                os.path.join(folder, LEVEL_SCENE_NAME), "w", encoding="utf-8", newline="\n"
-            ) as file:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            self.normalize_media_paths()
+            with open(path, "w", encoding="utf-8", newline="\n") as file:
                 file.write(dump_level(self.level.to_definition()))
         except OSError as error:
             self.status = f"保存失败：{error}。"
             return False
-        self.path = folder
+        if old_path is not None and os.path.normpath(path) != old_path:
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass                            # 旧文件删不掉也不影响新的
+        self.level.name = level_name_of(path)
+        self.path = path
         self.dirty = False
-        self.status = f"已保存至 {display_path(folder)}。"
+        self.status = f"已保存至 {display_path(path)}。"
         missing = self.missing_for_play()
         if missing:
             # 游戏里会把这种关卡跳过：状态栏留一句，另外弹个小提示
@@ -652,19 +661,19 @@ class Editor:
             return "没有终点"
         return ""
 
-    def normalize_media_paths(self, folder: str) -> None:
-        """背景和贴图都只记相对 scene.json 的路径，一个文件都不复制。
+    def normalize_media_paths(self) -> None:
+        """背景和贴图都只记相对 game.json 的路径，一个文件都不复制。
 
-        基准目录原来是 levels/（关卡还没保存时选的图），保存时换算成相对关卡文件夹；
-        找不到的路径原样留着，别把用户填的值抹掉。
+        相对路径统一写成相对游戏根的正斜杠形式；解析不到的路径原样留着，
+        别把用户填的值抹掉。
         """
-        old_base = self.media_base_dir
+        base = self.media_base_dir
 
         def rebased(value: str) -> str | None:
-            source = resolve_level_path(value, folder)
+            source = resolve_level_path(value, base)
             if source is None:
-                source = resolve_level_path(value, old_base)
-            return relative_level_path(source, folder) if source is not None else None
+                return None
+            return relative_level_path(source, base)
 
         if self.level.background:
             path = rebased(self.level.background)
@@ -905,7 +914,7 @@ class Editor:
 
     # ---- 贴图 -------------------------------------------------------
     def import_texture(self, layout: Layout) -> None:
-        """直接导入一张贴图：不复制，只记一个相对 scene.json 的路径。
+        """直接导入一张贴图：不复制，只记一个相对 game.json 的路径。
 
         图片按游戏比例（可玩行 400px）换算成世界格尺寸，位置和大小之后在详情里调。
         """
@@ -1674,10 +1683,10 @@ class Editor:
             return
         self.settings["background"] = relative_level_path(path, self.media_base_dir)
         self.settings_field = 5
-        self.status = "已选择背景：仅记录相对 scene.json 的路径，不复制文件。"
+        self.status = "已选择背景：仅记录相对 game.json 的路径，不复制文件。"
 
     def pick_texture_image(self) -> None:
-        """给当前贴图换一张图：只记相对 scene.json 的路径，不复制文件。"""
+        """给当前贴图换一张图：只记相对 game.json 的路径，不复制文件。"""
         if self.dialog is None or self.dialog["kind"] != KIND_TEXTURE:
             return
         path = ask_image_path("选择贴图", self.media_base_dir)
@@ -1688,7 +1697,7 @@ class Editor:
         self.dirty = True
         self.dialog["entry"]["image"] = relative_level_path(path, self.media_base_dir)
         self.number_buffer = None
-        self.status = "已更换贴图：路径相对 scene.json。"
+        self.status = "已更换贴图：路径相对 game.json。"
 
     def adjust_settings(self, delta: int) -> None:
         if self.settings is None:

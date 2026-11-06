@@ -68,10 +68,17 @@ def object_box(kind: str, entry: dict) -> dict:
     return {"pos": [left, bottom], "size": [width, height]}
 
 
-def folder_name_for(name: str) -> str:
-    """关卡名 → 文件夹名：去掉 Windows 不允许的字符，空的就退回默认名字。"""
+def file_name_for(name: str) -> str:
+    """关卡名 → 文件名（不含 .json）：去掉 Windows 不允许的字符，空的就退回默认名字。"""
     cleaned = re.sub(r'[<>:"/\\|?*]', "", name or "").strip().strip(".")
     return cleaned or "新关卡"
+
+
+def level_name_of(path: str | None) -> str:
+    """关卡文件 → 关卡名（文件名去掉 .json）；没有文件就是空串。"""
+    if not path:
+        return ""
+    return os.path.splitext(os.path.basename(path))[0]
 
 
 def normalize_rect(a: tuple, b: tuple, minimum: float) -> tuple:
@@ -154,7 +161,7 @@ def clamp_float(value, low: float, high: float, fallback: float) -> float:
 
 
 def resolve_level_path(value: str, base_dir: str | None) -> str | None:
-    """相对基准目录（关卡文件夹）的路径 → 绝对路径；没有兜底，找不到就 None。"""
+    """相对基准目录（游戏根）的路径 → 绝对路径；没有兜底，找不到就 None。"""
     if not value:
         return None
     path = value.replace("/", os.sep)
@@ -167,7 +174,7 @@ def resolve_level_path(value: str, base_dir: str | None) -> str | None:
 
 
 def resolve_background(value: str, base_dir: str | None) -> str | None:
-    """background 解析成绝对路径；scene.json 没写就退回文件夹里的 background.png。"""
+    """background 解析成绝对路径；关卡 json 没写就退回游戏根里的 background.png。"""
     found = resolve_level_path(value, base_dir)
     if found is not None:
         return found
@@ -175,7 +182,7 @@ def resolve_background(value: str, base_dir: str | None) -> str | None:
 
 
 def relative_level_path(path: str, base_dir: str | None) -> str:
-    """绝对路径 → 相对基准目录（关卡文件夹）的写法，一律用正斜杠。"""
+    """绝对路径 → 相对基准目录（游戏根）的写法，一律用正斜杠。"""
     try:
         relative = os.path.relpath(path, base_dir) if base_dir else path
     except ValueError:
@@ -184,5 +191,5 @@ def relative_level_path(path: str, base_dir: str | None) -> str:
 
 
 def resolve_texture(value: str, level_path: str | None) -> str | None:
-    """贴图路径解析成绝对路径；相对路径以关卡文件夹为基准，没有兜底。"""
+    """贴图路径解析成绝对路径；相对路径以游戏根为基准，没有兜底。"""
     return resolve_level_path(value, level_path)

@@ -2,7 +2,7 @@
 
 游戏根就是 game.json 所在的那个文件夹：
     game.json    游戏自己的配置：title 是标题，credits 是版权信息（职位 → 名字数组）
-    levels/      一个文件夹是一关
+    levels/      一个 <名字>.json 是一关
 编辑器在启动时让用户打开或新建一份 game.json，之后关卡都从它的兄弟目录 levels/ 里找。
 配置里只改自己认识的键，别的键原样保留。
 """
@@ -10,7 +10,7 @@
 import json
 import os
 
-from core.constants import LEVEL_SCENE_NAME, LEVELS_DIR_NAME
+from core.constants import LEVEL_FILE_SUFFIX, LEVELS_DIR_NAME
 
 DEFAULT_TITLE = "重力"      # game.json 丢了或没写标题时用它，编辑器照常能用
 
@@ -95,8 +95,8 @@ def levels_dir_of(path: str) -> str:
     return os.path.join(game_root_of(path), LEVELS_DIR_NAME)
 
 
-def level_folders(path: str) -> list[str]:
-    """levels/ 里带 scene.json 的关卡文件夹，按文件夹名不分大小写排序。"""
+def level_files(path: str) -> list[str]:
+    """levels/ 里的关卡 json（<关卡名>.json），按文件名不分大小写排序。"""
     levels_dir = levels_dir_of(path)
     try:
         names = os.listdir(levels_dir)
@@ -105,15 +105,16 @@ def level_folders(path: str) -> list[str]:
     return [
         os.path.join(levels_dir, name)
         for name in sorted(names, key=str.lower)
-        if os.path.isfile(os.path.join(levels_dir, name, LEVEL_SCENE_NAME))
+        if name.lower().endswith(LEVEL_FILE_SUFFIX)
+        and os.path.isfile(os.path.join(levels_dir, name))
     ]
 
 
-def unique_level_folder(levels_dir: str, folder_name: str) -> str:
-    """levels/ 里没被占用的文件夹：撞名了就加 -2、-3，别把已有的关卡写坏。"""
-    candidate = os.path.join(levels_dir, folder_name)
+def unique_level_path(levels_dir: str, file_stem: str) -> str:
+    """levels/ 里没被占用的关卡文件：撞名了就加 -2、-3，别把已有的关卡写坏。"""
+    candidate = os.path.join(levels_dir, f"{file_stem}{LEVEL_FILE_SUFFIX}")
     index = 2
     while os.path.exists(candidate):
-        candidate = os.path.join(levels_dir, f"{folder_name}-{index}")
+        candidate = os.path.join(levels_dir, f"{file_stem}-{index}{LEVEL_FILE_SUFFIX}")
         index += 1
     return candidate
