@@ -90,28 +90,38 @@ class RenderSystem:
         else:
             self._fill(surface, rect, render.placeholder_color)
 
+    def _frustum(self, surface: pygame.Surface, rect: pygame.Rect, render, color) -> None:
+        """棱台：窄端指向 face 方向，占满这块矩形（和传送门一样大，只是形状是梯形）。"""
+        pygame.draw.polygon(
+            surface, color, self._frustum_points(rect, render.placeholder_face)
+        )
+
     @staticmethod
-    def _frustum(surface: pygame.Surface, rect: pygame.Rect, render, color) -> None:
-        """棱台：窄端指向 face 方向。"""
-        inset = rect.width * 0.2
-        base = [
-            (rect.left, rect.bottom),
-            (rect.right, rect.bottom),
-            (rect.right - inset, rect.top),
-            (rect.left + inset, rect.top),
+    def _frustum_points(rect: pygame.Rect, face) -> list:
+        """梯形四个点：底面贴着矩形的 face 反面那条边，窄面在对面、缩进 20%。
+
+        不旋转整块矩形——矩形已经是按朝向摆正过的，这里只是把它的边做成梯形。
+        """
+        name = str(face)
+        if name in ("left", "right"):
+            inset = max(1.0, rect.height * 0.2)
+            far = rect.right if name == "right" else rect.left
+            near = rect.left if name == "right" else rect.right
+            return [
+                (near, rect.top),
+                (far, rect.top + inset),
+                (far, rect.bottom - inset),
+                (near, rect.bottom),
+            ]
+        inset = max(1.0, rect.width * 0.2)
+        far = rect.top if name == "up" else rect.bottom
+        near = rect.bottom if name == "up" else rect.top
+        return [
+            (rect.left, near),
+            (rect.right, near),
+            (rect.right - inset, far),
+            (rect.left + inset, far),
         ]
-        angle = math.radians(render.placeholder_face.rotation)
-        center = rect.center
-        points = []
-        for x, y in base:
-            dx, dy = x - center[0], y - center[1]
-            points.append(
-                (
-                    center[0] + dx * math.cos(angle) - dy * math.sin(angle),
-                    center[1] + dx * math.sin(angle) + dy * math.cos(angle),
-                )
-            )
-        pygame.draw.polygon(surface, color, points)
 
     def _fill(self, surface: pygame.Surface, rect: pygame.Rect, color: tuple[int, int, int, int]) -> None:
         """alpha 小于 255 时走混合路径，否则直接画不透明矩形。"""

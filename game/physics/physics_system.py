@@ -51,14 +51,24 @@ class PhysicsSystem:
         gravity: float,
         delta_seconds: float,
     ) -> None:
-        """在风区内把速度设成「从当前位置正好飞到目标」的值。"""
+        """在风区内把速度设成「从当前位置正好飞到目标」的值。
+
+        竖向风区推 velocity_y（起跳那种惯性会留着）；横向风区只能推 velocity_x，
+        下一步控制来源会把它覆盖掉，所以效果是「待在风里就被往那个方向推」。
+        """
         nozzle = nozzle_object.nozzle
         body = mover_object.body
-        target_y = nozzle.target_y
-        if nozzle.power > 0 and body.bottom < target_y:
-            body.velocity_y = launch_speed(target_y - body.bottom, gravity, delta_seconds)
-        elif nozzle.power < 0 and body.bottom > target_y:
-            body.velocity_y = -launch_speed(body.bottom - target_y, gravity, delta_seconds)
+        target_x, target_y = nozzle.target
+        if nozzle.vertical:
+            if target_y > body.bottom:
+                body.velocity_y = launch_speed(target_y - body.bottom, gravity, delta_seconds)
+            elif target_y < body.bottom:
+                body.velocity_y = -launch_speed(body.bottom - target_y, gravity, delta_seconds)
+            return
+        if target_x > body.right:
+            body.velocity_x = launch_speed(target_x - body.right, gravity, delta_seconds)
+        elif target_x < body.left:
+            body.velocity_x = -launch_speed(body.left - target_x, gravity, delta_seconds)
 
     def _solids_for(self, mover: GameObject, objects: list[GameObject]) -> list[Body]:
         solids: list[Body] = []

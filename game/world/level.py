@@ -11,17 +11,20 @@ scene.json 的键：
     flip_area_offsets        [向上翻带高度, 向下翻带高度]，见 controller.flip_rule
     blocks, planks           方块与木板
     movable_blocks           可移动方块：offset 是目标点相对支点的偏移，sources 引用按钮名
-    buttons                  按钮：face 是朝向，name 供可移动方块引用
-    portals                  传送门：pos/size 是门本身，face 是出来的朝向，target 引用另一个门
+    buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供可移动方块引用
+    portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
     items                    道具：heavy 表示变重
-    nozzles                  喷口：pos 是三角形底边中点，power 是目标偏移，range 是风区长度
+    nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的），
+                             size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
     textures                 贴图：浮点矩形 + image（相对 scene.json 的路径）
     player                   起点，同时带着玩家的跳高、速度和动画
     destination              终点
     background               背景图，相对 scene.json 的路径；不写就用文件夹里的 background.png
 
 有矩形的对象都写成 {"pos": [x, y], "size": [w, h]}：pos 是左下角，size 缺省 1×1
-（传送门缺省 1×0.3），单位格，都是浮点。喷口是一个点（底边中点），没有 size。
+（传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是
+「底面」的中点、size 是没转过的宽高，face（up/right/down/left）决定从底面往哪边
+长出去，左右朝向时屏幕上的宽高是对调的。
 player 除了 pos/size 还写着 jump_height（格）、move_speed（格/秒）和 animation
 （动作名 → 该动作的图片路径，动作名不预设；动画系统还没接，先读出来放着）。
 """
@@ -46,9 +49,12 @@ LevelDefinition = dict[str, object]
 
 DEFAULT_SIZE = (1.0, 1.0)
 PORTAL_SIZE = (1.0, 0.3)   # 传送门画出来的那块门：1 格宽、0.3 格高
+# 按钮画出来就是它的触发区（和传送门一样）：缺省 1 格宽、0.3 格高
+BUTTON_SIZE = (1.0, 0.3)
 PLAYER_SIZE = (0.8, 1.0)   # 玩家比一格窄，过缝与贴墙时更宽容
-NOZZLE_DEFAULT_RANGE = 5   # 喷口没写 range 时的风区长度
+NOZZLE_DEFAULT_RANGE = 5   # 老数据没写 range 时的风区长度（新数据写 size）
 NOZZLE_DEFAULT_POWER = 7   # 喷口没写 power 时的目标偏移
+NOZZLE_DEFAULT_SIZE = (1.0, 5.0)   # 风区缺省尺寸：宽 1 格、长 5 格
 BACKGROUND_NAME = "background.png"  # 关卡文件夹里背景图的固定名字
 
 
@@ -145,6 +151,25 @@ def _read_size(entry: dict, default: tuple[float, float] = DEFAULT_SIZE) -> tupl
     return float(width), float(height)
 
 
+def facing_rect(entry: dict, default_size) -> tuple[float, float, float, float]:
+    """按钮、传送门和喷口风区的矩形：pos 是「底面」的中点，矩形从底面朝 face 指的方向长出去。
+
+    up：底面是下边、往上长；down：底面是上边、往下长；
+    right：底面是左边、往右长；left：底面是右边、往左长。
+    左右朝向时把宽高对调（竖起来），pos 就落在侧面那条边的中点上。
+    """
+    x, y = _read_position(entry)
+    width, height = _read_size(entry, default_size)
+    face = str(entry.get("face", PlaceholderFace.UP))
+    if face == "right":
+        return x, y - width / 2.0, height, width
+    if face == "left":
+        return x - height, y - width / 2.0, height, width
+    if face == "down":
+        return x - width / 2.0, y - height, width, height
+    return x - width / 2.0, y, width, height
+
+
 def _read_face(entry: dict) -> PlaceholderFace:
     """按钮朝向，缺省或非法时按向上处理。"""
     try:
@@ -161,15 +186,20 @@ def _make(
     is_passable_during_flip: bool = False,
     controller: Controller | None = None,
     default_size: tuple[float, float] = DEFAULT_SIZE,
+    facing: bool = False,
 ) -> GameObject:
-    x, y = _read_position(entry)
-    width, height = _read_size(entry, default_size)
+    if facing:
+        # 按钮和传送门：pos 是底边中点，宽高按朝向摆正
+        left, bottom, width, height = facing_rect(entry, default_size)
+    else:
+        left, bottom = _read_position(entry)
+        width, height = _read_size(entry, default_size)
     return GameObject(
         kind=kind,
         name=str(entry.get("name", "")),
         body=Body(
-            left=x,
-            bottom=y,
+            left=left,
+            bottom=bottom,
             width=width,
             height=height,
             is_static=is_static,
@@ -261,35 +291,59 @@ def build_destination(level_definition: LevelDefinition) -> list[GameObject]:
     return [_make(entry, GameObjectKind.DESTINATION, is_static=True, is_sensor=True)]
 
 
+def _nozzle_size(entry: dict) -> tuple[float, float]:
+    """喷口风区的宽高：新数据写 size，老数据写 range（只有长度，宽度按 1 算）。"""
+    value = entry.get("size")
+    if value is not None:
+        try:
+            width, height = value
+            return float(width), float(height)
+        except (TypeError, ValueError):
+            pass
+    try:
+        return 1.0, float(entry.get("range", NOZZLE_DEFAULT_RANGE))
+    except (TypeError, ValueError):
+        return 1.0, float(NOZZLE_DEFAULT_RANGE)
+
+
 def build_nozzles(level_definition: LevelDefinition) -> list[GameObject]:
-    """喷口的 pos 是三角形底边中点；range 是风区长度，power 是目标偏移。"""
+    """喷口：pos 是风区底面中点，face 是伸出的方向，power 是目标离它多远（不给负的）。"""
     nozzles = []
     for entry in level_definition.get("nozzles", []):
-        power = float(entry.get("power", NOZZLE_DEFAULT_POWER))
-        length = float(entry.get("range", NOZZLE_DEFAULT_RANGE))
+        normalized = dict(entry)
+        normalized["size"] = list(_nozzle_size(entry))
+        power = max(0.0, float(entry.get("power", NOZZLE_DEFAULT_POWER)))
+        face = _read_face(entry)
         x, y = _read_position(entry)
-        bottom = y if power >= 0 else y - length
+        left, bottom, width, height = facing_rect(normalized, NOZZLE_DEFAULT_SIZE)
+        vertical = str(face) in (str(PlaceholderFace.UP), str(PlaceholderFace.DOWN))
         nozzles.append(
             GameObject(
                 kind=GameObjectKind.NOZZLE,
                 name=str(entry.get("name", "")),
                 body=Body(
-                    left=x - 0.5,          # 底边中点落在 x 上，风区横跨 x±0.5
-                    bottom=float(bottom),
-                    width=1.0,
-                    height=float(length),
+                    left=left,              # 风区从底面中点朝 face 长出去
+                    bottom=bottom,
+                    width=width,
+                    height=height,
                     is_static=True,
                     is_sensor=True,
                 ),
                 render=RenderSpec(
-                    placeholder_shape=PlaceholderShape.TRIANGLE,
+                    # 上下朝向画三角，左右朝向画棱台：都是「窄端指向吹风方向」的标记
+                    placeholder_shape=(
+                        PlaceholderShape.TRIANGLE
+                        if vertical
+                        else PlaceholderShape.FRUSTUM
+                    ),
                     placeholder_size_in_blocks=(1.0, 1.0),
                     placeholder_color=color_for_kind(GameObjectKind.NOZZLE),
                     placeholder_label_text=str(GameObjectKind.NOZZLE),
-                    placeholder_direction=1 if power >= 0 else -1,
-                    placeholder_has_axis=True,
+                    placeholder_direction=1 if str(face) == str(PlaceholderFace.UP) else -1,
+                    placeholder_face=face,
+                    placeholder_has_axis=vertical,
                 ),
-                nozzle=Nozzle(power=power, length=length, origin_y=y),
+                nozzle=Nozzle(face=str(face), power=power, origin=(x, y)),
             )
         )
     return nozzles
@@ -306,9 +360,17 @@ def build_items(level_definition: LevelDefinition) -> list[GameObject]:
 
 
 def build_buttons(level_definition: LevelDefinition) -> list[GameObject]:
+    """按钮画出来的那块矩形就是它的触发区（和传送门一样），缺省 1×0.3 格。"""
     buttons = []
     for entry in level_definition.get("buttons", []):
-        game_object = _make(entry, GameObjectKind.BUTTON, is_static=True, is_sensor=True)
+        game_object = _make(
+            entry,
+            GameObjectKind.BUTTON,
+            is_static=True,
+            is_sensor=True,
+            default_size=BUTTON_SIZE,
+            facing=True,
+        )
         game_object.render.placeholder_shape = PlaceholderShape.FRUSTUM
         game_object.render.placeholder_face = _read_face(entry)
         buttons.append(game_object)
@@ -325,6 +387,7 @@ def build_portals(level_definition: LevelDefinition) -> list[GameObject]:
             is_static=True,
             is_sensor=True,
             default_size=PORTAL_SIZE,
+            facing=True,
         )
         game_object.portal = Portal(
             target=str(entry.get("target", "")),

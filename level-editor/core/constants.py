@@ -113,10 +113,12 @@ TOOL_COLORS = {
 
 # ---- 默认值 ----
 NOZZLE_DEFAULT_POWER = 7
-NOZZLE_DEFAULT_RANGE = 5
+NOZZLE_DEFAULT_SIZE = (1.0, 5.0)   # 风区尺寸：宽 1 格、长 5 格（老数据里的 range 读进来换成它）
 # 传送门画出来的那块门：1 格宽、0.3 格高。门本身既是外观也是触发区，没有额外范围
 PORTAL_SIZE = (1.0, 0.3)
-FACE_ORDER = ("up", "right", "down", "left")   # 按钮和传送门的朝向循环顺序
+# 按钮同理：画出来的矩形就是触发区，缺省 1 格宽、0.3 格高
+BUTTON_SIZE = (1.0, 0.3)
+FACE_ORDER = ("up", "right", "down", "left")   # 按钮、传送门和喷口的朝向循环顺序
 FACE_LABELS = {"up": "上", "right": "右", "down": "下", "left": "左"}  # 界面上显示的中文
 FACE_DIRECTIONS = {
     "up": (0.0, 1.0),

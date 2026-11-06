@@ -275,7 +275,7 @@ def run() -> None:
                 elif editor.dialog is not None and event.unicode and (
                     event.unicode.isdigit() or event.unicode in "-."
                 ):
-                    # 数字字段：直接敲数字输入（可以带小数点和负号），点加减或按方向键仍是 ±1
+                    # 数字字段：直接敲数字输入（可以带小数点和负号），点加减或按方向键仍是半格一步
                     editor.type_dialog_number(event.unicode)
                 elif editor.dialog is not None and event.key == pygame.K_BACKSPACE:
                     editor.erase_dialog_number()

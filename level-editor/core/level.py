@@ -8,6 +8,7 @@ import copy
 import json
 
 from core.constants import (
+    BUTTON_SIZE,
     COLS,
     FLIP_AREA_OFFSETS_DEFAULT,
     JUMP_HEIGHT_DEFAULT,
@@ -19,6 +20,8 @@ from core.constants import (
     MOVE_SPEED_DEFAULT,
     MOVE_SPEED_MAX,
     MOVE_SPEED_MIN,
+    NOZZLE_DEFAULT_SIZE,
+    PORTAL_SIZE,
     ROWS,
 )
 from core.helpers import clamp_float, clamp_int
@@ -135,8 +138,22 @@ class Level:
             for entry in copy.deepcopy(list(definition.get("portals", [])))
             if isinstance(entry, dict)
         ]
+        # 按钮和门的「画出来的矩形」就是触发区，缺 size 时按默认补上，别和游戏里不一致
+        for entries, default in ((level.buttons, BUTTON_SIZE), (level.portals, PORTAL_SIZE)):
+            for entry in entries:
+                if isinstance(entry, dict):
+                    entry.setdefault("size", list(default))
         level.items = copy.deepcopy(list(definition.get("items", [])))
-        level.nozzles = copy.deepcopy(list(definition.get("nozzles", [])))
+        # 喷口的风区现在是 size；老数据写的 range 读进来换成 [1, range]
+        level.nozzles = []
+        for entry in copy.deepcopy(list(definition.get("nozzles", []))):
+            if not isinstance(entry, dict):
+                continue
+            if "size" not in entry and "range" in entry:
+                entry["size"] = [1.0, entry.pop("range")]
+            entry.pop("range", None)
+            entry.setdefault("size", list(NOZZLE_DEFAULT_SIZE))
+            level.nozzles.append(entry)
         level.textures = copy.deepcopy(list(definition.get("textures", [])))
 
         # 玩家：跳高、速度、动画都挂在它身上；老文件写在外层的，读的时候搬进来

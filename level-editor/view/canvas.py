@@ -13,7 +13,6 @@ from core.constants import (
     DIM_TEXT,
     FACE_DIRECTIONS,
     FACE_ORDER,
-    FACE_ROTATIONS,
     FLIP_DOWN_COLOR,
     FLIP_UP_COLOR,
     GRID,
@@ -21,11 +20,11 @@ from core.constants import (
     HANDLE_COLOR,
     HIGHLIGHT,
     ITEM_COLOR,
-    KIND_NOZZLE,
+    KIND_BUTTON,
+    KIND_PORTAL,
     MIN_SIZE,
     MOVABLE_COLOR,
     NOZZLE_COLOR,
-    NOZZLE_DEFAULT_POWER,
     PANEL,
     PIVOT_COLOR,
     PLANK_COLOR,
@@ -36,7 +35,15 @@ from core.constants import (
     RULER_STEP,
     TOOL_COLORS,
 )
-from core.helpers import normalize_rect, nozzle_box, readable_color
+from core.helpers import (
+    normalize_rect,
+    nozzle_box,
+    nozzle_face_axis,
+    nozzle_marker_box,
+    nozzle_power_tip,
+    object_box,
+    readable_color,
+)
 from view.background import draw_background
 from view.layout import Layout
 from view.texture import draw_textures, texture_rect
@@ -53,22 +60,29 @@ def draw_cell_marker(surface: pygame.Surface, rect: pygame.Rect, color: tuple) -
 
 
 def frustum_points(rect: pygame.Rect, face: str) -> list:
-    """按钮的棱台：窄端指向 face（up/right/down/left），和游戏里的画法一致。"""
+    """按钮的棱台：窄端指向 face（up/right/down/left），占满这块矩形，和游戏一致。
+
+    矩形已经按朝向摆正过（左右朝向是竖的），所以这里只把四条边做成梯形，不旋转整块。
+    """
+    name = str(face)
+    if name in ("left", "right"):
+        inset = max(1.0, rect.height * 0.2)
+        far = rect.right if name == "right" else rect.left
+        near = rect.left if name == "right" else rect.right
+        return [
+            (near, rect.top),
+            (far, rect.top + inset),
+            (far, rect.bottom - inset),
+            (near, rect.bottom),
+        ]
     inset = max(1.0, rect.width * 0.2)
-    base = [
-        (rect.left, rect.bottom),
-        (rect.right, rect.bottom),
-        (rect.right - inset, rect.top),
-        (rect.left + inset, rect.top),
-    ]
-    angle = math.radians(FACE_ROTATIONS.get(str(face), 0))
-    if not angle:
-        return base
-    center_x, center_y = rect.center
-    cos_a, sin_a = math.cos(angle), math.sin(angle)
+    far = rect.top if name == "up" else rect.bottom
+    near = rect.bottom if name == "up" else rect.top
     return [
-        (center_x + dx * cos_a - dy * sin_a, center_y + dx * sin_a + dy * cos_a)
-        for dx, dy in ((x - center_x, y - center_y) for x, y in base)
+        (rect.left, near),
+        (rect.right, near),
+        (rect.right - inset, far),
+        (rect.left + inset, far),
     ]
 
 
@@ -98,6 +112,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     # 贴图压在所有方块之上（方块、木板、可移动方块），网格线再盖在贴图上当辅助线
     draw_textures(surface, layout, level, editor.path)
 
+    # 网格还是按整格画（吸附细到半格，但不改网格的样子）
     for col in range(layout.cols + 1):
         x = layout.left + col * tile
         if -tile <= x <= layout.window[0] + tile:
@@ -108,7 +123,13 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
 
     if debug:
         for entry in level.buttons:
-            pygame.draw.polygon(surface, BUTTON_COLOR, frustum_points(layout.entry_rect(entry), entry.get("face", "")))
+            pygame.draw.polygon(
+                surface,
+                BUTTON_COLOR,
+                frustum_points(
+                    layout.entry_rect(object_box(KIND_BUTTON, entry)), entry.get("face", "")
+                ),
+            )
 
         for entry in level.items:
             rect = layout.entry_rect(entry)
@@ -129,19 +150,9 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for entry in level.portals:
             draw_portal(surface, layout, entry)
 
+        selected_ids = {id(entry) for _, entry in editor.selection}
         for entry in level.nozzles:
-            # pos 是底边中点：三角形底边中点就画在这个点上，底边落在 y 这道平面上。
-            center_x = layout.left + entry["pos"][0] * tile
-            base_y = layout.top + (layout.rows + 1 - entry["pos"][1]) * tile
-            up = float(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
-            apex_y = base_y - tile if up else base_y + tile
-            draw_nozzle_range(surface, layout, entry)
-            pygame.draw.polygon(
-                surface,
-                NOZZLE_COLOR,
-                [(center_x - tile / 2, base_y), (center_x + tile / 2, base_y), (center_x, apex_y)],
-            )
-            draw_nozzle_power(surface, layout, entry)
+            draw_nozzle(surface, layout, entry, selected=id(entry) in selected_ids)
 
         # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
         if level.player is not None:
@@ -197,7 +208,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
                 selected[1],
                 HIGHLIGHT,
                 2,
-                handles=selected[0] != KIND_NOZZLE,
+                handles=True,
                 active_corner=active_corner,
             )
         # 光标下的对象只给淡描边，不画把手
@@ -216,22 +227,25 @@ def draw_object_outline(
     handles: bool = False,
     active_corner: str | None = None,
 ) -> None:
-    """给一个对象画描边，需要时画出四角的缩放把手。"""
-    box = nozzle_box(entry) if kind == KIND_NOZZLE else entry
-    rect = layout.entry_rect(box)
+    """给一个对象画描边，需要时画出缩放把手：四角 + 四条边的中点。"""
+    rect = layout.entry_rect(object_box(kind, entry))
     pygame.draw.rect(surface, color, rect, width)
-    if not handles or kind == KIND_NOZZLE:
+    if not handles:
         return
-    for name, point in (
-        ("bl", rect.bottomleft),
-        ("br", rect.bottomright),
-        ("tl", rect.topleft),
-        ("tr", rect.topright),
+    for name, point, size in (
+        ("bl", rect.bottomleft, 9),
+        ("br", rect.bottomright, 9),
+        ("tl", rect.topleft, 9),
+        ("tr", rect.topright, 9),
+        ("l", rect.midleft, 7),
+        ("r", rect.midright, 7),
+        ("b", rect.midbottom, 7),
+        ("t", rect.midtop, 7),
     ):
-        size = 14 if name == active_corner else 9
-        handle = pygame.Rect(0, 0, size, size)
+        active = name == active_corner
+        handle = pygame.Rect(0, 0, 14 if active else size, 14 if active else size)
         handle.center = point
-        pygame.draw.rect(surface, HIGHLIGHT if name == active_corner else HANDLE_COLOR, handle)
+        pygame.draw.rect(surface, HIGHLIGHT if active else HANDLE_COLOR, handle)
 
 
 def _dotted_line(
@@ -285,41 +299,54 @@ def _arrow_head(surface: pygame.Surface, tip: tuple, direction: tuple, color: tu
     )
 
 
-def nozzle_range_rect(layout: Layout, entry: dict) -> pygame.Rect:
-    """风区（range）占的一格宽、length 格高的矩形。"""
-    x, y = entry["pos"]
-    length = max(0.0, float(entry.get("range", 0)))
-    up = float(entry.get("power", NOZZLE_DEFAULT_POWER)) >= 0
-    bottom = y if up else y - length
-    return layout.world_rect(x - 0.5, bottom, 1.0, max(1.0, length))
-
-
-def draw_nozzle_range(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
-    """范围用虚线框标出来。"""
-    if float(entry.get("range", 0)) <= 0:
-        return
-    rect = nozzle_range_rect(layout, entry)
-    corners = [rect.topleft, rect.topright, rect.bottomright, rect.bottomleft]
+def draw_nozzle(surface: pygame.Surface, layout: Layout, entry: dict, selected: bool = False) -> None:
+    """喷口：风区虚线框 + 底面朝 face 的三角 + 力度箭头（选中时末端有可拖的高亮把手）。"""
+    range_rect = layout.entry_rect(nozzle_box(entry))
+    corners = [range_rect.topleft, range_rect.topright, range_rect.bottomright, range_rect.bottomleft]
     for start, end in zip(corners, corners[1:] + corners[:1]):
         _dotted_line(surface, start, end, RANGE_COLOR, dash=3.0, gap=3.0)
 
+    # 三角画在自己的 1×1 格里：底边中点落在 pos 上，尖端朝 face 那一边
+    marker = layout.entry_rect(nozzle_marker_box(entry))
+    step_x, step_y = nozzle_face_axis(entry)
+    if step_x:
+        base = marker.left if step_x > 0 else marker.right
+        apex = marker.right if step_x > 0 else marker.left
+        points = [(base, marker.top), (base, marker.bottom), (apex, marker.centery)]
+    else:
+        base = marker.bottom if step_y > 0 else marker.top
+        apex = marker.top if step_y > 0 else marker.bottom
+        points = [(marker.left, base), (marker.right, base), (marker.centerx, apex)]
+    pygame.draw.polygon(surface, NOZZLE_COLOR, points)
 
-def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
-    """力度用一条从 pos 指向目标的红色尺寸线，只在目标端有一个箭头。"""
-    power = float(entry.get("power", 0))
-    if power == 0:
+    draw_nozzle_power(surface, layout, entry, selected)
+
+
+def draw_nozzle_power(surface: pygame.Surface, layout: Layout, entry: dict, selected: bool = False) -> None:
+    """力度：从 pos 沿 face 指向末端的红色尺寸线 + 箭头；只有选中时末端才画可拖的高亮把手。"""
+    step_x, step_y = nozzle_face_axis(entry)
+    # 0.1 格的小方块取中心：正好落在那个世界坐标上（world_rect 最小 1px 也不影响）
+    x, y = entry["pos"]
+    base_x, base_y = layout.world_rect(x - 0.05, y - 0.05, 0.1, 0.1).center
+    tip_x, tip_y = nozzle_power_tip(entry)
+    tip = layout.world_rect(tip_x - 0.05, tip_y - 0.05, 0.1, 0.1).center
+    pygame.draw.line(surface, PIVOT_COLOR, (base_x, base_y), tip, 2)
+    _arrow_head(surface, tip, (step_x, -step_y), PIVOT_COLOR)
+    if not selected:
         return
-    center_x = layout.left + entry["pos"][0] * layout.tile
-    base_y = layout.top + (layout.rows + 1 - entry["pos"][1]) * layout.tile
-    tip_y = base_y - power * layout.tile
-    pygame.draw.line(surface, PIVOT_COLOR, (center_x, base_y), (center_x, tip_y), 2)
-    direction = (0.0, -1.0 if power > 0 else 1.0)
-    _arrow_head(surface, (center_x, tip_y), direction, PIVOT_COLOR)
+    # 末端的高亮把手：拖它就是改力度（力度是 0 时它就贴在 pos 上，照样能拖出去）
+    if step_x:
+        size = (3, max(10, round(layout.tile * 0.6)))
+    else:
+        size = (max(10, round(layout.tile * 0.6)), 3)
+    handle = pygame.Rect(0, 0, *size)
+    handle.center = tip
+    pygame.draw.rect(surface, HIGHLIGHT, handle)
 
 
 def draw_portal(surface: pygame.Surface, layout: Layout, entry: dict) -> None:
-    """传送门：1×0.3 的那块门就是触发区，再画一个朝向箭头。"""
-    rect = layout.entry_rect(entry)
+    """传送门：那块门就是触发区（左右朝向时竖起来），再画一个朝向箭头。"""
+    rect = layout.entry_rect(object_box(KIND_PORTAL, entry))
     pygame.draw.rect(surface, PORTAL_COLOR, rect)
     pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
 

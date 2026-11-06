@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
+    BUTTON_SIZE,
     COLS,
     HANDLE_PIXELS,
     HEADER,
@@ -38,7 +39,6 @@ from core.constants import (
     MOVE_SPEED_MIN,
     NAME_MAX_LENGTH,
     NOZZLE_DEFAULT_POWER,
-    NOZZLE_DEFAULT_RANGE,
     NUMBER_TEXT_MAX_LENGTH,
     PORTAL_SIZE,
     ROWS,
@@ -62,10 +62,15 @@ from core.helpers import (
     level_base_dir,
     normalize_rect,
     nozzle_box,
+    nozzle_face_axis,
+    nozzle_marker_box,
+    nozzle_power_tip,
     number_text,
+    object_box,
     relative_level_path,
     resolve_level_path,
     round_rect,
+    snap,
 )
 from core.level import Level, dump_level
 from editing.files import ask_image_path, ask_level_folder
@@ -141,26 +146,30 @@ class Editor:
     def object_stack_at(self, position: tuple, layout: Layout) -> list:
         """屏幕上该点压着的所有对象，最上层的在前（和绘制顺序相反）。
 
-        命中用的就是画出来的那个矩形（layout.entry_rect），所以只要眼睛看得见、
-        不管它延伸到关卡外面还是顶到底部状态栏，都点得到。选中只认最上层那个：
+        命中用的就是画出来的那个矩形（object_box + layout.entry_rect），所以只要眼睛
+        看得见、不管它延伸到关卡外面还是顶到底部状态栏，都点得到。选中只认最上层那个：
         不能隔着另一个对象点到它后面的东西。
         """
         stack = []
-        if self.level.destination is not None and self._hit(position, layout, self.level.destination):
+        if self.level.destination is not None and self._hit(
+            position, layout, KIND_DESTINATION, self.level.destination
+        ):
             stack.append((KIND_DESTINATION, self.level.destination))
-        if self.level.player is not None and self._hit(position, layout, self.level.player):
+        if self.level.player is not None and self._hit(
+            position, layout, KIND_PLAYER, self.level.player
+        ):
             stack.append((KIND_PLAYER, self.level.player))
         for entry in reversed(self.level.nozzles):
-            if self._hit(position, layout, nozzle_box(entry)):
+            if self._hit(position, layout, KIND_NOZZLE, entry):
                 stack.append((KIND_NOZZLE, entry))
         for kind, entry in reversed(self.all_entries()):
-            if self._hit(position, layout, entry):
+            if self._hit(position, layout, kind, entry):
                 stack.append((kind, entry))
         return stack
 
     @staticmethod
-    def _hit(position: tuple, layout: Layout, box: dict) -> bool:
-        return layout.entry_rect(box).collidepoint(position)
+    def _hit(position: tuple, layout: Layout, kind: str, entry: dict) -> bool:
+        return layout.entry_rect(object_box(kind, entry)).collidepoint(position)
 
     def object_at(self, position: tuple, layout: Layout):
         """最上层的那个对象；按住 Alt 时穿透一层。"""
@@ -170,14 +179,21 @@ class Editor:
         index = 1 if (self.click_through and len(stack) > 1) else 0
         return stack[index]
 
-    def corner_at(self, layout: Layout, entry: dict, position: tuple):
-        """光标离对象哪个角够近：返回角名，都不够近返回 None。"""
-        rect = layout.entry_rect(entry)
+    def handle_at(self, layout: Layout, kind: str, entry: dict, position: tuple):
+        """光标离哪个缩放手柄够近：四角 + 四条边的中点，都不够近返回 None。
+
+        角名是 bl/br/tl/tr，边名是 b/t/l/r；拉边只动一个方向，拉角两个方向都动。
+        """
+        rect = layout.entry_rect(object_box(kind, entry))
         for name, point in (
             ("bl", rect.bottomleft),
             ("br", rect.bottomright),
             ("tl", rect.topleft),
             ("tr", rect.topright),
+            ("l", rect.midleft),
+            ("r", rect.midright),
+            ("b", rect.midbottom),
+            ("t", rect.midtop),
         ):
             if (
                 abs(position[0] - point[0]) <= HANDLE_PIXELS
@@ -187,15 +203,30 @@ class Editor:
         return None
 
     def object_handle_at(self, position: tuple, layout: Layout):
-        """光标压在哪个角把手上：选中项优先，然后按绘制顺序从上往下找。"""
+        """光标压在哪个手柄上：选中项优先，然后按绘制顺序从上往下找。"""
         candidates = []
         if self.dialog is not None:
             candidates.append((self.dialog["kind"], self.dialog["entry"]))
         candidates += [(kind, entry) for kind, entry in reversed(self.all_entries())]
+        candidates += [(KIND_NOZZLE, entry) for entry in reversed(self.level.nozzles)]
         for kind, entry in candidates:
-            corner = self.corner_at(layout, entry, position)
-            if corner is not None:
-                return kind, entry, corner
+            name = self.handle_at(layout, kind, entry, position)
+            if name is not None:
+                return kind, entry, name
+        return None
+
+    def power_handle_at(self, position: tuple, layout: Layout):
+        """光标压在选中喷口的力度箭头末端：只有选中的喷口才有这条可拖的线。"""
+        for kind, entry in self.selection:
+            if kind != KIND_NOZZLE:
+                continue
+            tip_x, tip_y = nozzle_power_tip(entry)
+            tip_rect = layout.world_rect(tip_x - 0.5, tip_y - 0.2, 1.0, 0.4)
+            if (
+                tip_rect.left - HANDLE_PIXELS <= position[0] <= tip_rect.right + HANDLE_PIXELS
+                and abs(position[1] - tip_rect.centery) <= HANDLE_PIXELS
+            ):
+                return KIND_NOZZLE, entry, "power"
         return None
 
     def update_hover(self, position: tuple, layout: Layout) -> None:
@@ -207,8 +238,10 @@ class Editor:
         # 所以整个窗口都算工作区，对象长到哪就点到哪
         if not (0 <= position[0] < layout.window[0] and 0 <= position[1] < layout.window[1]):
             return
-        # 角把手优先：不然压在方块上的对象永远抓不到
-        self.hovered_handle = self.object_handle_at(position, layout)
+        # 手柄优先：力度箭头末端、然后四角/四边，不然压在方块上的对象永远抓不到
+        self.hovered_handle = self.power_handle_at(position, layout)
+        if self.hovered_handle is None:
+            self.hovered_handle = self.object_handle_at(position, layout)
         # 只选最上层那个：不隔着另一个对象去点它后面的东西
         self.hovered = self.object_at(position, layout)
 
@@ -272,7 +305,10 @@ class Editor:
         self.dirty = True
         # 新对象的数值/布尔/字符串一律给中性默认值，具体参数再在面板里调
         if self.tool == TOOL_BUTTON:
-            level.buttons.append({"name": "", "pos": [x, y], "size": list(size), "face": ""})
+            # 按钮画出来的矩形就是触发区，所以缺省就是 1×0.3
+            level.buttons.append(
+                {"name": "", "pos": [x, y], "size": list(BUTTON_SIZE), "face": ""}
+            )
         elif self.tool == TOOL_PORTAL:
             # 门本身固定 1×0.3，它就是触发区；目标和朝向在面板里调
             level.portals.append(
@@ -287,7 +323,15 @@ class Editor:
         elif self.tool == TOOL_ITEM:
             level.items.append({"name": "", "pos": [x, y], "size": list(size), "heavy": False})
         elif self.tool == TOOL_NOZZLE:
-            level.nozzles.append({"pos": [x, y], "power": 0, "range": 0})
+            # 喷口的 size 就是风区（宽 × 长），face 是伸出的方向，power 是目标离底面多远
+            level.nozzles.append(
+                {
+                    "pos": [x, y],
+                    "face": FACE_ORDER[0],
+                    "power": 0,
+                    "size": list(NOZZLE_DEFAULT_SIZE),
+                }
+            )
         elif self.tool == TOOL_PLAYER:
             # 起点只有一份：再放一次就是把它挪过去
             level.player = {"pos": [x, y], "size": list(size)}
@@ -504,22 +548,28 @@ class Editor:
         """
         hit = self.hovered_handle
         if hit is None:
+            hit = self.power_handle_at(position, layout)   # 力度箭头末端优先
+        if hit is None:
             hit = self.object_handle_at(position, layout)
         if hit is not None:
             kind, entry, corner = hit
         elif self.hovered is not None:
             kind, entry = self.hovered
-            corner = None                  # 喷口没有矩形，只能整体挪
+            corner = None                  # 点在对象本体上：整体挪，不缩放
         else:
             return False
         self.push_undo()                   # 先记下拖动前的状态，没动过就弹掉
+        box = object_box(kind, entry)      # 屏幕上那块矩形：朝向型对象和喷口都要先摆正
+        if corner is not None:
+            # 抓的是缩放手柄：老数据里没写 size 的对象（木板、道具）也补上，别当成移动
+            entry.setdefault("size", [1.0, 1.0])
         self.object_grab = {
             "kind": kind,
             "entry": entry,
             "corner": corner,
             "start": layout.world_point(position),
             "pos": list(entry["pos"]),
-            "size": list(entry.get("size", [1.0, 1.0])),
+            "box": (float(box["pos"][0]), float(box["pos"][1]), *box.get("size", [1.0, 1.0])),
             "moved": False,
             "additive": self.keep_ratio,   # 按下时就按住 Ctrl：松手时是加选而不是单选
         }
@@ -537,29 +587,41 @@ class Editor:
             return                          # 还不到 1 像素，当作抖动
         grab["moved"] = True
         self.dirty = True
+        kind = grab["kind"]
         entry = grab["entry"]
         x, y = grab["pos"]
-        width, height = grab["size"]
         corner = grab["corner"]
-        if corner is None or "size" not in entry:
+        if corner == "power":
+            # 拖力度箭头末端：末端到 pos 的距离（沿朝向）就是 power，不给负的
+            step_x, step_y = nozzle_face_axis(entry)
+            reach = (point[0] - x) * step_x + (point[1] - y) * step_y
+            if self.snapping:
+                reach = snap(reach)
+            entry["power"] = round(clamp_float(reach, 0.0, 8.0, 0.0), 2)
+            return
+        if corner is None:
             entry["pos"] = [round(x + dx, 2), round(y + dy, 2)]
             if self.snapping:
-                entry["pos"] = [round(value) for value in entry["pos"]]
+                entry["pos"] = [snap(value) for value in entry["pos"]]
             return
-        left, right, bottom, top = x, x + width, y, y + height
+        box_left, box_bottom, width, height = grab["box"]
+        left, right, bottom, top = box_left, box_left + width, box_bottom, box_bottom + height
         if self.keep_ratio and width > 0 and height > 0:
             # 等比缩放（所有能缩放的对象通用）：以对角为锚点，
             # 取鼠标在横竖两个方向上缩放比例的较大者
-            anchor_x = x + width if "l" in corner else x
-            anchor_y = y + height if "b" in corner else y
+            anchor_x = box_left + width if "l" in corner else box_left
+            anchor_y = box_bottom + height if "b" in corner else box_bottom
             scale = max(abs(point[0] - anchor_x) / width, abs(point[1] - anchor_y) / height)
             new_width = max(MIN_SIZE, round(width * scale, 2))
             new_height = max(MIN_SIZE, round(height * scale, 2))
-            entry["pos"] = [
+            self._set_box(
+                kind,
+                entry,
                 round(anchor_x - new_width if "l" in corner else anchor_x, 2),
                 round(anchor_y - new_height if "b" in corner else anchor_y, 2),
-            ]
-            entry["size"] = [new_width, new_height]
+                new_width,
+                new_height,
+            )
             return
         if "l" in corner:
             left = point[0]
@@ -570,12 +632,38 @@ class Editor:
         if "t" in corner:
             top = point[1]
         if self.snapping:
-            left, right, bottom, top = round(left), round(right), round(bottom), round(top)
-        entry["pos"] = [round(min(left, right), 2), round(min(bottom, top), 2)]
-        entry["size"] = [
+            left, right, bottom, top = snap(left), snap(right), snap(bottom), snap(top)
+        self._set_box(
+            kind,
+            entry,
+            round(min(left, right), 2),
+            round(min(bottom, top), 2),
             max(MIN_SIZE, round(abs(right - left), 2)),
             max(MIN_SIZE, round(abs(top - bottom), 2)),
-        ]
+        )
+
+    @staticmethod
+    def _set_box(kind: str, entry: dict, left: float, bottom: float, width: float, height: float) -> None:
+        """把算好的屏幕矩形写回条目。
+
+        按钮、传送门和喷口的 pos 都是「底面」的中心、size 是没转过的宽高（左右朝向时
+        屏幕上的宽高是反的），所以缩放后都要换算回这种写法。
+        """
+        if kind in (KIND_BUTTON, KIND_PORTAL, KIND_NOZZLE):
+            face = str(entry.get("face", FACE_ORDER[0]))
+            if face in ("left", "right"):
+                entry["size"] = [round(height, 2), round(width, 2)]
+                if face == "right":
+                    entry["pos"] = [round(left, 2), round(bottom + height / 2.0, 2)]
+                else:
+                    entry["pos"] = [round(left + width, 2), round(bottom + height / 2.0, 2)]
+            else:
+                entry["size"] = [round(width, 2), round(height, 2)]
+                edge = bottom + height if face == "down" else bottom
+                entry["pos"] = [round(left + width / 2.0, 2), round(edge, 2)]
+            return
+        entry["pos"] = [round(left, 2), round(bottom, 2)]
+        entry["size"] = [width, height]
 
     def refresh_grab(self, layout: Layout) -> None:
         """修饰键按下/松开时：用最近一次鼠标位置把正在进行的拖动重算一遍。
@@ -739,7 +827,7 @@ class Editor:
             if self._in_marquee(kind, entry, x0, y0, x1, y1)
         ]
         for entry in self.level.nozzles:
-            if self._in_marquee(KIND_NOZZLE, nozzle_box(entry), x0, y0, x1, y1):
+            if self._in_marquee(KIND_NOZZLE, entry, x0, y0, x1, y1):
                 picked.append((KIND_NOZZLE, entry))
         if getattr(self, "marquee_additive", False):
             # 加选：把已选的和框里的一起保留（同一对象只算一次）
@@ -754,8 +842,9 @@ class Editor:
     @staticmethod
     def _in_marquee(kind: str, entry: dict, x0: float, y0: float, x1: float, y1: float) -> bool:
         """贴图要整个框住才算（它是背景皮，一划就中的话太容易误选），其余相交即选。"""
-        px, py = entry["pos"]
-        width, height = entry.get("size", [1.0, 1.0])
+        box = object_box(kind, entry)
+        px, py = box["pos"]
+        width, height = box.get("size", [1.0, 1.0])
         if kind == KIND_TEXTURE:
             return px >= x0 and py >= y0 and px + width <= x1 and py + height <= y1
         return px < x1 and px + width > x0 and py < y1 and py + height > y0
@@ -817,9 +906,8 @@ class Editor:
         entry = self.dialog["entry"]
         pos = entry["pos"]
         rows = [("位置 x", number_text(pos[0])), ("位置 y", number_text(pos[1]))]
-        if kind != KIND_NOZZLE:
-            size = entry.get("size", [1.0, 1.0])
-            rows += [("宽度", number_text(size[0])), ("高度", number_text(size[1]))]
+        size = entry.get("size", [1.0, 1.0])
+        rows += [("宽度", number_text(size[0])), ("高度", number_text(size[1]))]
         if kind == KIND_MOVABLE:
             offset = entry.get("offset", [0, -3])
             sources = entry.get("sources", [])
@@ -840,8 +928,8 @@ class Editor:
             rows.append(("变重", "是" if entry.get("heavy") else "否"))
         elif kind == KIND_NOZZLE:
             rows += [
+                ("朝向", FACE_LABELS.get(entry.get("face", "up"), FACE_LABELS[FACE_ORDER[0]])),
                 ("力度", number_text(entry.get("power", NOZZLE_DEFAULT_POWER))),
-                ("长度", number_text(entry.get("range", NOZZLE_DEFAULT_RANGE))),
             ]
         elif kind == KIND_TEXTURE:
             rows.append(("图片", entry.get("image") or "（未选择）"))
@@ -867,7 +955,8 @@ class Editor:
 
         current_number = self.dialog_number_value(field)
         if current_number is not None:
-            self.set_dialog_number(field, current_number + delta)
+            # 数字字段统一半格一步（位置、尺寸、偏移、力度、长度都是方块单位）
+            self.set_dialog_number(field, current_number + 0.5 * delta)
             return
 
         if kind == KIND_MOVABLE:
@@ -918,6 +1007,14 @@ class Editor:
                     else None
                 )
                 entry["target"] = chosen or ""
+        elif kind == KIND_NOZZLE:
+            if field == 4:                 # 朝向：按 up/right/down/left 循环
+                current_face = entry.get("face", FACE_ORDER[0])
+                entry["face"] = (
+                    FACE_ORDER[(FACE_ORDER.index(current_face) + delta) % len(FACE_ORDER)]
+                    if current_face in FACE_ORDER
+                    else FACE_ORDER[0]
+                )
         elif kind == KIND_ITEM:
             entry["heavy"] = not entry.get("heavy", False)
 
@@ -931,7 +1028,7 @@ class Editor:
             return None
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
-        if kind in (KIND_BUTTON, KIND_PORTAL) and field == 4:
+        if kind in (KIND_BUTTON, KIND_PORTAL, KIND_NOZZLE) and field == 4:
             return [(FACE_LABELS[face], face) for face in FACE_ORDER]
         if kind == KIND_PORTAL and field == 5:
             names = [
@@ -1004,14 +1101,12 @@ class Editor:
             return entry["pos"][0]
         if field == 1:
             return entry["pos"][1]
-        if kind != KIND_NOZZLE and field in (2, 3):
+        if field in (2, 3):
             return entry.get("size", [1.0, 1.0])[field - 2]
         if kind == KIND_MOVABLE and field in (4, 5):
             return entry.get("offset", [0, -3])[field - 4]
-        if kind == KIND_NOZZLE and field == 2:
+        if kind == KIND_NOZZLE and field == 5:
             return entry.get("power", NOZZLE_DEFAULT_POWER)
-        if kind == KIND_NOZZLE and field == 3:
-            return entry.get("range", NOZZLE_DEFAULT_RANGE)
         return None
 
     def set_dialog_number(self, field: int, value: float) -> None:
@@ -1023,7 +1118,7 @@ class Editor:
             pos[0] = round(value, 2)
         elif field == 1:
             pos[1] = round(value, 2)
-        elif kind != KIND_NOZZLE and field in (2, 3):
+        elif field in (2, 3):
             size = list(entry.get("size", [1.0, 1.0]))
             size[field - 2] = max(MIN_SIZE, round(value, 2))
             entry["size"] = size
@@ -1031,16 +1126,15 @@ class Editor:
             offset = list(entry.get("offset", [0, -3]))
             offset[field - 4] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
             entry["offset"] = offset
-        elif kind == KIND_NOZZLE and field == 2:
-            entry["power"] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
-        elif kind == KIND_NOZZLE and field == 3:
-            entry["range"] = round(clamp_float(value, 1.0, 8.0, 1.0), 2)
+        elif kind == KIND_NOZZLE and field == 5:
+            # 力度是沿着朝向走出去多远，不给负的
+            entry["power"] = round(clamp_float(value, 0.0, 8.0, 0.0), 2)
 
     def type_dialog_number(self, char: str) -> bool:
         """数字字段键盘输入：第一次敲键起一个新值，之后追加，可以带一个小数点。
 
-        负号只允许打头（偏移、力度可为负）；直接敲小数点就当用户想打「0.」。
-        返回是否吃掉了字符。
+        负号只允许打头（偏移可以是负的，力度敲了负号也会被夹回 0）；直接敲小数点就当
+        用户想打「0.」。返回是否吃掉了字符。
         """
         if self.dialog is None or self.name_focused:
             return False
@@ -1053,7 +1147,7 @@ class Editor:
             if len(self.number_buffer) < NUMBER_TEXT_MAX_LENGTH:
                 self.number_buffer += char
         elif char == "-" and self.number_buffer is None:
-            self.number_buffer = "-"       # 负号只允许打头（偏移、力度可为负）
+            self.number_buffer = "-"       # 负号只允许打头（力度回头会被夹到 0）
             self.push_undo()
         elif char == "." and "." not in (self.number_buffer or ""):
             if self.number_buffer is None:

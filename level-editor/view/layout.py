@@ -19,6 +19,7 @@ from core.constants import (
     RULER_HEIGHT,
     ZOOM_MAX_TILE,
 )
+from core.helpers import snap
 
 
 class Layout:
@@ -82,11 +83,16 @@ class Layout:
 
     # ---- 网格吸附 ---------------------------------------------------
     def snap_rect(self, x: float, y: float, width: float, height: float) -> tuple:
-        """把一个浮点矩形对到整格：左下与右上各自取整。"""
-        left, right = round(x), round(x + width)
-        bottom, top = round(y), round(y + height)
-        return float(left), float(bottom), float(max(1, right - left)), float(max(1, top - bottom))
+        """把一个浮点矩形对到网格：每半格一条，所以整格也落在上面。"""
+        left, right = snap(x), snap(x + width)
+        bottom, top = snap(y), snap(y + height)
+        return (
+            float(left),
+            float(bottom),
+            float(max(1, right - left)),
+            float(max(1, top - bottom)),
+        )
 
     def snap_point(self, x: float, y: float) -> tuple:
-        """把一个点对到整格线上。"""
-        return float(round(x)), float(round(y))
+        """把一个点对到网格线上（半格一条，整格也对得上）。"""
+        return float(snap(x)), float(snap(y))
