@@ -47,6 +47,7 @@ from core.helpers import (
 )
 from view.background import draw_background
 from view.layout import Layout
+from view.picker import pick_menu_hovered
 from view.texture import draw_textures, texture_rect
 
 if TYPE_CHECKING:
@@ -223,13 +224,22 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
                 handles=True,
                 active_corner=active_corner,
             )
-        # 光标下的对象只给淡描边，不画把手
+        # 光标下的对象只给淡描边，不画把手；取对象列表开着时不画，免得和列表里的高亮打架
         hovered = editor.hovered
         hidden = hovered is not None and hovered[0] == KIND_TEXTURE and not show_textures
-        if hovered is not None and not hidden and not any(
-            hovered[1] is entry for _, entry in editor.selection
+        if (
+            hovered is not None
+            and not hidden
+            and editor.pick_menu is None
+            and not any(hovered[1] is entry for _, entry in editor.selection)
         ):
             draw_object_outline(surface, layout, hovered[0], hovered[1], DIM_TEXT, 1)
+
+        # Alt+点击的列表里指着哪一行，画布上就描出哪个对象
+        picked = pick_menu_hovered(surface, editor)
+        if picked is not None:
+            kind, entry = editor.pick_menu["stack"][picked]
+            draw_object_outline(surface, layout, kind, entry, HIGHLIGHT, 2)
 
 
 def draw_object_outline(

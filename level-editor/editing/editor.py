@@ -104,8 +104,8 @@ class Editor:
         self.pan_x = 0.0
         self.pan_y = 0.0
         self.hovered = None
-        self.hovered_handle = None              # 光标下的角把手：(kind, entry, corner)
         self.selection: list = []               # 选中的对象：(kind, entry)
+        self.pick_menu: dict | None = None      # Alt+点击的取对象列表：{"stack": [...], "position": (...)}
         self.marquee_start: tuple | None = None  # 左键拖出的框选，世界坐标
         self.marquee_current: tuple | None = None
         self.marquee_additive = False            # 框选开始时是否按着 Ctrl
@@ -250,12 +250,53 @@ class Editor:
         return layout.entry_rect(object_box(kind, entry)).collidepoint(position)
 
     def object_at(self, position: tuple, layout: Layout):
-        """最上层的那个对象；按住 Alt 时穿透一层。"""
+        """最上层的那个对象。
+
+        单选时，选中的那个在自己的矩形里算最上层：被别的对象盖住也能直接拖它。
+        按住 Alt 不做这层优先，返回视觉上最上层的（要选叠在下面的，Alt+点击会列出列表）。
+        """
         stack = self.object_stack_at(position, layout)
         if not stack:
             return None
-        index = 1 if (self.click_through and len(stack) > 1) else 0
-        return stack[index]
+        if not self.click_through:
+            selected = self.selected_entry()
+            if selected is not None:
+                for kind, entry in stack:
+                    if entry is selected[1]:
+                        return kind, entry
+        return stack[0]
+
+    def selected_entry(self):
+        """唯一选中的那个 (kind, entry)；没选中或者多选都返回 None。"""
+        return self.selection[0] if len(self.selection) == 1 else None
+
+    def handle_target(self):
+        """有缩放手柄的对象：拖动中的那个，或者唯一选中的那个（和画出来的手柄一致）。"""
+        if self.object_grab is not None:
+            return self.object_grab["kind"], self.object_grab["entry"]
+        return self.selected_entry()
+
+    # ---- 取光标下的对象（Alt+点击） --------------------------------
+    def open_pick_menu(self, position: tuple, layout: Layout) -> bool:
+        """叠着两个以上对象时，把它们列出来让用户挑；只有一个就不弹。返回开没开。"""
+        stack = self.object_stack_at(position, layout)
+        if len(stack) < 2:
+            return False
+        self.pick_menu = {"stack": stack, "position": (position[0], position[1])}
+        self.status = "光标下叠着多个对象，点一行选中它。"
+        return True
+
+    def close_pick_menu(self) -> None:
+        self.pick_menu = None
+
+    def choose_pick(self, index: int) -> None:
+        """在取对象列表里点了一行：选中那个对象。"""
+        menu = self.pick_menu
+        if menu is None or not 0 <= index < len(menu["stack"]):
+            return
+        kind, entry = menu["stack"][index]
+        self.pick_menu = None
+        self.select(kind, entry)
 
     def handle_at(self, layout: Layout, kind: str, entry: dict, position: tuple):
         """光标离哪个缩放手柄够近：四角 + 四条边的中点，都不够近返回 None。
@@ -281,17 +322,13 @@ class Editor:
         return None
 
     def object_handle_at(self, position: tuple, layout: Layout):
-        """光标压在哪个手柄上：选中项优先，然后按绘制顺序从上往下找。"""
-        candidates = []
-        if self.dialog is not None:
-            candidates.append((self.dialog["kind"], self.dialog["entry"]))
-        candidates += [(kind, entry) for kind, entry in reversed(self.all_entries())]
-        candidates += [(KIND_NOZZLE, entry) for entry in reversed(self.level.nozzles)]
-        for kind, entry in candidates:
-            name = self.handle_at(layout, kind, entry, position)
-            if name is not None:
-                return kind, entry, name
-        return None
+        """光标压在哪个手柄上：只有唯一选中的那个有手柄（和画出来的一致）。"""
+        target = self.handle_target()
+        if target is None:
+            return None
+        kind, entry = target
+        name = self.handle_at(layout, kind, entry, position)
+        return (kind, entry, name) if name is not None else None
 
     def power_handle_at(self, position: tuple, layout: Layout):
         """光标压在选中喷口的力度箭头末端：只有选中的喷口才有这条可拖的线。"""
@@ -308,19 +345,13 @@ class Editor:
         return None
 
     def update_hover(self, position: tuple, layout: Layout) -> None:
-        """挑出光标下的对象：只认最上层那个（按住 Alt 时穿透一层）。"""
+        """挑出光标下的对象：选中的那个优先，其次是最上层那个。"""
         self.last_mouse = (position[0], position[1])
         self.hovered = None
-        self.hovered_handle = None
         # 画布铺满整个窗口：顶部信息栏、底部状态栏只是画字，不挡对象，
         # 所以整个窗口都算工作区，对象长到哪就点到哪
         if not (0 <= position[0] < layout.window[0] and 0 <= position[1] < layout.window[1]):
             return
-        # 手柄优先：力度箭头末端、然后四角/四边，不然压在方块上的对象永远抓不到
-        self.hovered_handle = self.power_handle_at(position, layout)
-        if self.hovered_handle is None:
-            self.hovered_handle = self.object_handle_at(position, layout)
-        # 只选最上层那个：不隔着另一个对象去点它后面的东西
         self.hovered = self.object_at(position, layout)
 
     # ---- 创建 / 删除 -----------------------------------------------
@@ -426,6 +457,7 @@ class Editor:
         self.dropdown_field = None
         self.selection = []
         self.hovered = None
+        self.pick_menu = None
         self.number_buffer = None
         self.status = f"已删除{KIND_TITLES.get(kind, '对象')}。"
 
@@ -445,6 +477,7 @@ class Editor:
         self.selection = []
         self.marquee_start = None
         self.marquee_current = None
+        self.pick_menu = None
         self.dirty = True
         self.status = "已撤销上一步操作。"
 
@@ -468,6 +501,7 @@ class Editor:
         self.dialog = None
         self.dropdown_field = None
         self.selection = []
+        self.pick_menu = None
         self.marquee_start = None
         self.marquee_current = None
         self.object_grab = None
@@ -515,6 +549,7 @@ class Editor:
         self.level = Level()
         self.level_in_view = True
         self.path = None
+        self.pick_menu = None
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
@@ -619,6 +654,7 @@ class Editor:
         self.level.name = level_name_of(path)      # 关卡名就是文件名，json 里不写
         self.path = path
         self.level_in_view = True
+        self.pick_menu = None
         self.undo_stack.clear()
         self.dirty = False
         self.dialog = None
@@ -1392,9 +1428,7 @@ class Editor:
 
         只动按下的那一个：多选只是列清单，不做整组编辑。
         """
-        hit = self.hovered_handle
-        if hit is None:
-            hit = self.power_handle_at(position, layout)   # 力度箭头末端优先
+        hit = self.power_handle_at(position, layout)   # 力度箭头末端优先
         if hit is None:
             hit = self.object_handle_at(position, layout)
         if hit is not None:
@@ -1564,6 +1598,7 @@ class Editor:
     def select_many(self, pairs: list) -> None:
         """多选：面板只列清单和数量，不给属性；正好一个时回到属性面板。"""
         self.selection = list(pairs)
+        self.pick_menu = None
         if len(self.selection) == 1:
             kind, entry = self.selection[0]
             self.dialog = {"kind": kind, "entry": entry}

@@ -19,6 +19,7 @@ from editing.handlers import (
     handle_dropdown_click,
     handle_game_settings_click,
     handle_level_select_click,
+    handle_pick_menu_click,
     handle_settings_click,
     handle_switch_click,
     handle_toolbar,
@@ -265,6 +266,10 @@ def run() -> None:
                     # 列表已经收起：点在面板里就继续走面板，点在画布上就只是收起列表
                     if not (panel_open() and detail_panel_rect(screen).collidepoint(event.pos)):
                         continue
+                if editor.pick_menu is not None:
+                    if event.button == 1 and handle_pick_menu_click(screen, editor, event.pos):
+                        continue
+                    editor.close_pick_menu()
                 if panel_open() and detail_panel_rect(screen).collidepoint(event.pos):
                     if event.button == 1:
                         handle_detail_click(screen, editor, event.pos)
@@ -289,6 +294,9 @@ def run() -> None:
                     editor.press_canvas(event.pos, layout)
                 elif event.button == 1:
                     editor.update_hover(event.pos, layout)
+                    # Alt+点击：叠着多个对象时先列出它们，让用户挑一个
+                    if editor.click_through and editor.open_pick_menu(event.pos, layout):
+                        continue
                     # 对象上按下就是拖（移动/缩放）；空地上按下就拉框选
                     if not editor.begin_object_grab(event.pos, layout):
                         editor.begin_marquee(event.pos, layout)
@@ -305,7 +313,9 @@ def run() -> None:
                     editor.finish_drag()
             elif event.type == pygame.KEYDOWN:
                 ctrl = bool(event.mod & pygame.KMOD_CTRL)
-                if ctrl and event.key == pygame.K_z:
+                if editor.pick_menu is not None and event.key == pygame.K_ESCAPE:
+                    editor.close_pick_menu()
+                elif ctrl and event.key == pygame.K_z:
                     if editor.level_in_view:
                         editor.undo()
                 elif ctrl and event.key == pygame.K_s:

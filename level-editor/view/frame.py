@@ -18,6 +18,7 @@ from view.modals import (
     draw_switch_confirm,
 )
 from view.panel import draw_detail_panel, draw_selection_panel
+from view.picker import draw_pick_menu
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -38,6 +39,8 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_file_menu(surface, editor, font)
     if editor.view_menu_open:
         draw_view_menu(surface, editor, font)
+    if editor.pick_menu is not None:
+        draw_pick_menu(surface, editor, font)
     if editor.dialog is not None:
         draw_detail_panel(surface, editor, font)
     elif len(editor.selection) > 1:

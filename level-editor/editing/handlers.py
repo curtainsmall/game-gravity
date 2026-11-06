@@ -22,6 +22,7 @@ from view.panel import (
     selection_panel_buttons,
     trigger_geometry,
 )
+from view.picker import pick_menu_rects
 from view.widgets import stepper_rects
 
 if TYPE_CHECKING:
@@ -94,6 +95,16 @@ def handle_dropdown_click(surface: pygame.Surface, editor: Editor, position: tup
         editor.close_dropdown()
         return True
     editor.close_dropdown()
+    return False
+
+
+def handle_pick_menu_click(surface: pygame.Surface, editor: Editor, position: tuple) -> bool:
+    """取对象列表：点中一行就选中它并吃掉点击；点别处只把列表关掉，点击继续照常处理。"""
+    for rect, index in pick_menu_rects(surface, editor):
+        if rect.collidepoint(position):
+            editor.choose_pick(index)
+            return True
+    editor.close_pick_menu()
     return False
 
 
