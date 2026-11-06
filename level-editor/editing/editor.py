@@ -383,7 +383,7 @@ class Editor:
         self.status = f"已打开 {display_path(folder)}"
 
     def save(self) -> None:
-        """保存到关卡文件夹：scene.json 放数据，背景与贴图复制进文件夹。"""
+        """保存到关卡文件夹：scene.json 放数据，图片只记相对路径、一个都不复制。"""
         folder = self.path
         if folder is None:
             folder = ask_level_folder("保存到")

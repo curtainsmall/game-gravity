@@ -1,4 +1,8 @@
-"""关卡数据模型。"""
+"""关卡数据模型。
+
+键和形状与游戏端一一对应，细节见 game/world/level.py 的模块说明；这里只额外记着
+编辑器自己关心的事：玩家的跳高、速度和动画存在 Level 上，保存时才塞进 player。
+"""
 
 import copy
 import json

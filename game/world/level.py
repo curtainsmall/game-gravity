@@ -1,13 +1,29 @@
 """关卡数据：里面用设计者的词汇，程序里只有 GameObject。
 
-每个条目都是 {"pos": [x, y], "size": [w, h]}，size 缺省为 1×1。
-按钮与可移动方块用 name 互相引用。
-
 一个关卡是一个文件夹，文件夹名就是关卡名：
     <关卡名>/scene.json        关卡数据
     <关卡名>/background.png    背景图（scene.json 里不写 background 时默认用它）
-background 如果写了，路径相对关卡文件夹；图片按可玩区的高度等比缩放后横向重复，
-ground/ceiling 那两行不在它的覆盖范围里。
+background 和各种图片的路径都相对关卡文件夹（也就是相对 scene.json）；背景图按可玩区
+的高度等比缩放后横向重复，ground/ceiling 那两行不在它的覆盖范围里。
+
+scene.json 的键：
+    name, width, height      关卡名与尺寸，单位格
+    flip_area_offsets        [向上翻带高度, 向下翻带高度]，见 controller.flip_rule
+    blocks, planks           方块与木板
+    movable_blocks           可移动方块：offset 是目标点相对支点的偏移，sources 引用按钮名
+    buttons                  按钮：face 是朝向，name 供可移动方块引用
+    portals                  传送门：pos/size 是门本身，face 是出来的朝向，target 引用另一个门
+    items                    道具：heavy 表示变重
+    nozzles                  喷口：pos 是三角形底边中点，power 是目标偏移，range 是风区长度
+    textures                 贴图：浮点矩形 + image（相对 scene.json 的路径）
+    player                   起点，同时带着玩家的跳高、速度和动画
+    destination              终点
+    background               背景图，相对 scene.json 的路径；不写就用文件夹里的 background.png
+
+有矩形的对象都写成 {"pos": [x, y], "size": [w, h]}：pos 是左下角，size 缺省 1×1
+（传送门缺省 1×0.3），单位格，都是浮点。喷口是一个点（底边中点），没有 size。
+player 除了 pos/size 还写着 jump_height（格）、move_speed（格/秒）和 animation
+（动作名 → 该动作的图片路径，动作名不预设；动画系统还没接，先读出来放着）。
 """
 
 import json
