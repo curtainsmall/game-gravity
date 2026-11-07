@@ -1264,8 +1264,10 @@ class Editor:
 
     # ---- 动画库（游戏配置的「动画集」页） ---------------------------
     def animation_library_items(self) -> list:
-        """编辑中的动画库：按加入顺序的 (键, 剪辑)。"""
-        return list(self.game_animation_library.items())
+        """编辑中的动画库：按名字字母序的 (键, 剪辑)，不分大小写。"""
+        return sorted(
+            self.game_animation_library.items(), key=lambda pair: pair[0].casefold()
+        )
 
     def animation_library_clip(self, key: str) -> dict | None:
         clip = self.game_animation_library.get(key)
@@ -1319,6 +1321,9 @@ class Editor:
             "previewing": False,
             "preview_frame": 0,
             "preview_elapsed": 0.0,
+            # 弹窗自己的一句提示：校验没过、被引用时都写在这里，别只丢到状态栏
+            "notice": "",
+            "references": self.animation_key_references(original) if original else [],
         }
         self.status = f"正在编辑动画 {name}。"
 
@@ -1335,18 +1340,20 @@ class Editor:
         edit["name_focus"] = False
         name = str(edit["name"]).strip()
         if not name:
-            self.status = "动画名不能为空。"
+            edit["notice"] = "动画名不能为空。"
+            self.status = edit["notice"]
             return
         original = edit["original"]
         if name != original and name in self.game_animation_library:
-            self.status = f"已经有一条叫 {name} 的动画了。"
+            edit["notice"] = f"已经有一条叫 {name} 的动画了。"
+            self.status = edit["notice"]
             return
         if original and name != original:
             references = self.animation_key_references(original)
             if references:
-                self.status = (
-                    f"动画 {original} 还被这些关卡引用着，不能改名：{'、'.join(references)}。"
-                )
+                edit["references"] = references
+                edit["notice"] = f"被这些关卡引用着，不能改名：{'、'.join(references)}。"
+                self.status = edit["notice"]
                 return
         if original:
             self.game_animation_library.pop(original, None)
@@ -1392,9 +1399,12 @@ class Editor:
             return
         references = self.animation_key_references(key)
         if references:
-            self.status = (
-                f"动画 {key} 还被这些关卡引用着，不能删除：{'、'.join(references)}。"
-            )
+            if self.animation_edit is not None and self.animation_edit["original"] == key:
+                self.animation_edit["references"] = references
+                self.animation_edit["notice"] = (
+                    f"被这些关卡引用着，不能删除：{'、'.join(references)}。"
+                )
+            self.status = f"动画 {key} 还被这些关卡引用着，不能删除：{'、'.join(references)}。"
             return
         self.game_animation_library.pop(key, None)
         if self.animation_selected == key:
@@ -1420,8 +1430,10 @@ class Editor:
 
     # ---- 声音库 -----------------------------------------------------
     def sound_library_items(self) -> list:
-        """声音库页的列表：键 → 条目，按名字排。"""
-        return sorted(self.sound_library.items(), key=lambda pair: pair[0])
+        """声音库页的列表：键 → 条目，按名字字母序，不分大小写。"""
+        return sorted(
+            self.sound_library.items(), key=lambda pair: pair[0].casefold()
+        )
 
     def sound_library_path(self, key: str) -> str | None:
         """键 → 文件的绝对路径；找不到文件返回 None。"""
@@ -1836,12 +1848,14 @@ class Editor:
             return
         if len(edit["name"]) < animation.NAME_MAX_LENGTH:
             edit["name"] += char
+            edit["notice"] = ""
 
     def erase_animation_name_char(self) -> None:
         edit = self.animation_edit
         if edit is None or not edit["name_focus"]:
             return
         edit["name"] = edit["name"][:-1]
+        edit["notice"] = ""
 
     # ---- 画布上的动画对象 -------------------------------------------
     def animation_object_frame(self, entry: dict) -> tuple[str, bool] | None:

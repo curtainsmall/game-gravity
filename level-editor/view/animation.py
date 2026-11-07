@@ -229,6 +229,28 @@ def draw_animation_edit(
     )
     surface.blit(title, (geometry["title"].left, geometry["title"].top))
 
+    # 弹窗自己的提示：校验没过、或者这条动画被关卡引用着时都写在这里
+    notice = str(edit.get("notice") or "")
+    references = edit.get("references") or []
+    if notice:
+        message, color = notice, HIGHLIGHT
+    elif references:
+        message = f"被 {'、'.join(references)} 引用着，不能改名或删除"
+        color = DIM_TEXT
+    else:
+        message = ""
+    if message:
+        rendered = font.render(message, True, color)
+        room = max(1, geometry["title"].right - title.get_width() - 16)
+        surface.blit(
+            rendered,
+            (
+                geometry["title"].right - min(rendered.get_width(), room),
+                geometry["title"].top,
+            ),
+            (0, 0, min(rendered.get_width(), room), rendered.get_height()),
+        )
+
     name_rect = geometry["name"]
     focused = edit["name_focus"]
     pygame.draw.rect(surface, (62, 62, 72) if focused else (48, 48, 54), name_rect)
