@@ -4,6 +4,7 @@ import pygame
 
 import debug_display
 import ui
+import window
 from levels import level_preview
 from renderer.texture import image_size, load_scaled
 
@@ -239,7 +240,7 @@ def draw_cutscene_pause(surface: pygame.Surface) -> None:
 
 def _draw_check_row(surface: pygame.Surface, rect: pygame.Rect, checked: bool, label: str) -> None:
     """设置里的一个复选框行：整行都能点，勾上时在方框里画个勾。"""
-    if rect.collidepoint(pygame.mouse.get_pos()):
+    if rect.collidepoint(window.mouse_pos()):
         pygame.draw.rect(surface, (245, 245, 245), rect)
     box = pygame.Rect(rect.left + 6, rect.centery - 8, 16, 16)
     pygame.draw.rect(surface, ui.BUTTON_HOVER if checked else ui.BUTTON, box)

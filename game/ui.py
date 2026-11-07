@@ -7,6 +7,8 @@ import math
 
 import pygame
 
+import window
+
 BACKGROUND = (235, 235, 235)
 PANEL = (250, 250, 250)
 TEXT = (40, 40, 40)
@@ -62,7 +64,7 @@ def draw_text(
 
 
 def draw_button(surface: pygame.Surface, rect: pygame.Rect, label: str, size: int = 22) -> None:
-    hovered = rect.collidepoint(pygame.mouse.get_pos())
+    hovered = rect.collidepoint(window.mouse_pos())
     pygame.draw.rect(surface, BUTTON_HOVER if hovered else BUTTON, rect)
     pygame.draw.rect(surface, BORDER, rect, 2)
     draw_text(surface, label, size, center=rect.center)
