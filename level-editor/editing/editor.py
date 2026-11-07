@@ -3476,8 +3476,10 @@ class Editor:
             if kind == KIND_NOZZLE:
                 clamp_nozzle_power(entry)  # 风区变长，力度至少要比它多 0.5 格
         elif kind == KIND_MOVABLE and field in (4, 5):
+            # 偏移不许超过关卡本身：横向看关卡宽度，纵向看关卡高度
+            limit = float(self.level.width if field == 4 else self.level.height)
             offset = list(entry.get("offset", [0, -3]))
-            offset[field - 4] = round(clamp_float(value, -8.0, 8.0, 0.0), 2)
+            offset[field - 4] = round(clamp_float(value, -limit, limit, 0.0), 2)
             entry["offset"] = offset
         elif kind == KIND_NOZZLE and field == 5:
             # 力度是沿着朝向走出去多远：下限是风区长度 + 0.5 格
