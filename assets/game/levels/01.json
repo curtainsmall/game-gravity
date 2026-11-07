@@ -274,20 +274,20 @@
   ],
   "planks": [
     {
-      "pos": [72.0, 6.0],
-      "size": [2.0, 2.0]
+      "pos": [72.0, 6.5],
+      "size": [2.0, 1.0]
     },
     {
-      "pos": [140.0, 12.0],
-      "size": [2.0, 2.0]
+      "pos": [140.0, 12.5],
+      "size": [2.0, 1.0]
     },
     {
-      "pos": [146.0, 6.0],
-      "size": [2.0, 2.0]
+      "pos": [146.0, 6.5],
+      "size": [2.0, 1.0]
     },
     {
-      "pos": [100.0, 6.0],
-      "size": [2.0, 2.0]
+      "pos": [100.0, 6.5],
+      "size": [2.0, 1.0]
     }
   ],
   "movable_blocks": [
@@ -350,7 +350,7 @@
       "offset": [0, -8.0],
       "triggers": [
         {
-          "source": "button1",
+          "source": "button_1",
           "behavior": "move",
           "mode": "once"
         }
@@ -506,7 +506,7 @@
       "triggers": []
     },
     {
-      "pos": [142.03, 4.5],
+      "pos": [142.03, 4.48],
       "size": [26.0, 12.5],
       "image": "textures/level1/13x5.png",
       "smooth": false

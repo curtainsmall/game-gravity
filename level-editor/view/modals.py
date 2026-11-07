@@ -312,7 +312,7 @@ def _draw_general_settings(
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
 
-    # 翻转带：脚边落在带子里才翻得动。向上翻贴着关卡顶、向下翻贴着关卡底，
+    # 翻转带：玩家整块和带子重叠才翻得动。向上翻贴着关卡顶、向下翻贴着关卡底，
     # 数字是带子的高度，0 表示这一侧翻不了
     for field, label, key in (
         (3, "向上翻带（贴顶）", "flip_up"),
