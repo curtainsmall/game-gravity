@@ -18,6 +18,8 @@ takeoff / landing 播一遍停在最后一帧，时长由 TAKEOFF_SECONDS / LAND
 
 重力翻转时（目标就是玩家、且玩家倒挂）：先取相反方向的链接（朝右取左、朝左取右），
 取不到再借本侧镜像，然后整体绕 z 轴旋转 180°；跟随玩家的通用预设也一起转。
+跟随的相对位置也跟着转：整个动画对象绕玩家 AABB 的中心转 180°，所以美术往 AABB
+某一侧偏出来的那点余量（比如脚底贴着下边）翻过来以后会出现在新的地面那一侧。
 这样朝右走、倒挂时显示的是另一侧的身体动画，并且仍然朝着运动方向。
 
 链接里写的是动画库的键（见 animation.library）；老数据把上升写在 jump 里，
@@ -176,12 +178,27 @@ class AnimationSystem:
             self.facing = -1
 
     def _follow(self) -> None:
+        flipped = (
+            self.player is not None
+            and self.player.body is not None
+            and self.player.body.gravity_direction_sign < 0
+        )
         for game_object, target, offset_x, offset_y in self.followers:
             body = game_object.body
             if body is None or target.body is None:
                 continue
-            body.left = target.body.left + offset_x
-            body.bottom = target.body.bottom + offset_y
+            if flipped and target is self.player:
+                # 倒挂时整个动画绕玩家 AABB 的中心转 180°：跟随的相对位置也一起转。
+                # 否则美术专门往 AABB 一侧偏的那条边（比如脚底贴着下边）转完就跑到另一边了。
+                body.left = (
+                    target.body.left + target.body.width - offset_x - body.width
+                )
+                body.bottom = (
+                    target.body.bottom + target.body.height - offset_y - body.height
+                )
+            else:
+                body.left = target.body.left + offset_x
+                body.bottom = target.body.bottom + offset_y
 
     def _update_sprite(
         self, game_object, delta_seconds: float, player_action: str
