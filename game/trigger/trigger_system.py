@@ -37,7 +37,7 @@ class TriggerSystem:
             events: set[str] = set()
             for card in game_object.triggers.behaviors:
                 source = self.sources.get(card.source)
-                pressed = source is not None and source.interaction_state != 0
+                pressed = source is not None and self._pressed(source)
                 was_pressed = self.pressed.get(card, False)
                 self.pressed[card] = pressed
                 if card.mode == MODE_ONCE:
@@ -53,3 +53,10 @@ class TriggerSystem:
                 if on:
                     events.add(card.behavior)
             game_object.events = events
+
+    @staticmethod
+    def _pressed(source) -> bool:
+        """来源算不算按下：道具看自己的触发状态，其他（按钮）看重叠。"""
+        if source.item is not None:
+            return bool(source.item.triggered)
+        return source.interaction_state != 0

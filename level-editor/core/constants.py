@@ -137,6 +137,12 @@ JUMP_HEIGHT_STEP = 0.5
 # 道具拾取后对跳高的变化量（格）：正数跳更高、负数跳更低、0 不变
 ITEM_JUMP_OFFSET_MIN, ITEM_JUMP_OFFSET_MAX = -99.0, 99.0
 
+# 道具的触发模式：(显示文字, json 里的值)。once = 触发一次就禁用，persist = 可重复触发
+ITEM_MODES = (("一次", "once"), ("可重复", "persist"))
+ITEM_MODE_VALUES = tuple(value for _, value in ITEM_MODES)
+ITEM_MODE_LABELS = {value: label for label, value in ITEM_MODES}
+ITEM_MODE_DEFAULT = "once"
+
 # 水平移动速度（方块/秒）
 MOVE_SPEED_DEFAULT = 8.0
 MOVE_SPEED_MIN, MOVE_SPEED_MAX = 0.5, 40.0

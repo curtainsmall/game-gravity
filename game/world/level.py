@@ -14,15 +14,17 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              老的 sources 只写按钮名，老的 once 写在卡片或方块上，真 = once，假 = hold）
     buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供触发器引用
     portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
-    items                    道具：jump_offset 是拾取后跳高的变化量（格，正数跳更高、
-                             负数跳更低、0 不变；老数据 heavy=true 当成 -1）
+    items                    道具：mode 是 once / persist（一次触发就禁用 / 可重复触发，
+                             缺省 once），jump_offset 是触发期间跳高的变化量（格，正数跳更高、
+                             负数跳更低、0 不变；老数据 heavy=true 当成 -1）；道具自己也是
+                             触发来源，名字可以被触发卡片引用
     nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的；
                              编辑器保证它至少比风区沿朝向的长度多 0.5 格，目标点落在风区外），
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
     textures                 贴图：浮点矩形 + image（相对 game.json 的路径）；
                              face 是朝向（up/right/down/left，顺时针转，缺省 up），
                              flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动；
-                             hide 表示初始隐藏，triggers 的 hide / show 由按钮切换显示
+                             hide 表示初始隐藏，triggers 的 hide / show 由按钮或道具切换显示
                              （卡片同样带 mode：一次 / 按住 / 切换）
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖。
                              animations 是玩家动画剪辑：名字固定（idle/run/jump/fall/flip），
@@ -52,7 +54,7 @@ from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
 from core.game_object import GameObject, GameObjectKind
 from nozzle.nozzle import Nozzle
-from item.item import Item
+from item.item import MODE_ONCE, Item
 from physics.body import Body
 from portal.portal import Portal
 from renderer.palette import color_for_kind
@@ -490,7 +492,10 @@ def build_items(level_definition: LevelDefinition) -> list[GameObject]:
     for entry in level_definition.get("items", []):
         game_object = _make(entry, GameObjectKind.ITEM, is_static=True, is_sensor=True)
         game_object.render.placeholder_shape = PlaceholderShape.PENTAGON
-        game_object.item = Item(jump_offset=_item_jump_offset(entry))
+        game_object.item = Item(
+            mode=str(entry.get("mode") or MODE_ONCE),
+            jump_offset=_item_jump_offset(entry),
+        )
         items.append(game_object)
     return items
 

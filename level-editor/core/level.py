@@ -15,6 +15,8 @@ from core.constants import (
     BUTTON_SIZE,
     COLS,
     FLIP_AREA_OFFSETS_DEFAULT,
+    ITEM_MODE_DEFAULT,
+    ITEM_MODE_VALUES,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MIN,
     LEVEL_HEIGHT_MAX,
@@ -119,6 +121,12 @@ def _migrate_item_jump_offset(entry: dict) -> None:
     heavy = bool(entry.get("heavy", False))
     if "jump_offset" not in entry:
         entry["jump_offset"] = -1.0 if heavy else 0.0
+
+
+def _migrate_item_mode(entry: dict) -> None:
+    """道具的触发模式：这是编辑器认识的字段，缺了补默认值，写坏了也按默认值。"""
+    if entry.get("mode") not in ITEM_MODE_VALUES:
+        entry["mode"] = ITEM_MODE_DEFAULT
 
 
 def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
@@ -231,6 +239,7 @@ class Level:
         for entry in level.items:
             if isinstance(entry, dict):
                 _migrate_item_jump_offset(entry)
+                _migrate_item_mode(entry)
         # 喷口的风区现在是 size；老数据写的 range 补出 size 之外原样留着
         level.nozzles = []
         for entry in copy.deepcopy(list(definition.get("nozzles", []))):

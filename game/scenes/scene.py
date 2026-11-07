@@ -11,7 +11,7 @@ from controller.input_source import InputSource
 from core.game_object import GameObjectKind
 from cutscene.cutscene import Cutscene, cutscene_of
 from game_settings import game_root, load_game_settings, player_of
-from item.pickup_system import PickupSystem
+from item.item_system import ItemSystem
 from physics.physics_system import PhysicsSystem
 from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
@@ -57,7 +57,7 @@ class Scene:
 
         self.controller_system: ControllerSystem = ControllerSystem()
         self.physics_system: PhysicsSystem = PhysicsSystem()
-        self.pickup_system: PickupSystem = PickupSystem()
+        self.item_system: ItemSystem = ItemSystem()
         self.portal_system: PortalSystem = PortalSystem()
         self.trigger_system: TriggerSystem = TriggerSystem()
         self.follow_system: FollowSystem = FollowSystem()
@@ -146,7 +146,7 @@ class Scene:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
     def update(self, delta_seconds: float) -> None:
-        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 玩家动画 → 拾取 → 传送门。"""
+        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 玩家动画 → 道具 → 传送门。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
@@ -156,7 +156,7 @@ class Scene:
         self.physics_system.update(self.objects, self.world, delta_seconds)
         if self.player_animator is not None:
             self.player_animator.update(delta_seconds)
-        self.pickup_system.update(self.objects)
+        self.item_system.update(self.objects)
         self.portal_system.update(self.objects, self.player)
 
     @property

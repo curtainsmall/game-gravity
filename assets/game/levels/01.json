@@ -381,7 +381,7 @@
     {
       "name": "button_1",
       "pos": [108.0, 0.5],
-      "size": [1.0, 0.3],
+      "size": [1.0, 0.5],
       "face": "left"
     }
   ],
@@ -391,13 +391,15 @@
       "name": "prop1",
       "pos": [53.0, 13.0],
       "size": [2.0, 2.0],
-      "jump_offset": -1.0
+      "jump_offset": -1.0,
+      "mode": "once"
     },
     {
       "name": "prop2",
       "pos": [139.0, 0.0],
       "size": [3.0, 3.0],
-      "jump_offset": -1.0
+      "jump_offset": -1.0,
+      "mode": "once"
     }
   ],
   "nozzles": [
@@ -550,7 +552,14 @@
       "pos": [138.5, 0.0],
       "size": [4.0, 4.0],
       "image": "textures/level1/2x2.png",
-      "smooth": false
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "prop2",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
     },
     {
       "pos": [145.5, 6.0],
@@ -733,7 +742,45 @@
       "pos": [52.5, 12.5],
       "size": [3.0, 3.0],
       "image": "textures/level1/2-2(道具).png",
-      "smooth": false
+      "smooth": false,
+      "hide": false,
+      "flip": false,
+      "triggers": [
+        {
+          "source": "prop1",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "pos": [107.0, 0.0],
+      "size": [1.0, 1.0],
+      "image": "textures/level1/按钮.png",
+      "smooth": false,
+      "face": "left",
+      "triggers": [
+        {
+          "source": "button_1",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "pos": [107.5, 0.0],
+      "size": [0.5, 1.0],
+      "image": "textures/level1/按钮.png",
+      "smooth": false,
+      "face": "left",
+      "triggers": [
+        {
+          "source": "button_1",
+          "behavior": "show",
+          "mode": "hold"
+        }
+      ],
+      "hide": true
     }
   ],
   "player": {
@@ -750,5 +797,10 @@
     "loop": true,
     "fade_in": 0.5,
     "fade_out": 1.0
+  },
+  "cutscene": {
+    "pictures": [],
+    "cascade": false,
+    "sound": false
   }
 }

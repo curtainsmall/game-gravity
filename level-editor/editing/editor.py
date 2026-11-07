@@ -19,6 +19,9 @@ from core.constants import (
     HEADER,
     ITEM_JUMP_OFFSET_MAX,
     ITEM_JUMP_OFFSET_MIN,
+    ITEM_MODE_DEFAULT,
+    ITEM_MODE_LABELS,
+    ITEM_MODES,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
@@ -437,7 +440,13 @@ class Editor:
             )
         elif self.tool == TOOL_ITEM:
             level.items.append(
-                {"name": "", "pos": [x, y], "size": list(size), "jump_offset": 0.0}
+                {
+                    "name": "",
+                    "pos": [x, y],
+                    "size": list(size),
+                    "jump_offset": 0.0,
+                    "mode": ITEM_MODE_DEFAULT,
+                }
             )
         elif self.tool == TOOL_NOZZLE:
             # 喷口的 size 就是风区（宽 × 长），face 是伸出的方向，power 是目标离底面多远
@@ -2137,6 +2146,8 @@ class Editor:
             ]
         elif kind == KIND_ITEM:
             rows.append(("跳高变化", number_text(entry.get("jump_offset", 0.0))))
+            mode = str(entry.get("mode") or ITEM_MODE_DEFAULT)
+            rows.append(("模式", ITEM_MODE_LABELS.get(mode, mode)))
         elif kind == KIND_NOZZLE:
             rows += [
                 ("朝向", FACE_LABELS.get(entry.get("face", "up"), FACE_LABELS[FACE_ORDER[0]])),
@@ -2198,10 +2209,14 @@ class Editor:
         return cards
 
     def trigger_sources(self) -> list:
-        """可以当来源的按钮名字。"""
-        return [
+        """可以当触发来源的名字：按钮和道具（同名的只列一次）。"""
+        names = [
             button.get("name", "") for button in self.level.buttons if button.get("name")
         ]
+        names += [
+            item.get("name", "") for item in self.level.items if item.get("name")
+        ]
+        return list(dict.fromkeys(names))
 
     def add_trigger_card(self) -> None:
         """面板上的「＋ 添加触发器」：加一张空来源的卡片，行为取这个种类的第一项。"""
@@ -2343,6 +2358,12 @@ class Editor:
                     else None
                 )
                 entry["target"] = chosen or ""
+        elif kind == KIND_ITEM:
+            if field == 5:                 # 模式：一次 / 可重复 循环
+                current = str(entry.get("mode") or ITEM_MODE_DEFAULT)
+                values = [value for _, value in ITEM_MODES]
+                index = values.index(current) if current in values else 0
+                entry["mode"] = values[(index + delta) % len(values)]
         elif kind == KIND_NOZZLE:
             if field == 4:                 # 朝向：按 up/right/down/left 循环
                 current_face = entry.get("face", FACE_ORDER[0])
@@ -2399,6 +2420,8 @@ class Editor:
             return list(KIND_BEHAVIORS[kind])
         if kind in (KIND_BUTTON, KIND_PORTAL, KIND_NOZZLE) and field == 4:
             return [(FACE_LABELS[face], face) for face in FACE_ORDER]
+        if kind == KIND_ITEM and field == 5:
+            return list(ITEM_MODES)
         if kind == KIND_PORTAL and field == 5:
             names = [
                 portal.get("name", "")
@@ -2434,6 +2457,8 @@ class Editor:
             return str(card.get(parts[1]) or "")
         if kind == KIND_PORTAL and field == 5:
             return entry.get("target") or ""
+        if kind == KIND_ITEM and field == 5:
+            return str(entry.get("mode") or ITEM_MODE_DEFAULT)
         if kind == KIND_TEXTURE and field == 7:
             return entry.get("follow") or ""
         return entry.get("face", FACE_ORDER[0])
@@ -2471,6 +2496,8 @@ class Editor:
             entry = self.dialog["entry"]
             if kind == KIND_PORTAL and field == 5:
                 entry["target"] = value or ""
+            elif kind == KIND_ITEM and field == 5:
+                entry["mode"] = value or ITEM_MODE_DEFAULT
             elif kind == KIND_TEXTURE and field == 5:
                 entry["face"] = value or FACE_ORDER[0]
             elif kind == KIND_TEXTURE and field == 7:
