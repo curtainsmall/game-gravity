@@ -391,13 +391,13 @@
       "name": "prop1",
       "pos": [53.0, 13.0],
       "size": [2.0, 2.0],
-      "heavy": true
+      "jump_offset": -1.0
     },
     {
-      "name": "",
+      "name": "prop2",
       "pos": [139.0, 0.0],
       "size": [3.0, 3.0],
-      "heavy": true
+      "jump_offset": -1.0
     }
   ],
   "nozzles": [
@@ -727,6 +727,12 @@
       "pos": [223.5, -0.5],
       "size": [3.0, 16.5],
       "image": "textures/level1/1x6 1.png",
+      "smooth": false
+    },
+    {
+      "pos": [52.5, 12.5],
+      "size": [3.0, 3.0],
+      "image": "textures/level1/2-2(道具).png",
       "smooth": false
     }
   ],

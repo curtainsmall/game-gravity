@@ -52,9 +52,16 @@ class InputSource:
         return launch_speed(cls.jump_height_blocks, GRAVITY_ACCELERATION, delta_seconds)
 
     @classmethod
-    def decrease_jump_height(cls) -> None:
-        """变重：跳高降一格，到 0 不再降。"""
-        cls.jump_height_blocks = max(cls.JUMP_HEIGHT_MIN, cls.jump_height_blocks - 1.0)
+    def adjust_jump_height(cls, offset: float) -> None:
+        """道具效果：跳高加一个偏移量（正数跳更高、负数跳更低）。
+
+        结果夹在 [0, 关卡高度 - 1]；还没进关卡（不知道高度）时不夹上限。
+        """
+        value = cls.jump_height_blocks + float(offset)
+        value = max(cls.JUMP_HEIGHT_MIN, value)
+        if cls.level_height_blocks > 0.0:
+            value = min(cls.level_height_blocks - 1.0, value)
+        cls.jump_height_blocks = value
 
     @classmethod
     def set_jump_height(cls, height: float) -> None:

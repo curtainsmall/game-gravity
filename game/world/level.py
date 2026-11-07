@@ -14,7 +14,8 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              老的 sources 只写按钮名，老的 once 写在卡片或方块上，真 = once，假 = hold）
     buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供触发器引用
     portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
-    items                    道具：heavy 表示变重
+    items                    道具：jump_offset 是拾取后跳高的变化量（格，正数跳更高、
+                             负数跳更低、0 不变；老数据 heavy=true 当成 -1）
     nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的；
                              编辑器保证它至少比风区沿朝向的长度多 0.5 格，目标点落在风区外），
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
@@ -489,9 +490,19 @@ def build_items(level_definition: LevelDefinition) -> list[GameObject]:
     for entry in level_definition.get("items", []):
         game_object = _make(entry, GameObjectKind.ITEM, is_static=True, is_sensor=True)
         game_object.render.placeholder_shape = PlaceholderShape.PENTAGON
-        game_object.item = Item(heavy=bool(entry.get("heavy", False)))
+        game_object.item = Item(jump_offset=_item_jump_offset(entry))
         items.append(game_object)
     return items
+
+
+def _item_jump_offset(entry: dict) -> float:
+    """道具的跳高变化量：新数据写 jump_offset；老数据 heavy=true 当成 -1 格。"""
+    if "jump_offset" in entry:
+        try:
+            return float(entry.get("jump_offset"))
+        except (TypeError, ValueError):
+            return 0.0
+    return -1.0 if bool(entry.get("heavy", False)) else 0.0
 
 
 def build_buttons(level_definition: LevelDefinition) -> list[GameObject]:

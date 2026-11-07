@@ -90,6 +90,16 @@ def _migrate_triggers(entry: dict) -> None:
         card.pop("once", None)
 
 
+def _migrate_item_jump_offset(entry: dict) -> None:
+    """道具：老数据用 heavy 表示变重（跳高降 1 格），读成 jump_offset = -1。
+
+    写盘只写新格式（jump_offset，0 表示不变）；heavy 键读进来就丢掉。
+    """
+    heavy = bool(entry.pop("heavy", False))
+    if "jump_offset" not in entry:
+        entry["jump_offset"] = -1.0 if heavy else 0.0
+
+
 def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
     """翻转区两个起点：缺字段、写坏了都退回默认值，夹在 0 ~ 关卡高度之间。"""
     value = definition.get("flip_area_offsets", FLIP_AREA_OFFSETS_DEFAULT)
@@ -187,6 +197,9 @@ class Level:
                 if isinstance(entry, dict):
                     entry.setdefault("size", list(default))
         level.items = copy.deepcopy(list(definition.get("items", [])))
+        for entry in level.items:
+            if isinstance(entry, dict):
+                _migrate_item_jump_offset(entry)
         # 喷口的风区现在是 size；老数据写的 range 读进来换成 [1, range]
         level.nozzles = []
         for entry in copy.deepcopy(list(definition.get("nozzles", []))):

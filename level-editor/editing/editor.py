@@ -17,6 +17,8 @@ from core.constants import (
     GAME_SETTINGS_TABS,
     HANDLE_PIXELS,
     HEADER,
+    ITEM_JUMP_OFFSET_MAX,
+    ITEM_JUMP_OFFSET_MIN,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
@@ -430,7 +432,9 @@ class Editor:
                 }
             )
         elif self.tool == TOOL_ITEM:
-            level.items.append({"name": "", "pos": [x, y], "size": list(size), "heavy": False})
+            level.items.append(
+                {"name": "", "pos": [x, y], "size": list(size), "jump_offset": 0.0}
+            )
         elif self.tool == TOOL_NOZZLE:
             # 喷口的 size 就是风区（宽 × 长），face 是伸出的方向，power 是目标离底面多远
             nozzle = {
@@ -2047,7 +2051,7 @@ class Editor:
                 ("目标", entry.get("target") or "无"),
             ]
         elif kind == KIND_ITEM:
-            rows.append(("变重", "是" if entry.get("heavy") else "否"))
+            rows.append(("跳高变化", number_text(entry.get("jump_offset", 0.0))))
         elif kind == KIND_NOZZLE:
             rows += [
                 ("朝向", FACE_LABELS.get(entry.get("face", "up"), FACE_LABELS[FACE_ORDER[0]])),
@@ -2066,14 +2070,12 @@ class Editor:
     def dialog_checkbox(self, index: int) -> bool | None:
         """这一行是不是复选框：是的话返回当前勾没勾，不是返回 None。
 
-        「是 / 否」的三项：道具的「变重」、贴图的「水平翻转」和「初始隐藏」。
+        「是 / 否」的两项：贴图的「水平翻转」和「初始隐藏」。
         """
         if self.dialog is None:
             return None
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
-        if kind == KIND_ITEM and index == 4:
-            return bool(entry.get("heavy", False))
         if kind == KIND_TEXTURE and index == 6:
             return bool(entry.get("flip", False))
         if kind == KIND_TEXTURE and index == 8:
@@ -2263,8 +2265,6 @@ class Editor:
                     if current_face in FACE_ORDER
                     else FACE_ORDER[0]
                 )
-        elif kind == KIND_ITEM:
-            entry["heavy"] = not entry.get("heavy", False)
         elif kind == KIND_TEXTURE:
             if field == 5:                 # 朝向：顺时针转一格（向上也照样写 up）
                 face = str(entry.get("face", FACE_ORDER[0]))
@@ -2412,6 +2412,8 @@ class Editor:
             return entry.get("offset", [0, -3])[field - 4]
         if kind == KIND_NOZZLE and field == 5:
             return entry.get("power", NOZZLE_DEFAULT_POWER)
+        if kind == KIND_ITEM and field == 4:
+            return entry.get("jump_offset", 0.0)
         return None
 
     def set_dialog_number(self, field: int, value: float) -> None:
@@ -2437,6 +2439,11 @@ class Editor:
             # 力度是沿着朝向走出去多远：下限是风区长度 + 0.5 格
             entry["power"] = round(value, 2)
             clamp_nozzle_power(entry)
+        elif kind == KIND_ITEM and field == 4:
+            # 跳高变化量：正数跳更高、负数跳更低，拾取时游戏还会按关卡高度夹一次
+            entry["jump_offset"] = round(
+                clamp_float(value, ITEM_JUMP_OFFSET_MIN, ITEM_JUMP_OFFSET_MAX, 0.0), 2
+            )
 
     def type_dialog_number(self, char: str) -> bool:
         """数字字段键盘输入：第一次敲键起一个新值，之后追加，可以带一个小数点。
