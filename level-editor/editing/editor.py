@@ -12,6 +12,7 @@ from core.constants import (
     COLS,
     FACE_LABELS,
     FACE_ORDER,
+    GAME_CARD_SCROLL_STEP,
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
     GAME_SETTINGS_TABS,
@@ -152,7 +153,7 @@ class Editor:
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
         self.game_cards: list = []                 # 浮层里的制作名单卡片：{job, names: [名字…]}
-        self.game_card_scroll = 0                  # 卡片列表滚到第几张
+        self.game_card_scroll = 0                  # 制作名单滚轮滚了多少像素
         self.game_animations: dict = animation.new_state()  # 玩家动画：状态名 → {frames, fps, loop}
         self.animation_state = 0                   # 动画页选中的状态行
         self.animation_frame = 0                   # 该状态里选中的帧
@@ -911,6 +912,7 @@ class Editor:
         self.preview.stop()
         self.game_tab = index
         self.game_field = 0
+        self.game_card_scroll = 0
         self.animation_drag = None
         if index == GAME_CUTSCENE_TAB:
             self.cutscene_field = 0
@@ -1262,15 +1264,16 @@ class Editor:
                 preview["elapsed"] = 0.0
                 break
 
-    def scroll_game_cards(self, delta: int, visible: int | None = None) -> None:
-        """滚轮翻制作名单卡片；visible 是当前能看到的张数，用来夹住上界。"""
+    def scroll_game_cards(self, delta: float) -> None:
+        """滚轮：制作名单按像素上下滚（上界在几何里按内容高度夹住）；过场页走它自己的滚动。"""
         if self.game_cutscene_tab():
             self.scroll_cutscene(delta)
             return
         if self.game_animation_tab():
             return                      # 玩家动画页是固定的五行，不用滚
-        last = max(0, len(self.game_cards) - (visible or 1))
-        self.game_card_scroll = max(0, min(self.game_card_scroll + delta, last))
+        self.game_card_scroll = max(
+            0.0, self.game_card_scroll + float(delta) * GAME_CARD_SCROLL_STEP
+        )
 
     def add_credit_card(self) -> None:
         """加一张职位卡片：职位和名字都空着，光标落在职位上。"""

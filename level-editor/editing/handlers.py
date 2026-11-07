@@ -423,6 +423,8 @@ def handle_game_settings_click(
         if geometry["remove"].collidepoint(position):
             editor.remove_credit_card()
             return
+        if not geometry["cards_area"].collidepoint(position):
+            return                  # 卡片区外面（藏在滚动区外的那部分）点不中
         for layout in geometry["layouts"]:
             index = layout["index"]
             for line, rect in enumerate(layout["minus"]):

@@ -163,8 +163,9 @@ def run() -> None:
                     handle_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
                 # 游戏配置：Tab 切常规/玩家动画/制作名单/声音/过场，↑↓ 选格子，←→ 调值，敲字直接改，
-                # 制作名单和过场的卡片都用滚轮翻；玩家动画页 ↑↓ 选状态、←→ 调 fps、Delete 删帧，
-                # 缩略图按住可以拖动换顺序；「预览」弹出的小窗自己吃掉事件，Esc / 回车 / 点面板外关掉
+                # 制作名单用滚轮按像素上下滚、过场的卡片按张翻；玩家动画页 ↑↓ 选状态、←→ 调 fps、
+                # Delete 删帧，缩略图按住可以拖动换顺序；「预览」弹出的小窗自己吃掉事件，
+                # Esc / 回车 / 点面板外关掉
                 if editor.animation_preview is not None:
                     if event.type == pygame.KEYDOWN and event.key in (
                         pygame.K_ESCAPE,

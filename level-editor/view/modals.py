@@ -466,13 +466,12 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
 
     常规页是标题与玩家参数；玩家动画页是玩家那五个状态的帧动画（见 view.animation，
     每行有「预览」弹出播放小窗）；
-    制作名单页每个职位一张卡片，装不下就用滚轮翻（滚到第几张记在编辑器的 game_card_scroll
-    上）；声音页把标题与制作名单两块上下排开，每块是路径、循环和淡入淡出；过场页和关卡设置
-    里的是同一页（见 view.cutscene）。只有当前页的那些矩形有值。
+    制作名单页每个职位一张卡片，装不下就用滚轮按像素上下滚（滚了多少记在编辑器的
+    game_card_scroll 上）；声音页把标题与制作名单两块上下排开，每块是路径、循环和淡入淡出；
+    过场页和关卡设置里的是同一页（见 view.cutscene）。只有当前页的那些矩形有值。
     """
     tab = editor.game_tab
     cards = editor.game_cards
-    scroll = editor.game_card_scroll
     if tab == 0:
         height = GAME_GENERAL_HEIGHT
     elif tab == GAME_ANIMATION_TAB:
@@ -548,14 +547,16 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         )
         geometry["cards_area"] = cards_area
 
-        # 从滚动位置开始往下摆，装不下的卡片先不画（内容还在，应用时照样写回）
+        # 内容按像素滚动：卡片从 cards_area.top - 滚动量 开始摆，超出内容区的靠绘制时裁剪
+        card_heights = [_credit_card_height(card) for card in cards]
+        content_height = sum(card_heights) + CREDIT_CARD_GAP * max(0, len(card_heights) - 1)
+        scroll = max(
+            0.0, min(float(editor.game_card_scroll), max(0.0, content_height - cards_area.height))
+        )
+        editor.game_card_scroll = scroll
         layouts = []
-        scroll = max(0, min(scroll, max(0, len(cards) - 1)))
-        y = cards_area.top
-        for index in range(scroll, len(cards)):
-            card_height = _credit_card_height(cards[index])
-            if y + card_height > cards_area.bottom:
-                break
+        y = cards_area.top - round(scroll)
+        for index, card_height in enumerate(card_heights):
             card_rect = pygame.Rect(cards_area.left, y, cards_area.width, card_height)
             job_rect = pygame.Rect(
                 card_rect.left + CREDIT_CARD_PAD,
@@ -600,7 +601,8 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
             )
             y += card_height + CREDIT_CARD_GAP
         geometry["layouts"] = layouts
-        geometry["visible"] = len(layouts)
+        geometry["content_height"] = content_height
+        geometry["scroll"] = scroll
         geometry["add"] = pygame.Rect(panel.left + MARGIN, button_y, 110, BUTTON_HEIGHT)
         geometry["remove"] = pygame.Rect(
             geometry["add"].right + 8, button_y, 110, BUTTON_HEIGHT
@@ -734,15 +736,31 @@ def _draw_game_general(
     surface.blit(note, (geometry["panel"].left + MARGIN, geometry["note_top"]))
 
 
+def _draw_scrollbar(
+    surface: pygame.Surface, area: pygame.Rect, content_height: float, scroll: float
+) -> None:
+    """内容比可视区高时，在右边画一条滚动条（轨道 + 滑块）。"""
+    if content_height <= area.height:
+        return
+    track = pygame.Rect(area.right - 4, area.top, 4, area.height)
+    pygame.draw.rect(surface, (60, 60, 66), track)
+    thumb_height = max(24, round(area.height * area.height / content_height))
+    max_scroll = content_height - area.height
+    offset = 0
+    if max_scroll > 0:
+        offset = round((area.height - thumb_height) * (scroll / max_scroll))
+    pygame.draw.rect(
+        surface, (150, 150, 160), pygame.Rect(track.left, track.top + offset, track.width, thumb_height)
+    )
+
+
 def _draw_game_credits(
     surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
 ) -> None:
-    """制作名单页：每个职位一张卡片，左边写职位、右边一行一个名字。"""
+    """制作名单页：每个职位一张卡片，左边写职位、右边一行一个名字；多了可以用滚轮上下滚。"""
     cards = editor.game_cards
     cards_area = geometry["cards_area"]
     label = "制作名单（每个职位一张卡片；名字为空也行，一个名字都没有就是空数组）"
-    if len(cards) > geometry["visible"]:
-        label += f"   滚轮翻卡片（{geometry['visible']} / {len(cards)} 张可见）"
     surface.blit(
         font.render(label, True, DIM_TEXT),
         (geometry["section"].left, geometry["section"].top + 2),
@@ -774,6 +792,7 @@ def _draw_game_credits(
             draw_icon_button(surface, layout["minus"][line], "−", font)
         draw_icon_button(surface, layout["plus"], "＋", font)
     surface.set_clip(previous_clip)
+    _draw_scrollbar(surface, cards_area, geometry["content_height"], geometry["scroll"])
 
     note = font.render(
         f"{display_path(editor.game_path) if editor.game_path else 'game.json'}："
