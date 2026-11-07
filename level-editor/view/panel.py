@@ -15,6 +15,7 @@ from core.constants import (
     HIGHLIGHT,
     KIND_HAS_NAME,
     KIND_ANIMATION,
+    KIND_DESTINATION,
     KIND_SOUND,
     KIND_TEXTURE,
     MARGIN,
@@ -359,10 +360,16 @@ def _draw_minus(surface: pygame.Surface, font: pygame.font.Font, rect: pygame.Re
 def draw_trigger_section(
     surface: pygame.Surface, font: pygame.font.Font, editor: Editor, geometry: dict
 ) -> None:
-    """触发器区：标题、每张卡片的来源 / 行为 / − / 模式，以及底下的添加按钮。"""
+    """触发器区：标题、每张卡片的来源 / 行为 / − / 模式，以及底下的添加按钮。
+
+    终点的卡片是通关条件：标题和提示换成「触发条件」，全部生效才能进下一关。
+    """
     label = geometry["label"]
-    surface.blit(font.render("触发器", True, DIM_TEXT), (label.left, label.top))
-    hint = font.render("来源 → 行为", True, DIM_TEXT)
+    destination = editor.dialog["kind"] == KIND_DESTINATION
+    title = "触发条件" if destination else "触发器"
+    hint_text = "全部触发后才能通关" if destination else "来源 → 行为"
+    surface.blit(font.render(title, True, DIM_TEXT), (label.left, label.top))
+    hint = font.render(hint_text, True, DIM_TEXT)
     surface.blit(hint, (label.right - hint.get_width(), label.top))
 
     cards = editor.trigger_cards() or []

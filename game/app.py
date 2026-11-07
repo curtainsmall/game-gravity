@@ -102,6 +102,8 @@ class App:
         self.flip_edge = False
         self.toast_text = ""
         self.toast_seconds = 0.0
+        # 终点还锁着的时候只提示一次，离开终点再压上去才重新提示
+        self.destination_was_locked = False
         # 调试显示：启动时不画占位几何体；玩家的占位框是单独一个开关
         self.debug = False
         self.player_debug = False
@@ -346,6 +348,7 @@ class App:
         self.unconsumed_seconds = 0.0
         self.jump_edge = False
         self.flip_edge = False
+        self.destination_was_locked = False
         # 同一首（过场里已经在放的那首）不会重头开始
         self.sound.play(scene.bgm)
         # 上一关的音效先收声，再放这一关声音对象里 general 预设的
@@ -513,7 +516,15 @@ class App:
             self.jump_edge = False
             self.flip_edge = False
         if self.scene.destination_reached:
+            self.destination_was_locked = False
             self.advance_level()
+        else:
+            locked = self.scene.destination_locked
+            if locked and not self.destination_was_locked:
+                self.show_toast(
+                    f"终点还没有解锁：还有 {self.scene.destination_missing} 个触发条件没有满足"
+                )
+            self.destination_was_locked = locked
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.screen == Screen.CUTSCENE and self.cutscene_player is not None:

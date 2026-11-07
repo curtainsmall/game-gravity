@@ -40,7 +40,8 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              帧来自 game.json 的 animation_library
     player                   起点；跳高和速度默认来自 game.json，这里写了就覆盖。
                              玩家自己不再有动画，显示用动画对象（跟随玩家、预设 player）
-    destination              终点
+    destination              终点；triggers 卡片是通关条件，全部生效才进下一关，
+                             没有卡片就直接通关
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
     sound                    这一关的音乐：bgm（相对 game.json 的路径）、loop、fade_in、fade_out
 
@@ -430,10 +431,19 @@ def build_player(level_definition: LevelDefinition) -> list[GameObject]:
 
 
 def build_destination(level_definition: LevelDefinition) -> list[GameObject]:
+    """终点：triggers 卡片是通关条件，全部生效才进下一关；没有卡片就直接通关。"""
     entry = level_definition.get("destination")
     if entry is None:
         return []
-    return [_make(entry, GameObjectKind.DESTINATION, is_static=True, is_sensor=True)]
+    return [
+        _make(
+            entry,
+            GameObjectKind.DESTINATION,
+            is_static=True,
+            is_sensor=True,
+            triggers=_trigger_sheet(entry),
+        )
+    ]
 
 
 def _nozzle_size(entry: dict) -> tuple[float, float]:

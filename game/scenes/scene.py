@@ -178,13 +178,41 @@ class Scene:
         # 玩家状态变了就换 player 预设的声音
         self.sound_objects.update(delta_seconds)
 
+    def _destination(self):
+        """这一关的终点；没有就是 None。"""
+        return next(
+            (
+                game_object
+                for game_object in self.objects
+                if game_object.kind == GameObjectKind.DESTINATION
+            ),
+            None,
+        )
+
     @property
     def destination_reached(self) -> bool:
-        """玩家是否碰到终点：终点是传感器，物理每步会把 interaction_state 写好。"""
-        return any(
-            game_object.kind == GameObjectKind.DESTINATION and game_object.interaction_state
-            for game_object in self.objects
+        """玩家碰到终点，并且终点的触发条件全都生效了。"""
+        destination = self._destination()
+        return bool(
+            destination is not None
+            and destination.interaction_state
+            and self.trigger_system.all_cards_on(destination)
         )
+
+    @property
+    def destination_locked(self) -> bool:
+        """玩家正压在终点上，但还有触发条件没生效。"""
+        destination = self._destination()
+        return bool(
+            destination is not None
+            and destination.interaction_state
+            and not self.trigger_system.all_cards_on(destination)
+        )
+
+    @property
+    def destination_missing(self) -> int:
+        """终点还差几张触发卡片没生效。"""
+        return self.trigger_system.inactive_cards(self._destination())
 
     def draw(self, surface: pygame.Surface) -> None:
         """每帧一次：绘制。镜头跟随玩家水平居中。"""

@@ -6,7 +6,8 @@ game_object.events。一条卡片怎么算生效看模式：
     hold    来源按着才算生效，松开当帧就撤销
     switch  来源每按下一次翻转 active：生效 / 撤销来回切
 它不知道行为名是什么意思，也不碰任何组件——读 events 的系统各自认领。来源按名字解析一次就
-够了（场景建好时 attach）。
+够了（场景建好时 attach）。每张卡片这一帧生不生效另外记一份（card_on），终点拿它判断
+「所有触发条件都满足没有」。
 """
 
 from core.game_object import GameObject
@@ -19,6 +20,7 @@ class TriggerSystem:
         self.sheets: list[GameObject] = []         # 挂了触发器的对象
         self.pressed: dict = {}                    # 卡片：上一帧来源按没按下（找按下那一刻）
         self.active: dict = {}                     # 卡片：once / switch 当前算不算生效
+        self.card_on: dict = {}                    # 卡片：这一帧算不算生效（终点条件读它）
 
     def attach(self, objects: list) -> None:
         """场景建好后调一次：解析来源名字，记住哪些对象有触发器。"""
@@ -30,6 +32,7 @@ class TriggerSystem:
         ]
         self.pressed = {}
         self.active = {}
+        self.card_on = {}
 
     def update(self) -> None:
         """重算每个对象的生效事件集合；空集合表示一张卡片都没触发。"""
@@ -50,9 +53,28 @@ class TriggerSystem:
                     on = self.active.get(card, False)
                 else:
                     on = pressed
+                self.card_on[card] = on
                 if on:
                     events.add(card.behavior)
             game_object.events = events
+
+    def all_cards_on(self, game_object) -> bool:
+        """所有卡片是否都算生效；没挂卡片的对象算通过（终点没有条件时永远能进）。"""
+        if game_object is None or game_object.triggers is None:
+            return True
+        return all(
+            self.card_on.get(card, False) for card in game_object.triggers.behaviors
+        )
+
+    def inactive_cards(self, game_object) -> int:
+        """还有几张卡片没生效；终点拿它给提示。"""
+        if game_object is None or game_object.triggers is None:
+            return 0
+        return sum(
+            1
+            for card in game_object.triggers.behaviors
+            if not self.card_on.get(card, False)
+        )
 
     @staticmethod
     def _pressed(source) -> bool:

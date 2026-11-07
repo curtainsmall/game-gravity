@@ -937,7 +937,19 @@
   },
   "destination": {
     "pos": [235.0, 6.0],
-    "size": [1.0, 1.0]
+    "size": [1.0, 1.0],
+    "triggers": [
+      {
+        "source": "prop1",
+        "behavior": "unlock",
+        "mode": "once"
+      },
+      {
+        "source": "prop2",
+        "behavior": "unlock",
+        "mode": "once"
+      }
+    ]
   },
   "background": "textures/level1/background.png",
   "sound": {

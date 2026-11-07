@@ -65,6 +65,7 @@ from core.constants import (
     TOOL_SOUND,
     TOOL_TEXTURE,
     TOOL_TRIGGER_SOURCE,
+    DESTINATION_TRIGGER_DEFAULT_MODE,
     TRIGGER_DEFAULT_MODE,
     TRIGGER_MODES,
     TRIGGER_SOURCE_MODE_DEFAULT,
@@ -3060,7 +3061,7 @@ class Editor:
 
     # ---- 触发行为卡片 -----------------------------------------------
     def trigger_cards(self) -> list | None:
-        """当前对象的触发行为卡片；这个种类不接触发器时返回 None。"""
+        """当前对象的触发卡片；不接触发器的种类返回 None。终点也用这套卡片。"""
         if self.dialog is None or self.dialog["kind"] not in KIND_BEHAVIORS:
             return None
         cards = self.dialog["entry"].get("triggers")
@@ -3103,17 +3104,27 @@ class Editor:
         if cards is None:
             return
         self.push_undo()
-        behaviors = KIND_BEHAVIORS[self.dialog["kind"]]
+        kind = self.dialog["kind"]
+        behaviors = KIND_BEHAVIORS[kind]
+        default_mode = (
+            DESTINATION_TRIGGER_DEFAULT_MODE
+            if kind == KIND_DESTINATION
+            else TRIGGER_DEFAULT_MODE
+        )
         cards = self.trigger_storage()
         cards.append(
-            {"source": "", "behavior": behaviors[0][1], "mode": TRIGGER_DEFAULT_MODE}
+            {"source": "", "behavior": behaviors[0][1], "mode": default_mode}
         )
         self.dialog_field = self.trigger_field(len(cards) - 1, "source")
         self.dropdown_field = None
         self.number_buffer = None
         self.detail_scroll = float("inf")   # 下一帧按内容高度夹到底，新卡片就在眼前
         self.dirty = True
-        self.status = "已添加一条触发行为，请选择来源。"
+        self.status = (
+            "已添加一条触发条件，请选择来源。"
+            if kind == KIND_DESTINATION
+            else "已添加一条触发行为，请选择来源。"
+        )
 
     def remove_trigger_card(self, index: int) -> None:
         """删掉第 index 张卡片；光标落到留下那张卡片的来源上。"""
@@ -3131,7 +3142,11 @@ class Editor:
         self.dropdown_field = None
         self.number_buffer = None
         self.dirty = True
-        self.status = "已删除一条触发行为。"
+        self.status = (
+            "已删除一条触发条件。"
+            if self.dialog["kind"] == KIND_DESTINATION
+            else "已删除一条触发行为。"
+        )
 
     def adjust_trigger_field(self, field: int, delta: int) -> None:
         """卡片上的 ←→：来源 / 行为 / 模式都在各自的选项里循环。"""

@@ -227,18 +227,21 @@ KIND_ORDER = (
 # ---- 触发行为 ----
 # 每种对象能接的触发行为：(显示文字, json 里的行为名)。TriggerSystem 只派发事件名，这些名字
 # 由游戏里各自读 events 的系统认领（move 由 ControllerSystem，hide/show 由渲染）；编辑器这边
-# 只负责列出每种对象能填哪些。
+# 只负责列出每种对象能填哪些。终点比较特殊：它不看行为名，所有卡片都生效才能通关。
 KIND_BEHAVIORS = {
     KIND_TEXTURE: (("隐藏", "hide"), ("显示", "show")),
     KIND_ANIMATION: (("隐藏", "hide"), ("显示", "show")),
     KIND_MOVABLE: (("移动", "move"),),
+    KIND_DESTINATION: (("解锁", "unlock"),),
 }
 
 # 触发卡片的模式：(显示文字, json 里的值)。once = 触发一次就一直生效；hold = 按着才生效、
-# 松开就撤销；switch = 每触发一次在生效和撤销之间切换。新卡片的默认模式沿用以前的「不勾」。
+# 松开就撤销；switch = 每触发一次在生效和撤销之间切换。新卡片的默认模式沿用以前的「不勾」；
+# 终点的条件是「触发过就算」，所以默认一次，免得按住类触发源永远解不开。
 TRIGGER_MODES = (("一次", "once"), ("按住", "hold"), ("切换", "switch"))
 TRIGGER_MODE_VALUES = tuple(value for _, value in TRIGGER_MODES)
 TRIGGER_DEFAULT_MODE = "hold"
+DESTINATION_TRIGGER_DEFAULT_MODE = "once"
 
 # ---- 路径 ----
 # 打包成 exe 后，关卡放在 exe 旁边的 assets/ 里；直接跑源码时在仓库根目录
