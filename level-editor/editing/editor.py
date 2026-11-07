@@ -15,6 +15,7 @@ from core.constants import (
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
     GAME_SETTINGS_TABS,
+    GAME_SOUND_LIBRARY_TAB,
     HANDLE_PIXELS,
     HEADER,
     ITEM_JUMP_OFFSET_MAX,
@@ -108,6 +109,19 @@ TRIGGER_PARTS = ("source", "behavior", "mode")
 KIND_ORDER_INDEX = {kind: index for index, kind in enumerate(KIND_ORDER)}
 
 
+def _cycle_key(library: dict, current, delta: int) -> str:
+    """在声音库的键和「无」之间前后挪一格：空字符串表示这一幕没有声音。"""
+    options = [""] + sorted(library)
+    value = str(current or "")
+    index = options.index(value) if value in options else 0
+    return options[(index + int(delta)) % len(options)]
+
+
+def _uses_sound(value, key: str) -> bool:
+    """一段链接是不是指向这个声音键。"""
+    return isinstance(value, dict) and str(value.get("sound") or "").strip() == key
+
+
 class Editor:
     def __init__(self) -> None:
         self.level = Level()
@@ -181,8 +195,15 @@ class Editor:
         self.game_cards: list = []                 # 浮层里的制作名单卡片：{job, names: [名字…]}
         self.game_card_scroll = 0                  # 制作名单滚轮滚了多少像素
         self.game_field = 0                        # 浮层里选中的格：标题、跳高、速度、职位、名字…
-        self.game_tab = 0                          # 游戏配置停在哪一页：常规/动画集/制作名单/声音/过场
-        self.game_sound: dict = {}                 # 声音页：键 → {bgm, loop, fade_in, fade_out}
+        self.game_tab = 0                          # 游戏配置停在哪一页：常规/动画集/制作名单/声音/声音库/过场
+        self.game_sound: dict = {}                 # 声音页：键 → {sound, loop, fade_in, fade_out}
+        # 声音库：game.json 的 sound_library（键 → {"path"}）；关卡和音乐链接都从这里取键
+        self.sound_library: dict = {}
+        self.sound_library_scroll = 0.0            # 声音库页的列表滚了多少像素
+        self.sound_selected = ""                   # 声音库页选中的键
+        self.sound_library_dirty = False           # 库里有还没写回 game.json 的改动
+        # 选 BGM 的下拉：{"target": 目标, "scroll": 滚了几行}；target 见 open_sound_menu
+        self.sound_menu: dict | None = None
         self.preview = sound.Preview()             # 试听（和游戏共用一个混音器）
         self.level_select_open = False             # 关卡列表浮层
         self.level_select_scroll = 0               # 关卡列表滚了多少像素
@@ -517,7 +538,9 @@ class Editor:
             return
         # 关卡名就是文件名，不写在快照里：撤销时从当前关卡带过去，别把名字丢了
         name = self.level.name
-        self.level = Level.from_definition(self.undo_stack.pop(), self.animation_library)
+        self.level = Level.from_definition(
+            self.undo_stack.pop(), self.animation_library, self.sound_library
+        )
         self.level.name = name
         self.dialog = None
         self.dropdown_field = None
@@ -543,6 +566,11 @@ class Editor:
         # 动画库快照：画布上的动画对象和「动画…」弹窗都要用；改过并应用之后再刷新
         self.animation_library = animation.from_settings(settings)
         self.animation_object_states = {}
+        # 声音库：标题、制作名单、关卡音乐和声音对象都从这里取键
+        self.sound_library = sound.library_of(settings)
+        self.sound_library_scroll = 0.0
+        self.sound_selected = next(iter(self.sound_library), "")
+        self.sound_library_dirty = False
         self.startup = False
         self.level = Level()
         self.level_in_view = False
@@ -706,7 +734,12 @@ class Editor:
         except (OSError, json.JSONDecodeError) as error:
             self.status = f"打开失败：{error}。"
             return
-        self.level = Level.from_definition(definition, self.animation_library)
+        before = len(self.sound_library)
+        self.level = Level.from_definition(
+            definition, self.animation_library, self.sound_library
+        )
+        if len(self.sound_library) != before:
+            self.sound_library_dirty = True        # 老关卡的音乐刚登记进库，保存时一起写
         self.level.name = level_name_of(path)      # 关卡名就是文件名，json 里不写
         self.path = path
         self.level_in_view = True
@@ -746,6 +779,9 @@ class Editor:
         if self.levels_dir is None:
             self.status = "尚未打开游戏配置，无法保存关卡。"
             return False
+        if self.sound_library_dirty:
+            # 老关卡的音乐登记进了声音库：先把库写回 game.json，关卡里的键才不会悬空
+            self.write_sound_library()
         if old_path is None:
             path = game.unique_level_path(self.levels_dir, wanted)
         else:
@@ -794,7 +830,7 @@ class Editor:
         return ""
 
     def normalize_media_paths(self) -> None:
-        """背景、贴图、音乐和过场图都只记相对 game.json 的路径，一个文件都不复制。
+        """背景、贴图、声音库和过场图都只记相对 game.json 的路径，一个文件都不复制。
 
         相对路径统一写成相对游戏根的正斜杠形式；解析不到的路径原样留着，
         别把用户填的值抹掉。
@@ -811,10 +847,11 @@ class Editor:
             path = rebased(self.level.background)
             if path is not None:
                 self.level.background = path
-        if self.level.sound and self.level.sound.get("bgm"):
-            path = rebased(self.level.sound["bgm"])
+        # 声音库的条目是文件路径；音乐和声音对象只存库里的键，不用改
+        for key, entry in self.sound_library.items():
+            path = rebased(sound.entry_path(entry))
             if path is not None:
-                self.level.sound["bgm"] = path
+                self.sound_library[key] = {"path": path}
         if self.level.cutscene:
             for picture in self.level.cutscene.get("pictures", []):
                 value = picture.get("path")
@@ -823,11 +860,6 @@ class Editor:
                 path = rebased(value)
                 if path is not None:
                     picture["path"] = path
-            sound = self.level.cutscene.get("sound")
-            if isinstance(sound, dict) and sound.get("bgm"):
-                path = rebased(sound["bgm"])
-                if path is not None:
-                    sound["bgm"] = path
         for entry in self.level.textures:
             value = entry.get("image")
             if not value:
@@ -861,9 +893,16 @@ class Editor:
         }
         block = settings.get(sound.GAME_SOUNDS_KEY)
         block = block if isinstance(block, dict) else {}
+        # 声音库先读进来：两幕的声音链接用它换键（老数据的 bgm 路径在这里登记进库）
+        before = len(self.sound_library)
         self.game_sound = {
-            key: sound.fields_of(block.get(key)) for key, _ in sound.SCENE_KEYS
+            key: sound.fields_of(block.get(key), self.sound_library)
+            for key, _ in sound.SCENE_KEYS
         }
+        if len(self.sound_library) != before:
+            self.sound_library_dirty = True
+        self.sound_selected = next(iter(self.sound_library), "")
+        self.sound_library_scroll = 0.0
         self.game_animation_library = animation.from_settings(settings)
         self.animation_selected = next(iter(self.game_animation_library), "")
         self.animation_library_scroll = 0.0
@@ -872,7 +911,9 @@ class Editor:
         self.game_card_scroll = 0
         self.game_tab = 0
         self.game_field = 0
-        self.cutscene = cutscene.from_value(settings.get(cutscene.CUTSCENE_KEY))
+        self.cutscene = cutscene.from_value(
+            settings.get(cutscene.CUTSCENE_KEY), self.sound_library
+        )
         self.cutscene_scope = "game"
         self.cutscene_field = 0
         self.cutscene_scroll = 0
@@ -900,6 +941,7 @@ class Editor:
         self.animation_object_states = {}
         self.cutscene = None
         self.preview.stop()                # 试听只在面板开着的时候有意义
+        self.sound_menu = None
         if settings is None or not commit or self.game_path is None:
             return
         title = str(settings.get("title") or "").strip() or game.DEFAULT_TITLE
@@ -919,12 +961,14 @@ class Editor:
             2,
         )
         settings["player"] = player
-        # 声音：每一幕的四项一直都在，没有曲子也写（bgm 是空字符串）
+        # 声音：每一幕的四项一直都在，没有声音也写（sound 是空字符串）
         block = {
-            key: sound.to_object(self._rebase_sound(sounds.get(key) or {}), keep_empty=True)
+            key: sound.to_object(sounds.get(key) or {}, keep_empty=True)
             for key, _ in sound.SCENE_KEYS
         }
         settings[sound.GAME_SOUNDS_KEY] = block
+        # 声音库：整张表写进去，关卡和声音对象引用的键都在这里
+        settings = sound.to_settings(settings, self.sound_library)
         # 标题 / 结算画面的背景：这两个字段一直都在，空着也照写（空字符串就是没有背景）
         settings[game.BACKGROUNDS_KEY] = {
             key: str(backgrounds.get(key) or "").strip()
@@ -945,9 +989,11 @@ class Editor:
         # 顶栏显示的跳高、速度跟着更新；动画库快照也换成刚保存的这一份
         self.game_player = player
         self.animation_library = animation.from_settings(settings)
+        self.sound_library = sound.library_of(settings)
+        self.sound_library_dirty = False
         names = sum(len(names) for names in settings["credits"].values())
         pictures = len(cutscene_value["pictures"])
-        tracks = sum(1 for spec in block.values() if spec.get("bgm"))
+        tracks = sum(1 for spec in block.values() if spec.get("sound"))
         library = settings.get(animation.LIBRARY_KEY) or {}
         frames = sum(
             len(clip.get("frames") or [])
@@ -969,11 +1015,15 @@ class Editor:
     def game_animation_tab(self) -> bool:
         return self.game_tab == GAME_ANIMATION_TAB
 
+    def game_sound_library_tab(self) -> bool:
+        return self.game_tab == GAME_SOUND_LIBRARY_TAB
+
     def select_game_tab(self, index: int) -> None:
         """点页签切页；换页时把试听停下，选中格回到这一页的第一格。"""
         if not 0 <= index < len(GAME_SETTINGS_TABS) or index == self.game_tab:
             return
         self.preview.stop()
+        self.sound_menu = None
         self.game_tab = index
         self.game_field = 0
         self.game_card_scroll = 0
@@ -986,9 +1036,12 @@ class Editor:
             self.animation_selected = next(iter(self.game_animation_library), "")
             self.animation_library_scroll = 0.0
             self.animation_edit = None
+        elif index == GAME_SOUND_LIBRARY_TAB:
+            self.sound_selected = next(iter(self.sound_library), "")
+            self.sound_library_scroll = 0.0
 
     def switch_game_tab(self, delta: int) -> None:
-        """Tab / Shift+Tab：在常规、动画集、制作名单、声音、过场之间转。"""
+        """Tab / Shift+Tab：在常规、动画集、制作名单、声音、声音库、过场之间转。"""
         self.select_game_tab((self.game_tab + delta) % len(GAME_SETTINGS_TABS))
 
     # 每一页的格子：常规是标题与两个玩家参数；动画集页没有这种格子；
@@ -1002,7 +1055,7 @@ class Editor:
                 ("title_bg",),
                 ("credits_bg",),
             ]
-        if self.game_tab in (GAME_ANIMATION_TAB, GAME_CUTSCENE_TAB):
+        if self.game_tab in (GAME_ANIMATION_TAB, GAME_CUTSCENE_TAB, GAME_SOUND_LIBRARY_TAB):
             return []
         if self.game_tab == 2:              # 制作名单
             cells: list[tuple] = []
@@ -1013,7 +1066,7 @@ class Editor:
             return cells
         cells = []
         for key, _ in sound.SCENE_KEYS:
-            cells += [("bgm", key), ("loop", key), ("fade_in", key), ("fade_out", key)]
+            cells += [("sound", key), ("loop", key), ("fade_in", key), ("fade_out", key)]
         return cells
 
     def current_game_cell(self) -> tuple:
@@ -1041,7 +1094,7 @@ class Editor:
             return str(self.game_numbers.get("move_speed") or "")
         if kind in ("title_bg", "credits_bg"):
             return str(self.game_backgrounds.get(kind.removesuffix("_bg")) or "")
-        if kind in ("bgm", "fade_in", "fade_out"):
+        if kind in ("sound", "fade_in", "fade_out"):
             return str(self.game_sound.get(cell[1], {}).get(kind, ""))
         if kind == "loop":
             return ""
@@ -1069,7 +1122,7 @@ class Editor:
             key = kind.removesuffix("_bg")
             if key in self.game_backgrounds:
                 self.game_backgrounds[key] = text
-        elif kind in ("bgm", "fade_in", "fade_out"):
+        elif kind in ("sound", "fade_in", "fade_out"):
             if cell[1] in self.game_sound:
                 self.game_sound[cell[1]][kind] = text
         elif kind == "job" and cell[1] < len(self.game_cards):
@@ -1087,6 +1140,8 @@ class Editor:
         if self.game_animation_tab():
             self.type_animation_delay(char)
             return
+        if self.game_sound_library_tab():
+            return                      # 声音库页没有输入格
         cell = self.current_game_cell()
         text = self.game_field_text()
         kind = cell[0]
@@ -1104,10 +1159,8 @@ class Editor:
             if (char.isdigit() or char == ".") and len(text) < 5:
                 self.set_game_field_text(text + char)
             return
-        if kind == "bgm":
-            if char.isprintable() and len(text) < sound.BGM_PATH_MAX_LENGTH:
-                self.set_game_field_text(text + char)
-            return
+        if kind == "sound":
+            return                  # 声音是库里的键：用左右键换，不直接敲字
         if kind in ("fade_in", "fade_out"):
             if (char.isdigit() or char == ".") and len(text) < 5:
                 self.set_game_field_text(text + char)
@@ -1122,6 +1175,10 @@ class Editor:
         if self.game_animation_tab():
             self.erase_animation_delay_char()
             return
+        if self.game_sound_library_tab():
+            return                      # 声音库页没有输入格
+        if self.current_game_cell()[0] == "sound":
+            return                  # 声音是库里的键，退格不删它
         self.set_game_field_text(self.game_field_text()[:-1])
 
     def adjust_game_number(self, delta: int) -> None:
@@ -1132,8 +1189,15 @@ class Editor:
         if self.game_animation_tab():
             self.adjust_animation_hold(delta)
             return
+        if self.game_sound_library_tab():
+            return                      # 声音库页没有格子
         cell = self.current_game_cell()
         kind = cell[0]
+        if kind == "sound":
+            fields = self.game_sound.get(cell[1])
+            if fields is not None:
+                fields["sound"] = _cycle_key(self.sound_library, fields.get("sound"), delta)
+            return
         if kind == "loop":
             fields = self.game_sound.get(cell[1])
             if fields is not None:
@@ -1182,6 +1246,8 @@ class Editor:
         if self.game_animation_tab():
             self.move_animation_frame(delta)
             return
+        if self.game_sound_library_tab():
+            return                      # 声音库页用点击选行
         cells = self.game_cells()
         self.game_field = max(0, min(self.game_field + delta, len(cells) - 1))
 
@@ -1340,6 +1406,153 @@ class Editor:
             self.status = f"无法保存 game.json：{error}。"
             return
         self.animation_library = animation.from_settings(settings)
+
+    # ---- 声音库 -----------------------------------------------------
+    def sound_library_items(self) -> list:
+        """声音库页的列表：键 → 条目，按名字排。"""
+        return sorted(self.sound_library.items(), key=lambda pair: pair[0])
+
+    def sound_library_path(self, key: str) -> str | None:
+        """键 → 文件的绝对路径；找不到文件返回 None。"""
+        return resolve_level_path(sound.path_of(self.sound_library, key), self.media_base_dir)
+
+    def select_sound(self, key: str) -> None:
+        self.sound_selected = str(key)
+
+    def scroll_sound_library(self, delta: float) -> None:
+        """声音库页的滚轮：按像素滚（上界在绘制时按内容高度夹住）。"""
+        self.sound_library_scroll = max(
+            0.0, self.sound_library_scroll + float(delta) * SCROLL_STEP
+        )
+
+    def import_sound(self) -> str:
+        """挑一份音频登记进声音库：只记相对路径，不复制文件；返回新键（取消就是空串）。"""
+        path = ask_audio_path("导入声音", self.media_base_dir)
+        if not path:
+            self.status = "已取消导入声音。"
+            return ""
+        relative = relative_level_path(path, self.media_base_dir)
+        key = sound.ensure_path(self.sound_library, relative)
+        self.sound_selected = key
+        self.sound_library_dirty = True
+        self.write_sound_library()
+        self.status = f"已导入声音 {key}：仅记录相对 game.json 的路径，不复制文件。"
+        return key
+
+    def delete_sound(self, key: str) -> None:
+        """从声音库删掉一个键；还被关卡引用的不许删。"""
+        key = str(key or "")
+        if key not in self.sound_library:
+            self.status = "先选中声音库里的一条。"
+            return
+        references = self.sound_key_references(key)
+        if references:
+            self.status = f"声音 {key} 还被这些关卡引用着，不能删除：{'、'.join(references)}。"
+            return
+        self.sound_library.pop(key, None)
+        if self.sound_selected == key:
+            self.sound_selected = next(iter(self.sound_library), "")
+        self.sound_library_dirty = True
+        self.write_sound_library()
+        self.status = f"已删除声音 {key}。"
+
+    def sound_key_references(self, key: str) -> list:
+        """哪些地方还在引用这个声音：当前关、已保存关卡、游戏配置的两幕和过场。"""
+        if not key:
+            return []
+        names = []
+        for scene_key, label in sound.SCENE_KEYS:
+            if _uses_sound((self.game_sound or {}).get(scene_key), key):
+                names.append(f"游戏配置的{label}音乐")
+        if self.cutscene is not None and _uses_sound(self.cutscene.get("sound"), key):
+            names.append("过场音乐")
+        if _uses_sound(self.level.sound, key):
+            names.append(self.level.name or "当前关卡")
+        if self.game_path is not None:
+            for path in game.level_files(self.game_path):
+                if self.path is not None and os.path.normpath(path) == os.path.normpath(self.path):
+                    continue
+                definition = sound.read_definition(path)
+                if definition is None:
+                    continue
+                if _uses_sound(definition.get("sound"), key):
+                    names.append(level_name_of(path))
+        return names
+
+    def preview_sound(self, key: str) -> None:
+        """试听声音库里的一条；再点一次停。"""
+        path = self.sound_library_path(key)
+        if path is None:
+            self.status = f"找不到这个声音的文件：{sound.key_label(self.sound_library, key)}。"
+            return
+        self.status = self.preview.toggle(path, False, 0.0)
+
+    # ---- 选 BGM 的下拉 ------------------------------------------------
+    def open_sound_menu(self, target: tuple) -> None:
+        """在「选择…」按钮下面摊开声音库：target 记着选完写回哪一格。
+
+        target 的写法：("level",) 这一关的音乐、("game", 场景键) 标题/制作名单、
+        ("cutscene",) 过场音乐。
+        """
+        if not self.sound_library:
+            self.status = "声音库还是空的：先到游戏配置的「声音库」页导入声音。"
+            return
+        self.sound_menu = {"target": target, "scroll": 0}
+        self.status = "从声音库里挑一个；「（无）」表示这一幕不放音乐。"
+
+    def close_sound_menu(self) -> None:
+        self.sound_menu = None
+
+    def sound_menu_value(self) -> str:
+        """下拉打开的那一格现在是哪个键。"""
+        menu = self.sound_menu
+        if menu is None:
+            return ""
+        target = menu.get("target") or ()
+        if target[:1] == ("level",):
+            return str((self.settings or {}).get("sound") or "")
+        if target[:1] == ("game",) and len(target) > 1:
+            return str(self.game_sound.get(target[1], {}).get("sound") or "")
+        if target[:1] == ("cutscene",) and self.cutscene is not None:
+            return str(self.cutscene.get("sound", {}).get("sound") or "")
+        return ""
+
+    def choose_sound_menu(self, key: str) -> None:
+        """下拉里点了一条：写回对应的那一格。"""
+        menu = self.sound_menu
+        if menu is None:
+            return
+        target = menu.get("target") or ()
+        key = str(key or "")
+        if target[:1] == ("level",) and self.settings is not None:
+            self.settings["sound"] = key
+        elif target[:1] == ("game",) and len(target) > 1:
+            if target[1] in self.game_sound:
+                self.game_sound[target[1]]["sound"] = key
+        elif target[:1] == ("cutscene",) and self.cutscene is not None:
+            self.cutscene["sound"]["sound"] = key
+        self.sound_menu = None
+        self.status = f"声音：{sound.key_label(self.sound_library, key)}。"
+
+    def scroll_sound_menu(self, delta: float) -> None:
+        """下拉比可视区多时用滚轮翻（上界在绘制时按条数夹住）。"""
+        if self.sound_menu is None:
+            return
+        self.sound_menu["scroll"] = int(self.sound_menu.get("scroll") or 0) + int(delta)
+
+    def write_sound_library(self) -> None:
+        """把声音库写进 game.json（导入、删除、老数据登记之后用）。"""
+        if self.game_path is None:
+            return
+        settings = game.load_settings(self.game_path)
+        settings = sound.to_settings(settings, self.sound_library)
+        try:
+            game.save_settings(settings, self.game_path)
+        except OSError as error:
+            self.status = f"无法保存 game.json：{error}。"
+            return
+        self.sound_library = sound.library_of(settings)
+        self.sound_library_dirty = False
 
     # ---- 动画弹窗里的帧 ---------------------------------------------
     def animation_edit_frames(self) -> list:
@@ -1832,27 +2045,15 @@ class Editor:
         self.status = "已删除一个名字。"
 
     # ---- 游戏配置的声音页 -------------------------------------------
-    def pick_game_audio(self, key: str) -> None:
-        """给标题或制作名单挑一首 BGM：只记路径，不复制文件。"""
-        if key not in self.game_sound:
-            return
-        path = ask_audio_path("选择背景音乐", self.media_base_dir)
-        if not path:
-            self.status = "已取消选择曲子。"
-            return
-        self.game_sound[key]["bgm"] = relative_level_path(path, self.media_base_dir)
-        self.game_field = self.game_cells().index(("bgm", key))
-        self.status = "已选择曲子：仅记录相对 game.json 的路径，不复制文件。"
-
     def preview_game_audio(self, key: str) -> None:
         """试听标题或制作名单：按这一页的循环与淡入放，再点一次停。"""
         fields = self.game_sound.get(key)
         if fields is None:
             return
-        path = resolve_level_path(fields["bgm"], self.media_base_dir)
+        path = self.sound_library_path(fields.get("sound"))
         if path is None:
             self.preview.stop()
-            self.status = f"找不到这首曲子：{fields['bgm'] or '（未填写）'}。"
+            self.status = f"找不到这首曲子：{sound.key_label(self.sound_library, fields.get('sound'))}。"
             return
         self.status = self.preview.toggle(
             path,
@@ -1873,13 +2074,8 @@ class Editor:
         self.status = "已选择背景图片：仅记录相对 game.json 的路径，不复制文件。"
 
     def _rebase_sound(self, fields: dict) -> dict:
-        """曲子能解析到就改成相对 game.json 的正斜杠写法，和背景、贴图一样。"""
-        path = resolve_level_path(fields.get("bgm"), self.media_base_dir)
-        if path is None:
-            return fields
-        rebased = dict(fields)
-        rebased["bgm"] = relative_level_path(path, self.media_base_dir)
-        return rebased
+        """声音链接只存库里的键，路径在库里，打开游戏时不用改。"""
+        return fields
 
     # ---- 过场编辑（关卡设置 / 游戏配置的过场页） ---------------------
     def cutscene_cells(self) -> list[tuple]:
@@ -1944,7 +2140,7 @@ class Editor:
                 return ""
             return str(state["pictures"][index][kind])
         if kind == "sound_bgm":
-            return str(state["sound"]["bgm"])
+            return str(state["sound"]["sound"])
         if kind in ("sound_fade_in", "sound_fade_out"):
             key = "fade_in" if kind == "sound_fade_in" else "fade_out"
             return str(state["sound"][key])
@@ -1960,8 +2156,6 @@ class Editor:
             index = cell[1]
             if index < len(state["pictures"]):
                 state["pictures"][index][kind] = text
-        elif kind == "sound_bgm":
-            state["sound"]["bgm"] = text
         elif kind in ("sound_fade_in", "sound_fade_out"):
             state["sound"]["fade_in" if kind == "sound_fade_in" else "fade_out"] = text
 
@@ -2016,6 +2210,10 @@ class Editor:
             self.set_cutscene_sound_mode(mode)
         elif kind == "sound_loop":
             state["sound"]["loop"] = not bool(state["sound"]["loop"])
+        elif kind == "sound_bgm":
+            state["sound"]["sound"] = _cycle_key(
+                self.sound_library, state["sound"].get("sound"), delta
+            )
         elif kind in ("sound_fade_in", "sound_fade_out"):
             key = "fade_in" if kind == "sound_fade_in" else "fade_out"
             current = clamp_float(
@@ -2036,9 +2234,6 @@ class Editor:
         if kind == "path":
             if char.isprintable() and len(text) < cutscene.PICTURE_PATH_MAX_LENGTH:
                 self.set_cutscene_field_text(text + char)
-        elif kind == "sound_bgm":
-            if char.isprintable() and len(text) < sound.BGM_PATH_MAX_LENGTH:
-                self.set_cutscene_field_text(text + char)
         elif kind in ("fade_in", "fade_out", "hold", "sound_fade_in", "sound_fade_out"):
             if (char.isdigit() or char == ".") and len(text) < 5:
                 self.set_cutscene_field_text(text + char)
@@ -2047,7 +2242,7 @@ class Editor:
         if self.cutscene is None:
             return
         cell = self.current_cutscene_cell()
-        if cell[0] in ("cascade", "sound_mode", "sound_loop"):
+        if cell[0] in ("cascade", "sound_mode", "sound_loop", "sound_bgm"):
             return
         self.set_cutscene_field_text(self.cutscene_field_text()[:-1])
 
@@ -2092,26 +2287,16 @@ class Editor:
         self.set_cutscene_field(("path", index))
         self.status = "已选择过场图片：仅记录相对 game.json 的路径，不复制文件。"
 
-    def pick_cutscene_sound(self) -> None:
-        """给过场挑一首自己的曲子：只记路径，不复制文件。"""
-        if self.cutscene is None or self.cutscene["sound_mode"] != cutscene.SOUND_MODE_CUSTOM:
-            return
-        path = ask_audio_path("选择过场音乐", self.media_base_dir)
-        if not path:
-            self.status = "已取消选择过场音乐。"
-            return
-        self.cutscene["sound"]["bgm"] = relative_level_path(path, self.media_base_dir)
-        self.set_cutscene_field(("sound_bgm",))
-        self.status = "已选择过场音乐：仅记录相对 game.json 的路径，不复制文件。"
-
     def preview_cutscene_sound(self) -> None:
         if self.cutscene is None:
             return
         fields = self.cutscene["sound"]
-        path = resolve_level_path(fields["bgm"], self.media_base_dir)
+        path = self.sound_library_path(fields.get("sound"))
         if path is None:
             self.preview.stop()
-            self.status = f"找不到这首曲子：{fields['bgm'] or '（未填写）'}。"
+            self.status = (
+                f"找不到这首曲子：{sound.key_label(self.sound_library, fields.get('sound'))}。"
+            )
             return
         self.status = self.preview.toggle(
             path,
@@ -3222,8 +3407,7 @@ class Editor:
         # 名称以外的数字项都按字符串编辑：可以直接敲数字，也可以点右边的加减
         flip_up, flip_down = self.level.flip_area_offsets
         music = sound.fields_of(self.level.sound)
-        self.settings = {
-            "name": self.level.name,
+        self.settings = {            "name": self.level.name,
             "width": str(self.level.width),
             "height": str(self.level.height),
             "flip_up": f"{flip_up:g}",
@@ -3232,15 +3416,15 @@ class Editor:
             # 玩家参数默认来自 game.json；这两格空着就是跟随，填了就覆盖
             "jump_height": self.settings_override("jump_height"),
             "move_speed": self.settings_override("move_speed"),
-            # 这一关的音乐跟着关卡文件走，在「声音」页里改
-            "bgm": music["bgm"],
+            # 这一关的音乐跟着关卡文件走，在「声音」页里改：库里的键 + 循环 + 淡入淡出
+            "sound": music["sound"],
             "loop": music["loop"],
             "fade_in": music["fade_in"],
             "fade_out": music["fade_out"],
         }
         self.settings_tab = 0
         self.settings_field = 0
-        self.cutscene = cutscene.from_value(self.level.cutscene)
+        self.cutscene = cutscene.from_value(self.level.cutscene, self.sound_library)
         self.cutscene_scope = "level"
         self.cutscene_field = 0
         self.cutscene_scroll = 0
@@ -3261,6 +3445,7 @@ class Editor:
         if not 0 <= index < len(SETTINGS_TABS) or index == self.settings_tab:
             return
         self.preview.stop()
+        self.sound_menu = None
         self.settings_tab = index
         if index == SETTINGS_CUTSCENE_TAB:
             self.cutscene_field = 0
@@ -3285,6 +3470,7 @@ class Editor:
 
     def close_settings(self, commit: bool) -> None:
         self.preview.stop()                # 试听只在面板开着的时候有意义
+        self.sound_menu = None
         if self.settings is not None and commit:
             name = self.settings["name"]
             self.level.name = name
@@ -3302,10 +3488,10 @@ class Editor:
             ]
             self.level.background = self.settings["background"]
             self._apply_player_override()
-            # 这一关的音乐：填了曲子才写 sound，空着就把它删掉
+            # 这一关的音乐：选了库里的声音才写 sound，空着就把它删掉
             self.level.sound = sound.to_object(
                 {
-                    "bgm": self.settings["bgm"],
+                    "sound": self.settings["sound"],
                     "loop": self.settings["loop"],
                     "fade_in": self.settings["fade_in"],
                     "fade_out": self.settings["fade_out"],
@@ -3317,7 +3503,11 @@ class Editor:
             background = self.level.background or "无"
             flip_up, flip_down = self.level.flip_area_offsets
             jump, speed, overridden = self.player_stats()
-            music = self.level.sound["bgm"] if self.level.sound else "无"
+            music = (
+                sound.key_label(self.sound_library, self.level.sound.get("sound"))
+                if self.level.sound
+                else "无"
+            )
             pictures = len(self.level.cutscene["pictures"]) if self.level.cutscene else 0
             self.status = (
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
@@ -3368,26 +3558,16 @@ class Editor:
         self.settings_field = 5
         self.status = "已选择背景：仅记录相对 game.json 的路径，不复制文件。"
 
-    def pick_level_audio(self) -> None:
-        """给这一关挑一首 BGM：只记路径，不复制文件。"""
-        if self.settings is None:
-            return
-        path = ask_audio_path("选择背景音乐", self.media_base_dir)
-        if not path:
-            self.status = "已取消选择曲子。"
-            return
-        self.settings["bgm"] = relative_level_path(path, self.media_base_dir)
-        self.settings_field = 8
-        self.status = "已选择曲子：仅记录相对 game.json 的路径，不复制文件。"
-
     def preview_level_audio(self) -> None:
         """试听这一关的声音页：按这一页的循环与淡入放，再点一次停。"""
         if self.settings is None:
             return
-        path = resolve_level_path(self.settings["bgm"], self.media_base_dir)
+        path = self.sound_library_path(self.settings.get("sound"))
         if path is None:
             self.preview.stop()
-            self.status = f"找不到这首曲子：{self.settings['bgm'] or '（未填写）'}。"
+            self.status = (
+                f"找不到这首曲子：{sound.key_label(self.sound_library, self.settings.get('sound'))}。"
+            )
             return
         self.status = self.preview.toggle(
             path,
@@ -3462,6 +3642,11 @@ class Editor:
             )
             stepped = max(MOVE_SPEED_MIN, min(MOVE_SPEED_MAX, current + 0.5 * delta))
             self.settings["move_speed"] = f"{stepped:g}"
+        elif field == 8:
+            # 声音：在声音库的键和「无」之间前后换
+            self.settings["sound"] = _cycle_key(
+                self.sound_library, self.settings["sound"], delta
+            )
         elif field == 9:
             # 循环播放：左右键（或点整行）切换
             self.settings["loop"] = not bool(self.settings["loop"])
@@ -3513,9 +3698,8 @@ class Editor:
             if (char.isdigit() or char == ".") and len(self.settings["move_speed"]) < 5:
                 self.settings["move_speed"] += char
         elif field == 8:
-            # BGM 也是路径：可打印字符都能打
-            if char.isprintable() and len(self.settings["bgm"]) < sound.BGM_PATH_MAX_LENGTH:
-                self.settings["bgm"] += char
+            # 声音是库里的键：用左右键换，不直接敲字
+            pass
         elif field in (10, 11):
             # 淡入淡出：数字和小数点，最多 5 位
             key = "fade_in" if field == 10 else "fade_out"
@@ -3544,7 +3728,7 @@ class Editor:
         elif field == 7:
             self.settings["move_speed"] = self.settings["move_speed"][:-1]
         elif field == 8:
-            self.settings["bgm"] = self.settings["bgm"][:-1]
+            pass                        # 声音是库里的键，退格不删它
         elif field in (10, 11):
             key = "fade_in" if field == 10 else "fade_out"
             self.settings[key] = str(self.settings[key])[:-1]

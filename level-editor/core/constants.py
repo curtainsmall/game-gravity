@@ -157,7 +157,7 @@ FLIP_AREA_OFFSETS_DEFAULT = (0.0, 0.0)
 
 # 关卡设置分四页：(页签标题, 这一页有哪几个字段)。字段下标对应编辑器 settings 里的格子：
 # 0 名称、1 宽度、2 高度、3 上翻带、4 下翻带、5 背景、6 跳高、7 速度、
-# 8 BGM 路径、9 循环、10 淡入、11 淡出。过场页是卡片列表，不用这套字段。
+# 8 声音（声音库的键）、9 循环、10 淡入、11 淡出。过场页是卡片列表，不用这套字段。
 SETTINGS_TABS = (
     ("常规", (0, 1, 2, 3, 4, 5)),
     ("玩家", (6, 7)),
@@ -165,10 +165,11 @@ SETTINGS_TABS = (
     ("过场", ()),
 )
 SETTINGS_CUTSCENE_TAB = 3
-# 游戏配置分五页：常规、动画集、制作名单、声音、过场。每页有哪些格子由 editor.game_cells 按页给。
-GAME_SETTINGS_TABS = ("常规", "动画集", "制作名单", "声音", "过场")
+# 游戏配置分六页：常规、动画集、制作名单、声音、声音库、过场。每页有哪些格子由 editor.game_cells 按页给。
+GAME_SETTINGS_TABS = ("常规", "动画集", "制作名单", "声音", "声音库", "过场")
 GAME_ANIMATION_TAB = 1
-GAME_CUTSCENE_TAB = 4
+GAME_SOUND_LIBRARY_TAB = 4
+GAME_CUTSCENE_TAB = 5
 BACKGROUND_MAX_LENGTH = 120
 
 # 编辑器里可滚的页面：滚轮一格滚多少像素

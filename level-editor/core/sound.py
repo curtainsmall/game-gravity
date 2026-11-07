@@ -1,14 +1,14 @@
-"""声音：每一幕一首背景音乐。
+"""声音库与 BGM 链接。
 
-写法和游戏端一致（见 game/sound/bgm.py）：
-    标题、制作名单   game.json 的 sounds.title / sounds.credits，在「游戏配置」的声音页里改
-    每一关       关卡 json 的 sound：曲子跟着关卡文件走，在「关卡设置」的声音页里改
-一首 BGM 的键：
-    bgm       曲子文件，相对 game.json 的路径
+game.json 里有一张声音库（键 → 文件），音乐和音效都从这里取：
+    "sound_library": {"雨": {"path": "sounds/rain.ogg"}, ...}
+链接写的是键，不是路径：
+    sound     声音库里的键
     loop      是否循环，缺省 true
     fade_in   切入时淡入几秒，缺省 0.5
     fade_out  离开这一幕时淡出几秒，缺省 1.0
-没有 bgm 的这一幕就不写这一项。
+标题、制作名单在 game.json 的 sounds 里；每一关在关卡 json 的 sound 里；过场自定义也一样。
+老数据写的是 bgm（文件路径）：读进来时登记进声音库、换成链接，键取文件名（重名加 -2）。
 """
 
 import json
@@ -19,6 +19,7 @@ import pygame
 from core.constants import ROOT, SETTING_DIR_NAME, SETTING_FILE_NAME
 from core.helpers import clamp_float
 
+LIBRARY_KEY = "sound_library"
 GAME_SOUNDS_KEY = "sounds"   # game.json：一幕一首，标题、制作名单都在里面
 TITLE_KEY = "title"
 CREDITS_KEY = "credits"      # 结算画面（制作名单）
@@ -30,7 +31,6 @@ DEFAULT_FADE_IN = 0.5
 DEFAULT_FADE_OUT = 1.0
 MAX_FADE_SECONDS = 10.0
 FADE_STEP = 0.5
-BGM_PATH_MAX_LENGTH = 200    # 路径字段最多敲几个字符
 
 VOLUME_MASTER_DEFAULT = 0.8
 VOLUME_MUSIC_DEFAULT = 0.7
@@ -41,7 +41,6 @@ def setting_file() -> str:
     return os.path.join(ROOT, SETTING_DIR_NAME, SETTING_FILE_NAME)
 
 
-# ---- 一页的四项 -----------------------------------------------------
 def read_definition(path: str) -> dict | None:
     """读一份 json；读不出来返回 None。"""
     try:
@@ -52,12 +51,92 @@ def read_definition(path: str) -> dict | None:
     return value if isinstance(value, dict) else None
 
 
-def fields_of(value) -> dict:
-    """json 里的一幕 → 编辑用的四项；数字写成字符串，可以像别的数字字段那样直接敲。"""
+# ---- 声音库 ---------------------------------------------------------
+def library_of(settings: dict) -> dict:
+    """game.json → 声音库（键 → {"path": …}）；坏条目跳过。"""
+    table = (settings or {}).get(LIBRARY_KEY)
+    library: dict = {}
+    if not isinstance(table, dict):
+        return library
+    for key, value in table.items():
+        name = str(key).strip()
+        path = entry_path(value)
+        if name and path:
+            library[name] = {"path": path}
+    return library
+
+
+def to_settings(settings: dict, library: dict) -> dict:
+    """编辑好的声音库写回 game.json；空名字、空路径的条目丢掉。"""
+    table = {}
+    for key, value in (library or {}).items():
+        name = str(key).strip()
+        path = entry_path(value)
+        if name and path:
+            table[name] = {"path": path}
+    settings[LIBRARY_KEY] = table
+    return settings
+
+
+def entry_path(value) -> str:
+    """库条目 → 相对路径：条目是 {"path": …}，也认直接写字符串的写法。"""
+    if isinstance(value, dict):
+        value = value.get("path")
+    return str(value or "").strip()
+
+
+def path_of(library: dict, key: str) -> str:
+    """键 → 文件路径；不认识的键返回空字符串。"""
+    value = (library or {}).get(str(key or ""))
+    return entry_path(value)
+
+
+def ensure_path(library: dict, path: str) -> str:
+    """把一份文件登记进声音库，返回它的键。
+
+    同一份文件已经有键就复用；不然拿文件名当键，重名时往后加 -2、-3。
+    """
+    path = str(path or "").strip()
+    if not path:
+        return ""
+    for key, value in (library or {}).items():
+        if entry_path(value) == path:
+            return key
+    stem = os.path.splitext(os.path.basename(path))[0].strip() or "声音"
+    key = stem
+    index = 2
+    while key in library:
+        key = f"{stem}-{index}"
+        index += 1
+    library[key] = {"path": path}
+    return key
+
+
+def key_label(library: dict, key: str) -> str:
+    """界面上显示什么：键加文件名；没有就是（无）。"""
+    key = str(key or "").strip()
+    if not key:
+        return "（无）"
+    path = path_of(library, key)
+    name = os.path.basename(path) if path else ""
+    return f"{key}（{name}）" if name and name != key else key
+
+
+# ---- 一幕的链接 -----------------------------------------------------
+def fields_of(value, library: dict | None = None) -> dict:
+    """json 里的一段链接 → 编辑用的四项；数字写成字符串，可以像别的数字字段那样敲。
+
+    老数据只有 bgm（路径）：给了声音库就登记进去、换成键。
+    """
     if not isinstance(value, dict):
         value = {}
+    key = str(value.get("sound") or "").strip()
+    if not key:
+        legacy = str(value.get("bgm") or "").strip()
+        if legacy and library is not None:
+            key = ensure_path(library, legacy)
     return {
-        "bgm": str(value.get("bgm") or ""),
+        "sound": key,
         "loop": _read_bool(value.get("loop"), DEFAULT_LOOP),
         "fade_in": f"{_read_seconds(value.get('fade_in'), DEFAULT_FADE_IN):g}",
         "fade_out": f"{_read_seconds(value.get('fade_out'), DEFAULT_FADE_OUT):g}",
@@ -65,18 +144,18 @@ def fields_of(value) -> dict:
 
 
 def to_object(fields: dict, keep_empty: bool = False) -> dict | None:
-    """编辑用的四项 → 写回 json 的 sound。
+    """编辑用的四项 → 写回 json 的链接。
 
-    keep_empty 为真时，没有曲子也把四项都写出来（bgm 是空字符串）；否则返回 None，
+    keep_empty 为真时，没有声音也把四项都写出来（sound 是空字符串）；否则返回 None，
     调用方就不会写这个键。
     """
     if not isinstance(fields, dict):
         return None
-    path = str(fields.get("bgm") or "").strip()
-    if not path and not keep_empty:
+    key = str(fields.get("sound") or "").strip()
+    if not key and not keep_empty:
         return None
     return {
-        "bgm": path,
+        "sound": key,
         "loop": bool(fields.get("loop", DEFAULT_LOOP)),
         "fade_in": round(
             clamp_float(fields.get("fade_in"), 0.0, MAX_FADE_SECONDS, DEFAULT_FADE_IN), 2
@@ -121,7 +200,7 @@ class Preview:
     def toggle(self, path: str, loop: bool, fade_in: float) -> str:
         """放或者停这一首；返回一句给状态栏的话。"""
         if not os.path.isfile(path):
-            return f"找不到这首曲子：{path}。"
+            return f"找不到这个声音：{path}。"
         if not self._open_mixer():
             return "没有可用的声卡，无法试听。"
         if self.path == path and pygame.mixer.music.get_busy():

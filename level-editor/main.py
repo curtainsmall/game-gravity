@@ -152,9 +152,15 @@ def run() -> None:
                 # 过场页的图片卡片用滚轮上下滚
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        editor.close_settings(False)
+                        if editor.sound_menu is not None:
+                            editor.close_sound_menu()
+                        else:
+                            editor.close_settings(False)
                     elif event.key == pygame.K_RETURN:
-                        editor.close_settings(True)
+                        if editor.sound_menu is not None:
+                            editor.close_sound_menu()
+                        else:
+                            editor.close_settings(True)
                     elif event.key == pygame.K_TAB:
                         step = -1 if event.mod & pygame.KMOD_SHIFT else 1
                         editor.switch_settings_tab(step)
@@ -171,7 +177,10 @@ def run() -> None:
                     else:
                         editor.type_settings(event.unicode)
                 elif event.type == pygame.MOUSEWHEEL:
-                    editor.scroll_cutscene(-event.y)
+                    if editor.sound_menu is not None:
+                        editor.scroll_sound_menu(-event.y)
+                    else:
+                        editor.scroll_cutscene(-event.y)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
@@ -213,9 +222,15 @@ def run() -> None:
                     continue
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        editor.close_game_settings(False)
+                        if editor.sound_menu is not None:
+                            editor.close_sound_menu()
+                        else:
+                            editor.close_game_settings(False)
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        editor.close_game_settings(True)
+                        if editor.sound_menu is not None:
+                            editor.close_sound_menu()
+                        else:
+                            editor.close_game_settings(True)
                     elif event.key == pygame.K_TAB:
                         step = -1 if event.mod & pygame.KMOD_SHIFT else 1
                         editor.switch_game_tab(step)
@@ -232,7 +247,12 @@ def run() -> None:
                     elif event.unicode and event.unicode.isprintable():
                         editor.type_game_settings(event.unicode)
                 elif event.type == pygame.MOUSEWHEEL:
-                    editor.scroll_game_cards(-event.y)
+                    if editor.sound_menu is not None:
+                        editor.scroll_sound_menu(-event.y)
+                    elif editor.game_sound_library_tab():
+                        editor.scroll_sound_library(-event.y)
+                    else:
+                        editor.scroll_game_cards(-event.y)
                 elif (
                     event.type == pygame.MOUSEMOTION
                     and editor.animation_edit is not None

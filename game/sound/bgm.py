@@ -1,17 +1,19 @@
 """一幕的背景音乐：放哪首曲子、怎么放。
 
 音乐写在两处：标题和制作名单在 game.json 的 sounds 里（sounds.title、sounds.credits），
-每一关在它自己的关卡 json 的 sound 里——曲子跟着关卡文件走，改名、删关都不牵连别人。
-一首 BGM 的键：
-    bgm       曲子文件，和别的路径一样相对 game.json 所在的文件夹
+每一关在它自己的关卡 json 的 sound 里。两处都是同一种链接：
+    sound     声音库里的键（见 sound.library）
     loop      循环播放，缺省 true
     fade_in   切入时淡入几秒，缺省 0.5
     fade_out  离开这一幕时淡出几秒，缺省 1.0
-没有 bgm、或者文件找不到，这一幕就是没音乐，游戏照常跑。
+老数据写的是 bgm（文件路径），现在照样认：找不到 sound 键时按这个路径放。
+没有声音、键找不到、文件不在了，这一幕就是没音乐，游戏照常跑。
 """
 
 from dataclasses import dataclass
 from pathlib import Path
+
+from sound.library import library_sounds
 
 GAME_SOUNDS_KEY = "sounds"     # game.json：一幕一首，标题、制作名单都在里面
 LEVEL_SOUND_KEY = "sound"      # 关卡 json：这一关自己的那一首
@@ -34,30 +36,49 @@ class Bgm:
     fade_out: float = DEFAULT_FADE_OUT
 
 
-def game_bgm(game_settings: dict, key: str, base_dir: str | Path | None) -> Bgm | None:
+def game_bgm(
+    game_settings: dict,
+    key: str,
+    base_dir: str | Path | None,
+    sounds: dict[str, str] | None = None,
+) -> Bgm | None:
     """game.json 里 sounds.<key> 那一首：标题用 title，结算画面用 credits。"""
     value = game_settings.get(GAME_SOUNDS_KEY) if isinstance(game_settings, dict) else None
     if not isinstance(value, dict):
         return None
-    return _bgm(value.get(key), base_dir)
+    if sounds is None:
+        sounds = library_sounds(game_settings, base_dir)
+    return _bgm(value.get(key), base_dir, sounds)
 
 
-def level_bgm(level_definition: dict, base_dir: str | Path | None) -> Bgm | None:
+def level_bgm(
+    level_definition: dict,
+    base_dir: str | Path | None,
+    sounds: dict[str, str] | None = None,
+) -> Bgm | None:
     """关卡 json 里的 sound：这一关自己的音乐。"""
     if not isinstance(level_definition, dict):
         return None
-    return _bgm(level_definition.get(LEVEL_SOUND_KEY), base_dir)
+    return _bgm(level_definition.get(LEVEL_SOUND_KEY), base_dir, sounds)
 
 
-def bgm_value(value, base_dir: str | Path | None) -> Bgm | None:
-    """一段 sound 对象（bgm / loop / fade_in / fade_out）→ Bgm；空或找不到文件返回 None。"""
-    return _bgm(value, base_dir)
+def bgm_value(
+    value,
+    base_dir: str | Path | None,
+    sounds: dict[str, str] | None = None,
+) -> Bgm | None:
+    """一段链接（sound / loop / fade_in / fade_out）→ Bgm；空或找不到文件返回 None。"""
+    return _bgm(value, base_dir, sounds)
 
 
-def _bgm(value, base_dir: str | Path | None) -> Bgm | None:
+def _bgm(
+    value,
+    base_dir: str | Path | None,
+    sounds: dict[str, str] | None = None,
+) -> Bgm | None:
     if not isinstance(value, dict):
         return None
-    path = _resolve(value.get("bgm"), base_dir)
+    path = _path_of(value, base_dir, sounds)
     if path is None:
         return None
     return Bgm(
@@ -66,6 +87,14 @@ def _bgm(value, base_dir: str | Path | None) -> Bgm | None:
         fade_in=_read_seconds(value.get("fade_in"), DEFAULT_FADE_IN),
         fade_out=_read_seconds(value.get("fade_out"), DEFAULT_FADE_OUT),
     )
+
+
+def _path_of(value: dict, base_dir, sounds: dict[str, str] | None) -> str | None:
+    """链接 → 绝对路径：先按声音库的键找，找不到再认老写法的 bgm 路径。"""
+    key = str(value.get("sound") or "").strip()
+    if key:
+        return (sounds or {}).get(key)
+    return _resolve(value.get("bgm"), base_dir)
 
 
 def _resolve(value, base_dir: str | Path | None) -> str | None:

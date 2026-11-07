@@ -27,6 +27,7 @@ from levels import discover_levels, load_scene
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
 from sound.bgm import CREDITS_KEY, TITLE_KEY, Bgm, game_bgm
+from sound.library import library_sounds
 from sound.sound_system import SoundSystem
 
 PHYSICS_STEP_SECONDS = 1.0 / 60.0
@@ -75,7 +76,9 @@ class App:
         self.title_bgm = game_bgm(self.game_settings, TITLE_KEY, game_root())
         self.credits_bgm = game_bgm(self.game_settings, CREDITS_KEY, game_root())
         # game.json 里的结尾过场：最后一关之后、制作名单之前
-        self.ending_cutscene = cutscene_of(self.game_settings, game_root())
+        self.ending_cutscene = cutscene_of(
+        self.game_settings, game_root(), library_sounds(self.game_settings, game_root())
+    )
         self.sound.start()
         self.sound.play(self.title_bgm)
         self.levels = discover_levels()

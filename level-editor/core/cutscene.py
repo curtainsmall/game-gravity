@@ -9,7 +9,7 @@
 """
 
 from core.helpers import clamp_float
-from core.sound import BGM_PATH_MAX_LENGTH, fields_of, to_object as sound_to_object
+from core.sound import fields_of, to_object as sound_to_object
 
 CUTSCENE_KEY = "cutscene"
 PICTURE_PATH_MAX_LENGTH = 200
@@ -36,7 +36,7 @@ def new_state() -> dict:
     }
 
 
-def from_value(value) -> dict:
+def from_value(value, library: dict | None = None) -> dict:
     """json 里的 cutscene → 编辑用的状态：图片的数字是字符串。"""
     state = new_state()
     if not isinstance(value, dict):
@@ -58,7 +58,7 @@ def from_value(value) -> dict:
         state["sound_mode"] = SOUND_MODE_SCENE
     elif isinstance(sound, dict):
         state["sound_mode"] = SOUND_MODE_CUSTOM
-        state["sound"] = fields_of(sound)
+        state["sound"] = fields_of(sound, library)
     return state
 
 

@@ -74,7 +74,11 @@ class Cutscene:
         return 0.0
 
 
-def cutscene_of(container, base_dir: str | Path | None) -> Cutscene | None:
+def cutscene_of(
+    container,
+    base_dir: str | Path | None,
+    sounds: dict[str, str] | None = None,
+) -> Cutscene | None:
     """读一份 json 里的 cutscene；没有、没图或图都找不到时返回 None。"""
     value = container.get(CUTSCENE_KEY) if isinstance(container, dict) else None
     if not isinstance(value, dict):
@@ -99,7 +103,11 @@ def cutscene_of(container, base_dir: str | Path | None) -> Cutscene | None:
     if sound_value is True:
         return Cutscene(pictures, bool(value.get("cascade")), None, keep_scene_music=True)
     if isinstance(sound_value, dict):
-        return Cutscene(pictures, bool(value.get("cascade")), bgm_value(sound_value, base_dir))
+        return Cutscene(
+            pictures,
+            bool(value.get("cascade")),
+            bgm_value(sound_value, base_dir, sounds),
+        )
     return Cutscene(pictures, bool(value.get("cascade")))
 
 

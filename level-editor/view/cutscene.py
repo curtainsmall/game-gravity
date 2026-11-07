@@ -16,6 +16,7 @@ from core.constants import (
     ROW_HEIGHT,
     TEXT,
 )
+from core.sound import key_label
 from view.widgets import (
     draw_button,
     draw_checkbox,
@@ -219,15 +220,15 @@ def draw_cutscene_page(
         surface.blit(label, (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2))
 
     if geometry["sound_path"] is not None:
-        bgm = state["sound"]["bgm"]
+        label = key_label(editor.sound_library, state["sound"].get("sound"))
         _draw_cell(
             surface,
             font,
             geometry["sound_path"],
-            f"过场音乐：{bgm or '（无）'}",
+            f"过场音乐：{label}",
             _selected(editor, ("sound_bgm",)),
         )
-        draw_button(surface, font, geometry["sound_browse"], "浏览…")
+        draw_button(surface, font, geometry["sound_browse"], "选择…")
         draw_button(surface, font, geometry["sound_preview"], "试听")
         loop_rect = geometry["sound_loop"]
         pygame.draw.rect(surface, (48, 48, 54), loop_rect)

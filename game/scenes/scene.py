@@ -18,6 +18,7 @@ from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from sound.bgm import Bgm, level_bgm
+from sound.library import library_sounds
 from trigger.trigger_system import TriggerSystem
 from world.follower import FollowSystem
 from world.level import (
@@ -122,10 +123,11 @@ class Scene:
             library_animations(game_settings, base_dir)
         )
         scene.animation_system.attach(objects, scene.player)
-        # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐
-        scene.bgm = level_bgm(level_definition, base_dir)
+        # 这一关的音乐也跟着关卡文件走：声音库在 game.json 里，曲子找不到就是没有音乐
+        sounds = library_sounds(game_settings, base_dir)
+        scene.bgm = level_bgm(level_definition, base_dir, sounds)
         # 进这一关之前的过场：没图就当作没有
-        scene.cutscene = cutscene_of(level_definition, base_dir)
+        scene.cutscene = cutscene_of(level_definition, base_dir, sounds)
         return scene
 
     @classmethod

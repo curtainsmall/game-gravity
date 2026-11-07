@@ -248,7 +248,7 @@ def handle_cutscene_click(editor: Editor, position: tuple, page: dict) -> None:
             editor.set_cutscene_sound_mode(mode)
             return
     if page["sound_browse"] is not None and page["sound_browse"].collidepoint(position):
-        editor.pick_cutscene_sound()
+        editor.open_sound_menu(("cutscene",))
         return
     if page["sound_preview"] is not None and page["sound_preview"].collidepoint(position):
         editor.preview_cutscene_sound()
@@ -311,9 +311,24 @@ def handle_cutscene_click(editor: Editor, position: tuple, page: dict) -> None:
             return
 
 
+def _handle_sound_menu_click(editor: Editor, menu: dict | None, position: tuple) -> bool:
+    """「选择…」摊开的声音下拉：点一条就写回；点别处只收起。开着就吃掉这次点击。"""
+    if editor.sound_menu is None:
+        return False
+    if menu is not None:
+        for rect, _, value in menu["rows"]:
+            if rect.collidepoint(position):
+                editor.choose_sound_menu(value)
+                return True
+    editor.close_sound_menu()
+    return True
+
+
 def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tuple) -> None:
     """关卡设置浮层：切页签、点字段、浏览图片/曲子、试听、应用/取消。"""
     geometry = settings_geometry(surface, editor)
+    if _handle_sound_menu_click(editor, geometry.get("sound_menu"), position):
+        return
     if geometry["apply"].collidepoint(position):
         editor.close_settings(True)
         return
@@ -333,7 +348,7 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         editor.pick_background()
         return
     if geometry["audio_browse"] is not None and geometry["audio_browse"].collidepoint(position):
-        editor.pick_level_audio()
+        editor.open_sound_menu(("level",))
         return
     if geometry["audio_preview"] is not None and geometry["audio_preview"].collidepoint(position):
         editor.preview_level_audio()
@@ -364,6 +379,23 @@ def handle_library_click(editor: Editor, position: tuple, page: dict) -> None:
         if row["rect"].collidepoint(position):
             editor.select_animation_key(row["key"])
             editor.open_animation_edit(row["key"])
+            return
+
+
+def handle_sound_library_click(editor: Editor, position: tuple, page: dict) -> None:
+    """声音库页：导入、试听、删除，以及点一行选中。"""
+    if page["import"].collidepoint(position):
+        editor.import_sound()
+        return
+    if page["preview"].collidepoint(position):
+        editor.preview_sound(editor.sound_selected)
+        return
+    if page["delete"].collidepoint(position):
+        editor.delete_sound(editor.sound_selected)
+        return
+    for row in page["rows"]:
+        if row["rect"].collidepoint(position):
+            editor.select_sound(row["key"])
             return
 
 
@@ -493,6 +525,8 @@ def handle_game_settings_click(
     """
     geometry = game_settings_geometry(surface, editor)
     panel = geometry["panel"]
+    if _handle_sound_menu_click(editor, geometry.get("sound_menu"), position):
+        return
     if editor.animation_edit is not None:
         handle_animation_edit_click(surface, editor, position)
         return
@@ -522,6 +556,11 @@ def handle_game_settings_click(
         return
     if editor.game_animation_tab():
         handle_library_click(editor, position, geometry["animation"])
+        if not panel.collidepoint(position):
+            editor.close_game_settings(False)
+        return
+    if editor.game_sound_library_tab():
+        handle_sound_library_click(editor, position, geometry["sound_library"])
         if not panel.collidepoint(position):
             editor.close_game_settings(False)
         return
@@ -578,13 +617,13 @@ def handle_game_settings_click(
         for scene in geometry["scenes"]:
             key = scene["key"]
             if scene["browse"].collidepoint(position):
-                editor.pick_game_audio(key)
+                editor.open_sound_menu(("game", key))
                 return
             if scene["preview"].collidepoint(position):
                 editor.preview_game_audio(key)
                 return
             if scene["path"].collidepoint(position):
-                editor.game_field = cells.index(("bgm", key))
+                editor.game_field = cells.index(("sound", key))
                 return
             if scene["loop"].collidepoint(position):
                 editor.game_field = cells.index(("loop", key))

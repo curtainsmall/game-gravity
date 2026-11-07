@@ -14,6 +14,7 @@ from core.constants import (
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
     GAME_SETTINGS_TABS,
+    GAME_SOUND_LIBRARY_TAB,
     HEADER,
     HIGHLIGHT,
     LEVEL_SELECT_WIDTH,
@@ -24,9 +25,16 @@ from core.constants import (
     TEXT,
 )
 from core.helpers import display_path, level_name_of
-from core.sound import SCENE_KEYS
+from core.sound import SCENE_KEYS, key_label
 from view.animation import draw_library_page, library_geometry, library_page_height
 from view.cutscene import cutscene_geometry, cutscene_page_height, draw_cutscene_page
+from view.sound import (
+    draw_sound_library,
+    draw_sound_menu,
+    sound_library_geometry,
+    sound_library_height,
+    sound_menu_geometry,
+)
 from view.widgets import (
     draw_button,
     draw_checkbox,
@@ -180,7 +188,7 @@ def settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
     """关卡设置：常规 / 玩家 / 声音 / 过场四页，底下是应用和取消。
 
     每页的字段都排成同高的行：常规是名称、宽高、翻转带、背景，玩家是跳高与速度的覆盖，
-    声音是这一关的 BGM、循环和淡入淡出；过场是级联、声音和一串图片卡片（见 view.cutscene）。
+    声音是这一关的 BGM（声音库里的键）、循环和淡入淡出；过场是级联、声音和一串图片卡片（见 view.cutscene）。
     只有当前页的那些行有矩形。
     """
     tab = editor.settings_tab
@@ -243,6 +251,8 @@ def settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
     button_y = panel.bottom - 12 - BUTTON_HEIGHT
     apply_rect = pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT)
     cancel_rect = pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT)
+    # 「选择…」摊开的声音下拉：锚在声音格（或过场音乐那一行）下面
+    anchor = page.get("sound_path") if page is not None else rows.get(8)
     return {
         "panel": panel,
         "tabs": tab_rects,
@@ -254,6 +264,7 @@ def settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         "cutscene": page,
         "apply": apply_rect,
         "cancel": cancel_rect,
+        "sound_menu": sound_menu_geometry(editor, anchor, surface.get_rect()),
     }
 
 
@@ -366,17 +377,17 @@ def _draw_player_settings(
 def _draw_level_sound_settings(
     surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
 ) -> None:
-    """声音页：这一关自己的 BGM、循环、淡入淡出。"""
+    """声音页：这一关自己的一声 BGM（库里的声音）、循环、淡入淡出。"""
     rows = geometry["rows"]
     _draw_settings_text_row(
         surface,
         font,
         rows[8],
-        f"BGM 路径：{editor.settings['bgm'] or '（无）'}",
+        f"声音：{key_label(editor.sound_library, editor.settings['sound'])}",
         editor.settings_field == 8,
         geometry["audio_browse"].left - rows[8].left - 12,
     )
-    draw_button(surface, font, geometry["audio_browse"], "浏览…")
+    draw_button(surface, font, geometry["audio_browse"], "选择…")
     draw_button(surface, font, geometry["audio_preview"], "试听")
 
     pygame.draw.rect(surface, (48, 48, 54), rows[9])
@@ -402,8 +413,8 @@ def _draw_level_sound_settings(
 
     for line_index, line in enumerate(
         (
-            "曲子路径相对 game.json；「应用」记进这一关，保存关卡时一起写盘。",
-            "循环关闭只放一遍；没有曲子就是这一关不放音乐。",
+            "「选择…」摊开声音库里的声音；新的音频在游戏配置的「声音库」页导入。",
+            "循环关闭只放一遍；没有选声音就是这一关不放音乐。",
         )
     ):
         surface.blit(
@@ -443,6 +454,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
 
     draw_button(surface, font, geometry["apply"], "应用")
     draw_button(surface, font, geometry["cancel"], "取消")
+    draw_sound_menu(surface, editor, font, geometry.get("sound_menu"))
 
 
 GAME_PANEL_WIDTH = 620
@@ -482,6 +494,10 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         # 动画集页有滚动，窗口矮的时候面板跟着矮
         max_height = max(240, surface.get_height() - HEADER - FOOTER - 8)
         height = min(library_page_height(GAME_CONTENT_TOP), max_height)
+    elif tab == GAME_SOUND_LIBRARY_TAB:
+        # 声音库页也是列表，窗口矮的时候面板跟着矮
+        max_height = max(240, surface.get_height() - HEADER - FOOTER - 8)
+        height = min(sound_library_height(GAME_CONTENT_TOP), max_height)
     elif tab == 2:                      # 制作名单
         card_heights = [_credit_card_height(card) for card in cards]
         content = sum(card_height + CREDIT_CARD_GAP for card_height in card_heights)
@@ -520,6 +536,7 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         "remove": None,
         "cutscene": None,
         "animation": None,
+        "sound_library": None,
         "note_top": content_top,
         "backgrounds": [],
         "apply": pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT),
@@ -557,6 +574,10 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         geometry["note_top"] = content_top + 202
     elif tab == GAME_ANIMATION_TAB:
         geometry["animation"] = library_geometry(surface, editor, panel, content_top)
+    elif tab == GAME_SOUND_LIBRARY_TAB:
+        geometry["sound_library"] = sound_library_geometry(
+            surface, editor, panel, content_top
+        )
     elif tab == 2:                      # 制作名单
         geometry["section"] = pygame.Rect(
             panel.left + MARGIN, content_top, row_width, ROW_HEIGHT
@@ -671,6 +692,16 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         geometry["hint"] = pygame.Rect(
             panel.left + MARGIN, content_top + 224, row_width, 44
         )
+    # 「选择…」摊开的声音下拉：锚在对应那一行下面
+    anchor = None
+    if geometry["cutscene"] is not None:
+        anchor = geometry["cutscene"].get("sound_path")
+    elif tab == 3:
+        target = (editor.sound_menu or {}).get("target") or ()
+        for scene in geometry["scenes"]:
+            if target[:1] == ("game",) and scene["key"] == target[1]:
+                anchor = scene["path"]
+    geometry["sound_menu"] = sound_menu_geometry(editor, anchor, surface.get_rect())
     return geometry
 
 
@@ -829,7 +860,7 @@ def _draw_game_credits(
 def _draw_game_sound(
     surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
 ) -> None:
-    """声音页：标题与制作名单两块，每块是路径、循环和淡入淡出。"""
+    """声音页：标题与制作名单两块，每块是库里的声音、循环和淡入淡出。"""
     for scene in geometry["scenes"]:
         key = scene["key"]
         values = editor.game_sound.get(key, {})
@@ -841,10 +872,10 @@ def _draw_game_sound(
             surface,
             font,
             scene["path"],
-            f"BGM 路径：{values.get('bgm') or '（无）'}",
-            _cell_selected(editor, ("bgm", key)),
+            f"声音：{key_label(editor.sound_library, values.get('sound'))}",
+            _cell_selected(editor, ("sound", key)),
         )
-        draw_button(surface, font, scene["browse"], "浏览…")
+        draw_button(surface, font, scene["browse"], "选择…")
         draw_button(surface, font, scene["preview"], "试听")
 
         selected = _cell_selected(editor, ("loop", key))
@@ -880,8 +911,8 @@ def _draw_game_sound(
 
     for line_index, line in enumerate(
         (
-            "曲子路径相对 game.json；「应用」把标题与制作名单写进 sounds。",
-            "循环关闭只放一遍；没有填曲子的一幕就不写进去。",
+            "「选择…」摊开声音库里的声音；新的音频在「声音库」页导入。",
+            "循环关闭只放一遍；没有选声音的一幕就不写进去。",
         )
     ):
         surface.blit(
@@ -914,6 +945,8 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         draw_cutscene_page(surface, editor, font, geometry["cutscene"])
     elif editor.game_animation_tab():
         draw_library_page(surface, editor, font, geometry["animation"])
+    elif editor.game_sound_library_tab():
+        draw_sound_library(surface, editor, font, geometry["sound_library"])
     elif editor.game_tab == 0:
         _draw_game_general(surface, editor, font, geometry)
     elif editor.game_tab == 2:
@@ -923,6 +956,7 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
 
     draw_button(surface, font, geometry["apply"], "应用")
     draw_button(surface, font, geometry["cancel"], "取消")
+    draw_sound_menu(surface, editor, font, geometry.get("sound_menu"))
 
     # 单条动画的编辑弹窗压在最上面
     if editor.animation_edit is not None:

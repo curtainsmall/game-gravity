@@ -153,7 +153,7 @@ class Level:
         self.width = COLS          # 关卡宽度，格
         self.height = ROWS         # 关卡高度，格
         self.background = ""       # 背景图，相对游戏根的路径；空串表示没有背景
-        self.sound: dict | None = None  # 这一关的音乐：{bgm, loop, fade_in, fade_out}；None 表示没有
+        self.sound: dict | None = None  # 这一关的音乐：{sound, loop, fade_in, fade_out}；None 表示没有
         self.cutscene: dict | None = None  # 进这一关之前的过场；None 表示没有
         self.flip_area_offsets = list(FLIP_AREA_OFFSETS_DEFAULT)  # 翻转带的高度
         self.blocks: list = []
@@ -199,10 +199,8 @@ class Level:
             definition["destination"] = copy.deepcopy(self.destination)
         # 背景、音乐、过场这三项在编辑器里都有字段，空着也照写（空值表示没有）
         definition["background"] = self.background
-        definition["sound"] = (
-            copy.deepcopy(self.sound)
-            if self.sound
-            else sound_to_object(sound_fields_of(None), keep_empty=True)
+        definition["sound"] = sound_to_object(
+            self.sound or {}, keep_empty=True
         )
         definition["cutscene"] = (
             copy.deepcopy(self.cutscene)
@@ -213,7 +211,10 @@ class Level:
 
     @classmethod
     def from_definition(
-        cls, definition: dict, animation_library: dict | None = None
+        cls,
+        definition: dict,
+        animation_library: dict | None = None,
+        sound_library: dict | None = None,
     ) -> "Level":
         level = cls()
         # 编辑器不认识的顶层键（老字段、手写的东西）原样留着，保存时照写回去
@@ -227,8 +228,13 @@ class Level:
         level.height = clamp_int(definition.get("height"), LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
         level.flip_area_offsets = _read_flip_area_offsets(definition, level.height)
         level.background = str(definition.get("background", "") or "")
-        sound = definition.get("sound")
-        level.sound = copy.deepcopy(sound) if isinstance(sound, dict) else None
+        # 音乐是一段链接（声音库的键 + 循环 + 淡入淡出）；老写的 bgm 路径在这里换成键
+        sound_value = definition.get("sound")
+        level.sound = (
+            sound_fields_of(sound_value, sound_library)
+            if isinstance(sound_value, dict)
+            else None
+        )
         cutscene = definition.get("cutscene")
         level.cutscene = copy.deepcopy(cutscene) if isinstance(cutscene, dict) else None
         level.destination = copy.deepcopy(definition.get("destination"))
