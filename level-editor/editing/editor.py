@@ -40,6 +40,7 @@ from core.constants import (
     KIND_PLANK,
     KIND_PLAYER,
     KIND_PORTAL,
+    KIND_SOUND,
     KIND_TEXTURE,
     KIND_TITLES,
     LEVEL_HEIGHT_MAX,
@@ -70,6 +71,7 @@ from core.constants import (
     TOOL_PORTAL,
     TOOL_SPECS,
     TOOL_ANIMATION,
+    TOOL_SOUND,
     TOOL_TEXTURE,
     TRIGGER_DEFAULT_MODE,
     TRIGGER_MODES,
@@ -188,6 +190,7 @@ class Editor:
         self.animation_selected = ""               # 动画集页选中的键
         self.animation_edit: dict | None = None    # 编辑单条动画的弹窗状态
         self.animation_link: dict | None = None    # 动画对象的「动画…」弹窗状态
+        self.sound_link: dict | None = None        # 声音对象的「声音…」弹窗状态
         self.animation_object_states: dict = {}    # 画布上每个动画对象的播放状态：id(entry) → {…}
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
@@ -513,6 +516,21 @@ class Editor:
             # 终点也只有一份
             level.destination = {"pos": [x, y], "size": list(size)}
         self.status = f"已添加{TOOL_SPECS[self.tool][0]}（{x}, {y}）。"
+
+    def add_sound_object(self) -> None:
+        """新建一个声音对象：没有位置和大小，建好就选中、属性面板跟着打开。"""
+        self.push_undo()
+        entry = {
+            "preset": sound.PRESET_GENERAL,
+            "follow": "",
+            "links": sound.new_object_links(),
+        }
+        self.level.sound_objects.append(entry)
+        self.creating = False
+        self.menu_open = False
+        self.dirty = True
+        self.select(KIND_SOUND, entry)
+        self.status = "已添加声音对象：在属性面板里选预设，再点「声音…」选声音。"
 
     def delete_entry(self, kind: str, entry: dict) -> None:
         self.push_undo()
@@ -1996,6 +2014,105 @@ class Editor:
         animation.set_link(link["links"], preset, action, side, str(key or ""))
         link["dropdown"] = None
 
+    # ---- 声音对象的链接弹窗 -----------------------------------------
+    def sound_link_button_label(self, entry: dict) -> str:
+        return f"声音…（{sound.preset_label(sound.preset_of(entry))}）"
+
+    def open_sound_link(self, entry: dict) -> None:
+        """打开声音对象的链接弹窗：通用一条，玩家按四个动作各一条。"""
+        if not isinstance(entry, dict):
+            return
+        self.sound_link = {
+            "entry": entry,
+            "preset": sound.preset_of(entry),
+            "links": copy.deepcopy(sound.object_links_of(entry)),
+            "dropdown": None,
+            "dropdown_scroll": 0,
+        }
+        self.status = "编辑这个声音对象的链接；确定后随关卡保存。"
+
+    def close_sound_link(self, commit: bool) -> None:
+        link = self.sound_link
+        self.sound_link = None
+        if link is None:
+            return
+        if not commit:
+            self.status = "已取消编辑声音链接。"
+            return
+        entry = link["entry"]
+        self.push_undo()
+        entry["preset"] = link["preset"]
+        entry["links"] = copy.deepcopy(link["links"])
+        self.dirty = True
+        self.status = (
+            f"声音对象：预设 {sound.preset_label(link['preset'])}，链接已更新。"
+        )
+
+    def sound_link_field(self, field: tuple) -> tuple:
+        """弹窗里的字段号：(预设, 动作)；通用预设没有动作。"""
+        preset = field[0] if field else sound.PRESET_GENERAL
+        action = field[1] if len(field) > 1 else ""
+        return preset, action
+
+    def sound_link_value(self, field: tuple) -> str:
+        link = self.sound_link
+        if link is None:
+            return ""
+        preset, action = self.sound_link_field(field)
+        return str(sound.object_link(link["links"], preset, action).get("sound") or "")
+
+    def sound_link_loop(self, field: tuple) -> bool:
+        link = self.sound_link
+        if link is None:
+            return False
+        preset, action = self.sound_link_field(field)
+        return bool(sound.object_link(link["links"], preset, action).get("loop", False))
+
+    def toggle_sound_link_loop(self, field: tuple) -> None:
+        link = self.sound_link
+        if link is None:
+            return
+        preset, action = self.sound_link_field(field)
+        loop = sound.object_link(link["links"], preset, action).get("loop", False)
+        sound.set_object_loop(link["links"], preset, action, not loop)
+        self.status = "链接循环：" + ("开" if not loop else "关")
+
+    def sound_link_options(self) -> list:
+        return [("（未选择）", "")] + [
+            (sound.key_label(self.sound_library, key), key)
+            for key in sorted(self.sound_library)
+        ]
+
+    def toggle_sound_link_dropdown(self, field: tuple) -> None:
+        link = self.sound_link
+        if link is None:
+            return
+        link["dropdown"] = None if link["dropdown"] == field else field
+        link["dropdown_scroll"] = 0
+
+    def close_sound_link_dropdown(self) -> None:
+        if self.sound_link is not None:
+            self.sound_link["dropdown"] = None
+
+    def scroll_sound_link_popup(self, delta: float) -> None:
+        """下拉列表比能放的多时，用滚轮往下翻。"""
+        link = self.sound_link
+        if link is None or link["dropdown"] is None:
+            return
+        total = len(self.sound_link_options())
+        visible = min(8, total)
+        limit = max(0, total - visible)
+        scroll = int(link.get("dropdown_scroll") or 0) + int(delta)
+        link["dropdown_scroll"] = max(0, min(scroll, limit))
+
+    def choose_sound_link(self, key: str) -> None:
+        link = self.sound_link
+        if link is None or link["dropdown"] is None:
+            return
+        preset, action = self.sound_link_field(link["dropdown"])
+        sound.set_object_link(link["links"], preset, action, str(key or ""))
+        link["dropdown"] = None
+
     def scroll_game_cards(self, delta: float) -> None:
         """滚轮：制作名单按像素上下滚（上界在几何里按内容高度夹住）；过场页走它自己的滚动。"""
         if self.game_cutscene_tab():
@@ -2317,6 +2434,10 @@ class Editor:
             if layout is not None:
                 self.import_texture(layout)
             return
+        # 声音对象也没有位置：不进创建模式，直接建一个并选中
+        if tool == TOOL_SOUND:
+            self.add_sound_object()
+            return
         self.tool = tool
         self.creating = True
         self.menu_open = False
@@ -2569,6 +2690,8 @@ class Editor:
         self.select_many(rest)
 
     def label_of(self, kind: str, entry: dict) -> str:
+        if kind == KIND_SOUND or "pos" not in entry:
+            return self.go_list_label(kind, entry)
         pos = entry["pos"]
         name = entry.get("name") or KIND_TITLES.get(kind, "对象")
         return f"{name}（{pos[0]}, {pos[1]}）"
@@ -2589,11 +2712,14 @@ class Editor:
     def go_list_objects(self) -> list:
         """列表里的对象：这一关能点选的全部对象，按种类排好，种类里保持原顺序。
 
-        和画布用同一份清单（stacked_entries）：视图菜单里关掉「显示贴图」时，
-        贴图既画不出来、也点不中，列表里跟着不列出来。
+        画布上的对象来自 stacked_entries（视图菜单里关掉「显示贴图」时贴图不列）；
+        声音对象没有位置和大小、不在画布上，但同样列在这里，点一行就能改它。
         """
+        entries = self.stacked_entries() + [
+            (KIND_SOUND, entry) for entry in self.level.sound_objects
+        ]
         return sorted(
-            self.stacked_entries(),
+            entries,
             key=lambda pair: KIND_ORDER_INDEX.get(pair[0], len(KIND_ORDER_INDEX)),
         )
     def go_list_counts(self) -> list:
@@ -2613,8 +2739,13 @@ class Editor:
         ]
 
     def go_list_label(self, kind: str, entry: dict) -> str:
-        """一行写什么：种类、名字（有的话）和位置（格，去掉多余的小数位）。"""
+        """一行写什么：种类、名字（有的话）和位置（格，去掉多余的小数位）。
+
+        声音对象没有位置，写预设就够了。
+        """
         title = KIND_TITLES.get(kind, "对象")
+        if kind == KIND_SOUND:
+            return f"{title}（{sound.preset_label(sound.preset_of(entry))}）"
         name = str(entry.get("name") or "").strip()
         position = entry.get("pos") or [0.0, 0.0]
         x, y = (f"{float(value):g}" for value in list(position)[:2])
@@ -2728,6 +2859,10 @@ class Editor:
         elif kind == KIND_ANIMATION:
             self.level.animation_objects = [
                 e for e in self.level.animation_objects if e is not entry
+            ]
+        elif kind == KIND_SOUND:
+            self.level.sound_objects = [
+                e for e in self.level.sound_objects if e is not entry
             ]
         elif kind == KIND_PLAYER:
             self.level.player = None
@@ -2887,6 +3022,12 @@ class Editor:
             return []
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
+        if kind == KIND_SOUND:
+            # 声音没有位置和大小：只有预设和跟随两格
+            return [
+                ("预设", sound.preset_label(sound.preset_of(entry))),
+                ("跟随", self.animation_follow_label(entry.get("follow"))),
+            ]
         pos = entry["pos"]
         rows = [("横坐标", number_text(pos[0])), ("纵坐标", number_text(pos[1]))]
         size = entry.get("size", [1.0, 1.0])
@@ -2924,7 +3065,6 @@ class Editor:
         elif kind == KIND_ANIMATION:
             rows.append(("跟随", self.animation_follow_label(entry.get("follow"))))
         return rows
-
     def dialog_checkbox(self, index: int) -> bool | None:
         """这一行是不是复选框：是的话返回当前勾没勾，不是返回 None。
 
@@ -3141,6 +3281,18 @@ class Editor:
                 current = str(entry.get("follow") or "")
                 index = values.index(current) if current in values else 0
                 entry["follow"] = values[(index + delta) % len(values)]
+        elif kind == KIND_SOUND:
+            if field == 0:                 # 预设：通用 / 玩家 循环
+                values = [value for _, value in sound.PRESETS]
+                current = sound.preset_of(entry)
+                index = values.index(current) if current in values else 0
+                entry["preset"] = values[(index + delta) % len(values)]
+            elif field == 1:               # 跟随：无 / 玩家 / 有名字的对象循环
+                options = self.animation_follow_options()
+                values = [value for _, value in options]
+                current = str(entry.get("follow") or "")
+                index = values.index(current) if current in values else 0
+                entry["follow"] = values[(index + delta) % len(values)]
         elif kind == KIND_TEXTURE:
             if field == 5:                 # 朝向：顺时针转一格（向上也照样写 up）
                 face = str(entry.get("face", FACE_ORDER[0]))
@@ -3210,6 +3362,10 @@ class Editor:
             return [("无", "")] + [(name, name) for name in names]
         if kind == KIND_ANIMATION and field == 4:
             return self.animation_follow_options()
+        if kind == KIND_SOUND and field == 0:
+            return [(label, value) for value, label in sound.PRESETS]
+        if kind == KIND_SOUND and field == 1:
+            return self.animation_follow_options()
         return None
 
     def dialog_option_value(self, field: int):
@@ -3234,6 +3390,10 @@ class Editor:
         if kind == KIND_TEXTURE and field == 7:
             return entry.get("follow") or ""
         if kind == KIND_ANIMATION and field == 4:
+            return str(entry.get("follow") or "")
+        if kind == KIND_SOUND and field == 0:
+            return sound.preset_of(entry)
+        if kind == KIND_SOUND and field == 1:
             return str(entry.get("follow") or "")
         return entry.get("face", FACE_ORDER[0])
 
@@ -3278,6 +3438,13 @@ class Editor:
                 entry["follow"] = value or ""
             elif kind == KIND_ANIMATION and field == 4:
                 entry["follow"] = value or ""
+            elif kind == KIND_SOUND and field == 0:
+                entry["preset"] = (
+                    value if value in (sound.PRESET_GENERAL, sound.PRESET_PLAYER)
+                    else sound.PRESET_GENERAL
+                )
+            elif kind == KIND_SOUND and field == 1:
+                entry["follow"] = value or ""
             else:
                 entry["face"] = value
         self.dropdown_field = None
@@ -3291,6 +3458,8 @@ class Editor:
             return None
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
+        if kind == KIND_SOUND:
+            return None                     # 声音只有预设一格，没有数字字段
         if field == 0:
             return entry["pos"][0]
         if field == 1:

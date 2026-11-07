@@ -61,6 +61,7 @@ from physics.body import Body
 from portal.portal import Portal
 from renderer.palette import color_for_kind
 from renderer.render_spec import PlaceholderFace, PlaceholderShape, RenderSpec
+from sound.objects import SoundSprite
 from trigger.trigger import (
     MODE_HOLD,
     MODE_ONCE,
@@ -186,6 +187,26 @@ def build_animation_objects(level_definition: LevelDefinition) -> list[GameObjec
         game_object.follow = str(entry.get("follow") or "").strip()
         game_object.sprite = AnimationSprite(
             str(entry.get("preset") or PRESET_GENERAL), entry.get("links")
+        )
+        sprites.append(game_object)
+    return sprites
+
+
+def build_sound_objects(level_definition: LevelDefinition) -> list[GameObject]:
+    """声音对象：只出声、不画不碰撞，和动画对象同级。
+
+    条目写 preset / follow / links；预设和链接由 sound.objects 解释，声音来自 game.json 的
+    声音库。声音对象不参与物理，所以没有位置、大小和 body，也不进关卡对象列表。
+    """
+    sprites = []
+    for entry in level_definition.get("sound_objects", []):
+        if not isinstance(entry, dict):
+            continue
+        game_object = GameObject(
+            kind=GameObjectKind.SOUND, follow=str(entry.get("follow") or "")
+        )
+        game_object.sound = SoundSprite(
+            str(entry.get("preset") or "general"), entry.get("links")
         )
         sprites.append(game_object)
     return sprites

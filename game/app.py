@@ -293,12 +293,14 @@ class App:
         user_settings.save_settings(self.user_settings)
 
     def set_paused(self, paused: bool) -> None:
-        """暂停：音乐跟着停住，回来接着放。"""
+        """暂停：音乐和音效都跟着停住，回来接着放。"""
         self.paused = paused
         if paused:
             self.sound.pause()
+            self.sound.pause_sounds()
         else:
             self.sound.resume()
+            self.sound.resume_sounds()
 
     # ---- 关卡切换 ---------------------------------------------------
     def show_toast(self, text: str) -> None:
@@ -345,6 +347,9 @@ class App:
         self.flip_edge = False
         # 同一首（过场里已经在放的那首）不会重头开始
         self.sound.play(scene.bgm)
+        # 上一关的音效先收声，再放这一关声音对象里 general 预设的
+        self.sound.stop_sounds()
+        scene.start_sounds(self.sound)
         self.fade_in_seconds = SCENE_FADE_SECONDS if fade_in else 0.0
 
     # ---- 过场 -------------------------------------------------------
@@ -359,6 +364,7 @@ class App:
         if self.scene is not None:
             self.scene.exit()
             self.scene = None
+        self.sound.stop_sounds()          # 离开关卡：这一关的音效收声
         self.cutscene_player = CutscenePlayer(cutscene, self.surface.get_size())
         self.cutscene_target = target
         self.cutscene_paused = False
@@ -405,6 +411,7 @@ class App:
         self.screen = Screen.ENDING
         self.credits_page = 0
         self.credits_elapsed = 0.0
+        self.sound.stop_sounds()
         self.sound.play(self.credits_bgm)
         self.fade_in_seconds = SCENE_FADE_SECONDS if fade_in else 0.0
 
@@ -448,6 +455,7 @@ class App:
         if self.scene is not None:
             self.scene.exit()
             self.scene = None
+        self.sound.stop_sounds()
         self.cutscene_player = None
         self.cutscene_target = ""
         self.cutscene_paused = False

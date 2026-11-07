@@ -186,6 +186,110 @@ def _read_seconds(value, default: float) -> float:
     return clamp_float(value, 0.0, MAX_FADE_SECONDS, default)
 
 
+# ---- 声音对象（关卡里的音效） ---------------------------------------
+PRESET_GENERAL = "general"
+PRESET_PLAYER = "player"
+PRESETS = ((PRESET_GENERAL, "通用"), (PRESET_PLAYER, "玩家"))
+PLAYER_ACTIONS = (
+    ("idle", "站立"),
+    ("run", "移动"),
+    ("jump", "上升"),
+    ("fall", "下落"),
+)
+PLAYER_ACTION_NAMES = {name for name, _ in PLAYER_ACTIONS}
+
+
+def preset_of(entry: dict) -> str:
+    preset = str(entry.get("preset") or PRESET_GENERAL) if isinstance(entry, dict) else ""
+    return preset if preset in (PRESET_GENERAL, PRESET_PLAYER) else PRESET_GENERAL
+
+
+def preset_label(preset: str) -> str:
+    return dict(PRESETS).get(preset, preset)
+
+
+def action_label(action: str) -> str:
+    return dict(PLAYER_ACTIONS).get(action, action)
+
+
+def new_object_link() -> dict:
+    return {"sound": "", "loop": False}
+
+
+def new_object_links() -> dict:
+    """声音对象的链接：通用一条，玩家按四个动作各一条（没有左右）。"""
+    return {
+        PRESET_GENERAL: new_object_link(),
+        PRESET_PLAYER: {action: new_object_link() for action, _ in PLAYER_ACTIONS},
+    }
+
+
+def object_links_of(entry: dict) -> dict:
+    """条目里的 links 补成完整形状：缺的预设/动作补空链接。"""
+    links = new_object_links()
+    value = entry.get("links") if isinstance(entry, dict) else None
+    if not isinstance(value, dict):
+        return links
+    links[PRESET_GENERAL] = _object_link(value.get(PRESET_GENERAL))
+    player = value.get(PRESET_PLAYER)
+    if isinstance(player, dict):
+        for action, _ in PLAYER_ACTIONS:
+            links[PRESET_PLAYER][action] = _object_link(player.get(action))
+    return links
+
+
+def _object_link(value) -> dict:
+    if isinstance(value, dict):
+        return {"sound": str(value.get("sound") or ""), "loop": bool(value.get("loop", False))}
+    return {"sound": str(value or ""), "loop": False}
+
+
+def object_link(links: dict, preset: str, action: str = "") -> dict:
+    """一条链接：预设 + 动作（通用预设没有动作）。"""
+    if preset == PRESET_GENERAL:
+        value = links.get(PRESET_GENERAL)
+        return value if isinstance(value, dict) else new_object_link()
+    pair = (links.get(PRESET_PLAYER) or {}).get(action)
+    return pair if isinstance(pair, dict) else new_object_link()
+
+
+def set_object_link(links: dict, preset: str, action: str, sound_key: str) -> None:
+    """只改链接指向的声音，循环开关保留。"""
+    value = object_link(links, preset, action)
+    _store_object_link(
+        links,
+        preset,
+        action,
+        {"sound": str(sound_key or ""), "loop": bool(value.get("loop", False))},
+    )
+
+
+def set_object_loop(links: dict, preset: str, action: str, loop: bool) -> None:
+    value = object_link(links, preset, action)
+    _store_object_link(
+        links,
+        preset,
+        action,
+        {"sound": str(value.get("sound") or ""), "loop": bool(loop)},
+    )
+
+
+def _store_object_link(
+    links: dict, preset: str, action: str, value: dict
+) -> None:
+    if preset == PRESET_GENERAL:
+        links[PRESET_GENERAL] = dict(value)
+        return
+    player = links.setdefault(PRESET_PLAYER, {})
+    player[action] = dict(value)
+
+
+def object_link_label(library: dict, link: dict) -> str:
+    """声音对象链接上显示什么：声音名；没有就（未选择）。"""
+    key = str((link or {}).get("sound") or "")
+    return key_label(library, key) if key else "（未选择）"
+
+
 # ---- 试听 -----------------------------------------------------------
 class Preview:
     """试听：编辑器自己的混音器，一次只放一首。

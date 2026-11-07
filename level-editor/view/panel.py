@@ -15,6 +15,7 @@ from core.constants import (
     HIGHLIGHT,
     KIND_HAS_NAME,
     KIND_ANIMATION,
+    KIND_SOUND,
     KIND_TEXTURE,
     MARGIN,
     ROW_HEIGHT,
@@ -64,6 +65,8 @@ def _detail_slot_kinds(editor) -> list:
             slots.append(("image", None))
     if kind == KIND_ANIMATION:
         slots.append(("anim_link", None))
+    if kind == KIND_SOUND:
+        slots.append(("sound_link", None))
     return slots
 
 
@@ -484,6 +487,15 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
             font,
             anim_link,
             editor.animation_link_button_label(editor.dialog["entry"]),
+        )
+
+    sound_link = detail_slot_rect(surface, editor, "sound_link")
+    if sound_link is not None and editor.dialog is not None:
+        draw_button(
+            surface,
+            font,
+            sound_link,
+            editor.sound_link_button_label(editor.dialog["entry"]),
         )
 
     surface.set_clip(previous_clip)

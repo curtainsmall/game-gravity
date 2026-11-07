@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from core import sound as sound_data
 from core.constants import (
     BUTTON_HEIGHT,
     DIALOG_BG,
@@ -22,7 +23,13 @@ from core.constants import (
     TEXT,
 )
 from core.sound import key_label
-from view.widgets import draw_button, draw_scrollbar
+from view.widgets import (
+    draw_button,
+    draw_checkbox,
+    draw_panel,
+    draw_scrollbar,
+    place_panel,
+)
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -134,6 +141,221 @@ def draw_sound_library(
 
     draw_button(surface, font, geometry["preview"], "试听 / 停止")
     draw_button(surface, font, geometry["delete"], "删除")
+
+
+# ---- 声音对象的链接弹窗 ---------------------------------------------
+LINK_PANEL_WIDTH = 560
+LINK_GENERAL_HEIGHT = 236
+LINK_PLAYER_HEIGHT = 320
+LINK_ROW = ROW_HEIGHT
+LINK_POPUP_ROWS = 8
+LINK_POPUP_ROW = ROW_HEIGHT
+
+
+def sound_link_geometry(surface: pygame.Surface, editor: "Editor") -> dict:
+    """声音对象的「声音…」弹窗：通用一条链接，玩家四个动作各一条。"""
+    link = editor.sound_link
+    general = link is not None and link["preset"] == sound_data.PRESET_GENERAL
+    height = LINK_GENERAL_HEIGHT if general else LINK_PLAYER_HEIGHT
+    panel = place_panel(surface, pygame.Rect(0, 0, LINK_PANEL_WIDTH, height))
+    left = panel.left + 16
+    width = panel.width - 32
+    title = pygame.Rect(left, panel.top + 10, width, 24)
+    preset = pygame.Rect(left, title.bottom + 6, 260, 24)
+    rows_top = preset.bottom + 10
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    rows = []
+    if link is not None:
+        if general:
+            y = rows_top
+            label = pygame.Rect(left, y, 70, 24)
+            loop = pygame.Rect(panel.right - 16 - 64, y, 64, 24)
+            field = pygame.Rect(left + 78, y, loop.left - 8 - (left + 78), 24)
+            rows.append({"kind": "general", "label": label, "field": field, "loop": loop})
+        else:
+            for action, action_text in sound_data.PLAYER_ACTIONS:
+                y = rows_top + len(rows) * LINK_ROW
+                label = pygame.Rect(left, y, 64, 24)
+                loop = pygame.Rect(panel.right - 16 - 64, y, 64, 24)
+                field = pygame.Rect(left + 72, y, loop.left - 8 - (left + 72), 24)
+                rows.append(
+                    {
+                        "kind": "player",
+                        "action": action,
+                        "label": label,
+                        "field": field,
+                        "loop": loop,
+                    }
+                )
+    hint = pygame.Rect(
+        left,
+        rows_top + max(1, len(rows)) * LINK_ROW + 8,
+        width,
+        20,
+    )
+    ok = pygame.Rect(panel.right - 16 - 76, button_y, 76, BUTTON_HEIGHT)
+    cancel = pygame.Rect(ok.left - 8 - 76, button_y, 76, BUTTON_HEIGHT)
+    geometry = {
+        "panel": panel,
+        "title": title,
+        "preset": preset,
+        "rows": rows,
+        "hint": hint,
+        "ok": ok,
+        "cancel": cancel,
+        "popup": None,
+        "popup_rects": [],
+    }
+    if link is not None and link["dropdown"] is not None:
+        anchor = _sound_link_field_rect(geometry, link["dropdown"])
+        if anchor is not None:
+            options = editor.sound_link_options()
+            geometry.update(
+                _sound_link_popup(panel, anchor, options, int(link.get("dropdown_scroll") or 0))
+            )
+    return geometry
+
+
+def _sound_link_field_rect(geometry: dict, field: tuple) -> pygame.Rect | None:
+    preset, action = field[0], field[1] if len(field) > 1 else ""
+    for row in geometry["rows"]:
+        if preset == sound_data.PRESET_GENERAL and row["kind"] == "general":
+            return row["field"]
+        if row["kind"] == "player" and row["action"] == action:
+            return row["field"]
+    return None
+
+
+def _sound_link_popup(
+    panel: pygame.Rect, anchor: pygame.Rect, options: list, scroll: int
+) -> dict:
+    visible = min(LINK_POPUP_ROWS, len(options))
+    height = max(1, visible) * LINK_POPUP_ROW + 2
+    top = anchor.bottom + 2
+    if top + height > panel.bottom - 8:
+        top = max(panel.top + 8, anchor.top - 2 - height)
+    popup = pygame.Rect(anchor.left, top, anchor.width, height)
+    scroll = max(0, min(int(scroll), max(0, len(options) - visible)))
+    rects = [
+        (
+            pygame.Rect(
+                popup.left,
+                popup.top + 1 + row * LINK_POPUP_ROW,
+                popup.width - 2,
+                LINK_POPUP_ROW,
+            ),
+            label,
+            value,
+        )
+        for row, (label, value) in enumerate(options[scroll : scroll + visible])
+    ]
+    return {"popup": popup, "popup_rects": rects, "popup_scroll": scroll}
+
+
+def draw_sound_link(
+    surface: pygame.Surface, editor: "Editor", font: pygame.font.Font
+) -> None:
+    link = editor.sound_link
+    if link is None:
+        return
+    geometry = sound_link_geometry(surface, editor)
+    panel = geometry["panel"]
+    draw_panel(surface, panel)
+    surface.blit(
+        font.render("声音对象：链接", True, TEXT),
+        (geometry["title"].left, geometry["title"].top),
+    )
+    preset = font.render(
+        f"预设：{sound_data.preset_label(link['preset'])}（在属性面板里改）", True, DIM_TEXT
+    )
+    surface.blit(preset, (geometry["preset"].left, geometry["preset"].top))
+
+    for row in geometry["rows"]:
+        label_text = (
+            sound_data.action_label(row["action"]) if row["kind"] == "player" else "声音"
+        )
+        label = font.render(label_text, True, TEXT)
+        surface.blit(
+            label, (row["label"].left, row["label"].centery - label.get_height() // 2)
+        )
+        field = link["dropdown"] is not None and _field_open(link, row)
+        preset_key = (
+            sound_data.PRESET_GENERAL
+            if row["kind"] == "general"
+            else sound_data.PRESET_PLAYER
+        )
+        action = "" if row["kind"] == "general" else row["action"]
+        value = sound_data.object_link_label(
+            editor.sound_library,
+            sound_data.object_link(link["links"], preset_key, action),
+        )
+        pygame.draw.rect(surface, (48, 48, 54), row["field"])
+        pygame.draw.rect(
+            surface, HIGHLIGHT if field else (86, 86, 94), row["field"], 1
+        )
+        text = font.render(value, True, TEXT)
+        surface.blit(
+            text,
+            (row["field"].left + 6, row["field"].centery - text.get_height() // 2),
+            (0, 0, max(1, row["field"].width - 20), text.get_height()),
+        )
+        triangle_x = row["field"].right - 10
+        pygame.draw.polygon(
+            surface,
+            HIGHLIGHT if field else TEXT,
+            [
+                (triangle_x - 4, row["field"].centery - 2),
+                (triangle_x + 4, row["field"].centery - 2),
+                (triangle_x, row["field"].centery + 4),
+            ],
+        )
+        action = "" if row["kind"] == "general" else row["action"]
+        preset_key = (
+            sound_data.PRESET_GENERAL if row["kind"] == "general" else sound_data.PRESET_PLAYER
+        )
+        draw_checkbox(
+            surface,
+            font,
+            row["loop"],
+            "循环",
+            editor.sound_link_loop((preset_key, action)),
+        )
+
+    hint = font.render(
+        "通用：关卡加载时放一次；玩家：按状态切换。勾「循环」就一直放。",
+        True,
+        DIM_TEXT,
+    )
+    surface.blit(
+        hint, (geometry["hint"].left, geometry["hint"].centery - hint.get_height() // 2)
+    )
+    draw_button(surface, font, geometry["ok"], "确定")
+    draw_button(surface, font, geometry["cancel"], "取消")
+
+    if geometry["popup"] is not None:
+        pygame.draw.rect(surface, (36, 36, 42), geometry["popup"])
+        pygame.draw.rect(surface, DIALOG_BORDER, geometry["popup"], 1)
+        current = editor.sound_link_value(link["dropdown"] or ())
+        for rect, label_text, value in geometry["popup_rects"]:
+            hovered = rect.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (80, 80, 90) if hovered else (48, 48, 54), rect)
+            pygame.draw.rect(surface, (86, 86, 94), rect, 1)
+            text = f"● {label_text}" if value == current else label_text
+            rendered = font.render(text, True, HIGHLIGHT if value == current else TEXT)
+            surface.blit(
+                rendered,
+                (rect.left + 6, rect.centery - rendered.get_height() // 2),
+                (0, 0, max(1, rect.width - 10), rendered.get_height()),
+            )
+
+
+def _field_open(link: dict, row: dict) -> bool:
+    field = link["dropdown"]
+    if field is None:
+        return False
+    if row["kind"] == "general":
+        return field[0] == sound_data.PRESET_GENERAL
+    return field[0] == sound_data.PRESET_PLAYER and len(field) > 1 and field[1] == row["action"]
 
 
 def _file_name(path: str | None) -> str:

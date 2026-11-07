@@ -20,6 +20,7 @@ from view.modals import (
     draw_switch_confirm,
 )
 from view.picker import draw_pick_menu
+from view.sound import draw_sound_link
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -50,6 +51,8 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_game_settings(surface, editor, font)
     if editor.animation_link is not None:
         draw_animation_link(surface, editor, font)
+    if editor.sound_link is not None:
+        draw_sound_link(surface, editor, font)
     if editor.startup:
         draw_startup(surface, font)
     if editor.level_select_open:

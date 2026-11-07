@@ -54,6 +54,7 @@ BUTTON_BG = (70, 70, 78)
 PREVIEW = (255, 230, 120, 90)
 TEXTURE_COLOR = (150, 150, 170)
 ANIMATION_COLOR = (110, 190, 220)
+SOUND_COLOR = (150, 225, 150)
 HANDLE_COLOR = (255, 255, 255)
 VIEW_MENU_WIDTH = 170          # 视图设置菜单宽度
 LEVEL_SELECT_WIDTH = 420       # 关卡列表浮层宽度
@@ -71,7 +72,8 @@ LEVEL_SELECT_WIDTH = 420       # 关卡列表浮层宽度
     TOOL_TEXTURE,
     TOOL_PORTAL,
     TOOL_ANIMATION,
-) = range(11)
+    TOOL_SOUND,
+) = range(12)
 
 TOOL_SPECS = {
     TOOL_BLOCK: ("方块", "rect"),
@@ -85,6 +87,7 @@ TOOL_SPECS = {
     TOOL_DEST: ("终点", "single"),
     TOOL_TEXTURE: ("贴图", "import"),   # import：选图直接导入，不进创建模式
     TOOL_ANIMATION: ("动画", "single"),
+    TOOL_SOUND: ("声音", "single"),
 }
 
 TOOL_ORDER = [
@@ -99,6 +102,7 @@ TOOL_ORDER = [
     TOOL_DEST,
     TOOL_TEXTURE,
     TOOL_ANIMATION,
+    TOOL_SOUND,
 ]
 
 # 新建时预览框用的颜色：和画布里这种对象本身的颜色一致
@@ -114,6 +118,7 @@ TOOL_COLORS = {
     TOOL_DEST: DESTINATION_COLOR,
     TOOL_TEXTURE: TEXTURE_COLOR,
     TOOL_ANIMATION: ANIMATION_COLOR,
+    TOOL_SOUND: SOUND_COLOR,
 }
 
 # ---- 默认值 ----
@@ -187,6 +192,7 @@ KIND_PLAYER = "player"
 KIND_DESTINATION = "destination"
 KIND_TEXTURE = "texture"
 KIND_ANIMATION = "animation"
+KIND_SOUND = "sound"
 MIN_SIZE = 0.05   # 对象最小宽高（格），防止拖成一条看不见的线
 HANDLE_PIXELS = 7  # 缩放手柄的热区半径（像素）：比画出来的把手大一点点
 NUMBER_TEXT_MAX_LENGTH = 8  # 属性面板里数字字段最多敲几个字符（含负号和小数点）
@@ -207,6 +213,7 @@ KIND_TITLES = {
     KIND_DESTINATION: "终点",
     KIND_TEXTURE: "贴图",
     KIND_ANIMATION: "动画",
+    KIND_SOUND: "声音",
 }
 
 # 左侧对象列表里的种类顺序（筛选菜单也按这个顺序列）
@@ -222,6 +229,7 @@ KIND_ORDER = (
     KIND_DESTINATION,
     KIND_TEXTURE,
     KIND_ANIMATION,
+    KIND_SOUND,
 )
 
 # ---- 触发行为 ----

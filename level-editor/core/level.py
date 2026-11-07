@@ -12,7 +12,7 @@ sounds 里，由「游戏配置」的声音页改（见 core.sound）。
 import copy
 import json
 
-from core import animation
+from core import animation, sound
 from core.constants import (
     BUTTON_SIZE,
     COLS,
@@ -56,6 +56,7 @@ LEVEL_KEYS = {
     "nozzles",
     "textures",
     "animation_objects",
+    "sound_objects",
     "player",
 }
 
@@ -165,6 +166,7 @@ class Level:
         self.nozzles: list = []
         self.textures: list = []   # 贴图：浮点世界矩形 + 图片名，不吸格子
         self.animation_objects: list = []  # 动画对象：pos/size + follow + 预设 + 链接
+        self.sound_objects: list = []      # 声音对象：预设 + 跟随 + 链接（没有位置、大小和左右）
         self.player: dict | None = None
         self.destination: dict | None = None
 
@@ -185,6 +187,7 @@ class Level:
                 "nozzles": copy.deepcopy(self.nozzles),
                 "textures": copy.deepcopy(self.textures),
                 "animation_objects": copy.deepcopy(self.animation_objects),
+                "sound_objects": copy.deepcopy(self.sound_objects),
             }
         )
         # 起点和终点都只有一份，没有就不写这个键。跳高、速度属于整个游戏，
@@ -280,6 +283,17 @@ class Level:
             entry.setdefault("preset", animation.PRESET_GENERAL)
             entry["links"] = animation.links_of(entry, animation_library)
             level.animation_objects.append(entry)
+        # 声音对象：只有预设和链接；没有位置、大小，也没有左右
+        level.sound_objects = []
+        for entry in copy.deepcopy(list(definition.get("sound_objects", []))):
+            if not isinstance(entry, dict):
+                continue
+            entry.pop("pos", None)
+            entry.pop("size", None)
+            entry.setdefault("preset", sound.PRESET_GENERAL)
+            entry.setdefault("follow", "")
+            entry["links"] = sound.object_links_of(entry)
+            level.sound_objects.append(entry)
 
         # 玩家：这里只放位置和大小，跳高/速度属于整个游戏（game.json，编辑器不写）；
         # 老关卡里写过的这几项原样留着，游戏读的时候当成这一关的覆盖值

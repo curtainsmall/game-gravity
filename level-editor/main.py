@@ -24,6 +24,7 @@ from editing.handlers import (
     handle_level_select_click,
     handle_pick_menu_click,
     handle_settings_click,
+    handle_sound_link_click,
     handle_switch_click,
     handle_toolbar,
 )
@@ -119,6 +120,19 @@ def run() -> None:
                         if rect.collidepoint(event.pos):
                             editor.create_game() if action == "create" else editor.open_game()
                             break
+            elif editor.sound_link is not None:
+                # 声音对象的链接弹窗：Esc 取消、回车确定，滚轮翻声音下拉
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    editor.close_sound_link(False)
+                elif event.type == pygame.KEYDOWN and event.key in (
+                    pygame.K_RETURN,
+                    pygame.K_KP_ENTER,
+                ):
+                    editor.close_sound_link(True)
+                elif event.type == pygame.MOUSEWHEEL:
+                    editor.scroll_sound_link_popup(-event.y)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    handle_sound_link_click(screen, editor, event.pos)
             elif editor.animation_link is not None:
                 # 动画对象的链接弹窗：Esc 取消、回车确定，滚轮翻下拉列表
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:

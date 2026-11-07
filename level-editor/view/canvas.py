@@ -23,6 +23,7 @@ from core.constants import (
     ITEM_COLOR,
     KIND_BUTTON,
     KIND_PORTAL,
+    KIND_SOUND,
     KIND_TEXTURE,
     MIN_SIZE,
     MOVABLE_COLOR,
@@ -210,10 +211,12 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for kind, entry in editor.selection:
             if kind == KIND_TEXTURE and not show_textures:
                 continue
+            if kind == KIND_SOUND:
+                continue                    # 声音对象没有位置，不在画布上描边
             if selected is not None and entry is selected[1]:
                 continue
             draw_object_outline(surface, layout, kind, entry, HIGHLIGHT, 1)
-        if selected is not None:
+        if selected is not None and selected[0] != KIND_SOUND:
             active_corner = editor.object_grab["corner"] if editor.object_grab else None
             draw_object_outline(
                 surface,

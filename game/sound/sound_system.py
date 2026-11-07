@@ -4,7 +4,8 @@ pygame 只有一个 mixer.music，做不了交叉淡入淡出：换曲时先让�
 （每帧在 update 里等，这期间是静音）再换文件开始新的，所以 fade_out 别写太长。
 音量 = 总音量 × 音乐音量，都在 .game/setting.json 里，曲子本身不再单独调。
 
-音效是另一条路：总音量 × 音效音量。游戏里现在还没有音效，先把音量和接口留着。
+音效是另一条路：走普通 channel，音量 = 总音量 × 音效音量。声音对象（sound.objects）
+拿到的 channel 由它自己管；这里只负责载入、缓存、停和调音量。
 没有声卡、曲子读不出来，都只是没有声音，游戏照常跑。
 """
 
@@ -22,6 +23,8 @@ class SoundSystem:
         self.current: Bgm | None = None      # 本该放着的那一首（可能还在等旧曲子淡出）
         self.paused = False
         self._wait_seconds = 0.0             # 旧曲子还要淡出多久，淡完再开始新的
+        self._cache: dict[str, pygame.mixer.Sound] = {}   # 音效：路径 → 载入好的声音
+        self._channels: list = []            # 正在放音效的 channel，暂停和统一停止用
 
     # ---- 初始化 -----------------------------------------------------
     def start(self) -> None:
@@ -99,6 +102,68 @@ class SoundSystem:
         pygame.mixer.music.unpause()
         self.paused = False
 
+    # ---- 音效 -------------------------------------------------------
+    def play_sound(self, path: str, loop: bool = False):
+        """放一段音效：走普通 channel，返回那个 channel（拿来停、淡出）。"""
+        if not self.ready:
+            return None
+        sound = self._load(path)
+        if sound is None:
+            return None
+        try:
+            channel = sound.play(-1 if loop else 0)
+        except pygame.error:
+            return None
+        if channel is None:
+            return None
+        channel.set_volume(self.sound_volume)
+        self._channels.append(channel)
+        return channel
+
+    def stop_channel(self, channel, fade_out: float = 0.0) -> None:
+        """停掉一个音效 channel：fade_out 秒淡出，0 就直接停。"""
+        if channel is None:
+            return
+        try:
+            if fade_out > 0.0:
+                channel.fadeout(self._milliseconds(fade_out))
+            else:
+                channel.stop()
+        except pygame.error:
+            pass
+        self._channels = [item for item in self._channels if item is not channel]
+
+    def stop_sounds(self, fade_out: float = 0.0) -> None:
+        """把所有音效停掉（离开关卡、进过场、回标题时用）。"""
+        for channel in list(self._channels):
+            self.stop_channel(channel, fade_out)
+        self._channels = []
+
+    def pause_sounds(self) -> None:
+        for channel in list(self._channels):
+            try:
+                channel.pause()
+            except pygame.error:
+                pass
+
+    def resume_sounds(self) -> None:
+        for channel in list(self._channels):
+            try:
+                channel.unpause()
+            except pygame.error:
+                pass
+
+    def _load(self, path: str) -> pygame.mixer.Sound | None:
+        sound = self._cache.get(path)
+        if sound is not None:
+            return sound
+        try:
+            sound = pygame.mixer.Sound(path)
+        except (pygame.error, OSError):
+            return None
+        self._cache[path] = sound
+        return sound
+
     # ---- 音量 -------------------------------------------------------
     @property
     def music_volume(self) -> float:
@@ -121,6 +186,11 @@ class SoundSystem:
             pygame.mixer.music.set_volume(self.music_volume)
         except pygame.error:
             pass
+        for channel in list(self._channels):
+            try:
+                channel.set_volume(self.sound_volume)
+            except pygame.error:
+                pass
 
     # ---- 内部 -------------------------------------------------------
     def _start(self, bgm: Bgm) -> None:

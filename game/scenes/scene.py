@@ -19,6 +19,7 @@ from renderer.render_system import RenderSystem
 from renderer.viewport import ViewMode
 from sound.bgm import Bgm, level_bgm
 from sound.library import library_sounds
+from sound.objects import SoundObjects
 from trigger.trigger_system import TriggerSystem
 from world.follower import FollowSystem
 from world.level import (
@@ -33,6 +34,7 @@ from world.level import (
     build_movable_blocks,
     build_player,
     build_portals,
+    build_sound_objects,
     build_textures,
     build_world,
     flip_area_offsets_of,
@@ -72,6 +74,8 @@ class Scene:
         self.player_debug: bool = False
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
         self.animation_system: AnimationSystem = AnimationSystem({})
+        # 声音对象：进关卡时放 general，之后按玩家状态切 player（由 App 给它混音器）
+        self.sound_objects: SoundObjects = SoundObjects({})
         self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
         self.cutscene: Cutscene | None = None  # 进这一关之前的过场
 
@@ -97,6 +101,8 @@ class Scene:
         )
         players = build_player(level_definition)
         buttons = build_buttons(level_definition)
+        # 声音库里键 → 路径：这一关的音乐、过场和声音对象都从这里取
+        sounds = library_sounds(game_settings, base_dir)
         objects = (
             build_blocks(level_definition)                 # 方块与木板
             + build_movable_blocks(level_definition)
@@ -123,12 +129,20 @@ class Scene:
             library_animations(game_settings, base_dir)
         )
         scene.animation_system.attach(objects, scene.player)
-        # 这一关的音乐也跟着关卡文件走：声音库在 game.json 里，曲子找不到就是没有音乐
-        sounds = library_sounds(game_settings, base_dir)
+        # 声音对象：预设/链接写在关卡里，声音来自 game.json 的声音库；没有 body，不进 objects
+        scene.sound_objects = SoundObjects(sounds)
+        scene.sound_objects.attach(
+            build_sound_objects(level_definition), objects, scene.player
+        )
+        # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐
         scene.bgm = level_bgm(level_definition, base_dir, sounds)
         # 进这一关之前的过场：没图就当作没有
         scene.cutscene = cutscene_of(level_definition, base_dir, sounds)
         return scene
+
+    def start_sounds(self, sound_system) -> None:
+        """App 进关卡时调用：把 general 预设的声音放出来。"""
+        self.sound_objects.start(sound_system)
 
     @classmethod
     def from_level_file(cls, path: str) -> "Scene":
@@ -164,6 +178,8 @@ class Scene:
         self.portal_system.update(self.objects, self.player)
         # 跟玩家的动画对象要在物理和传送之后才摆位
         self.animation_system.update(delta_seconds)
+        # 玩家状态变了就换 player 预设的声音
+        self.sound_objects.update()
 
     @property
     def destination_reached(self) -> bool:

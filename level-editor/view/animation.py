@@ -34,10 +34,8 @@ from view.widgets import (
     place_panel,
 )
 
-LIBRARY_ROW_HEIGHT = 54
+LIBRARY_ROW_HEIGHT = 28
 LIBRARY_ROW_GAP = 4
-LIBRARY_FRAME_SIZE = 30
-LIBRARY_FRAME_GAP = 4
 LIBRARY_SCROLLBAR = 10
 
 EDIT_PANEL_WIDTH = 700
@@ -81,26 +79,12 @@ def library_geometry(
         y = area.top + index * (LIBRARY_ROW_HEIGHT + LIBRARY_ROW_GAP) - round(scroll)
         if y + LIBRARY_ROW_HEIGHT < area.top or y > area.bottom:
             continue
-        row = pygame.Rect(area.left, y, area.width, LIBRARY_ROW_HEIGHT)
-        frames = clip.get("frames") or []
-        strip = pygame.Rect(row.left + 156, row.top + 8, row.width - 156 - 8, LIBRARY_FRAME_SIZE)
-        thumbs = []
-        x = strip.left
-        while x + LIBRARY_FRAME_SIZE <= strip.right:
-            index_in_clip = len(thumbs)
-            if index_in_clip >= len(frames):
-                break
-            thumbs.append(
-                (pygame.Rect(x, strip.top, LIBRARY_FRAME_SIZE, LIBRARY_FRAME_SIZE), index_in_clip)
-            )
-            x += LIBRARY_FRAME_SIZE + LIBRARY_FRAME_GAP
         rows.append(
             {
                 "key": key,
                 "clip": clip,
-                "rect": row,
-                "thumbs": thumbs,
-                "count": len(frames),
+                "rect": pygame.Rect(area.left, y, area.width, LIBRARY_ROW_HEIGHT),
+                "count": len(clip.get("frames") or []),
             }
         )
     return {
@@ -131,27 +115,22 @@ def draw_library_page(
 
     previous = surface.get_clip()
     surface.set_clip(previous.clip(area))
+    mouse = pygame.mouse.get_pos()
     for row in geometry["rows"]:
-        selected = row["key"] == editor.animation_selected
-        pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), row["rect"])
-        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), row["rect"], 1)
-        name = font.render(row["key"], True, HIGHLIGHT if selected else TEXT)
+        hovered = row["rect"].collidepoint(mouse)
+        pygame.draw.rect(surface, (100, 100, 110) if hovered else (48, 48, 54), row["rect"])
+        pygame.draw.rect(surface, (86, 86, 94), row["rect"], 1)
+        name = font.render(row["key"], True, HIGHLIGHT if hovered else TEXT)
         surface.blit(
             name,
             (row["rect"].left + 8, row["rect"].centery - name.get_height() // 2),
-            (0, 0, min(name.get_width(), 140), name.get_height()),
+            (0, 0, row["rect"].width - 120, name.get_height()),
         )
         count = font.render(f"共 {row['count']} 帧", True, DIM_TEXT)
         surface.blit(
             count,
-            (row["rect"].right - 8 - count.get_width(), row["rect"].top + 6),
+            (row["rect"].right - 8 - count.get_width(), row["rect"].centery - count.get_height() // 2),
         )
-        for thumb, index in row["thumbs"]:
-            _draw_frame(surface, thumb, row["clip"], index, editor.media_base_dir, False)
-        if row["count"] > len(row["thumbs"]) and row["thumbs"]:
-            more = font.render("…", True, DIM_TEXT)
-            last = row["thumbs"][-1][0]
-            surface.blit(more, (min(last.right + 4, row["rect"].right - 14), last.top + 2))
     surface.set_clip(previous)
     draw_scrollbar(surface, area, geometry["content"], geometry["scroll"])
 

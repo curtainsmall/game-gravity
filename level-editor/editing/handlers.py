@@ -6,6 +6,7 @@ import pygame
 
 from core.constants import ROW_HEIGHT
 from core.animation import PRESET_GENERAL, PRESET_PLAYER
+from core.sound import PRESET_GENERAL as SOUND_GENERAL, PRESET_PLAYER as SOUND_PLAYER
 from view.animation import animation_edit_geometry, animation_link_geometry
 from view.chrome import create_menu_rects, toolbar_rects
 from view.modals import (
@@ -30,6 +31,7 @@ from view.panel import (
 from view.dock import dock_tab_at
 from view.objects import go_list_geometry
 from view.picker import pick_menu_rects
+from view.sound import sound_link_geometry
 from view.widgets import stepper_rects
 
 if TYPE_CHECKING:
@@ -188,6 +190,13 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         editor.blur_number()
         if editor.dialog is not None:
             editor.open_animation_link(editor.dialog["entry"])
+        return
+    sound_link = detail_slot_rect(surface, editor, "sound_link")
+    if sound_link is not None and sound_link.collidepoint(position):
+        editor.blur_name()
+        editor.blur_number()
+        if editor.dialog is not None:
+            editor.open_sound_link(editor.dialog["entry"])
         return
     name_rect = detail_slot_rect(surface, editor, "name")
     if name_rect is not None and name_rect.collidepoint(position):
@@ -457,6 +466,41 @@ def handle_animation_edit_drag_motion(
 
 def handle_animation_edit_drag_release(editor: Editor) -> None:
     editor.finish_animation_frame_drag()
+
+
+def handle_sound_link_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """声音对象的链接弹窗：声音下拉、循环勾、确定/取消。"""
+    link = editor.sound_link
+    if link is None:
+        return
+    geometry = sound_link_geometry(surface, editor)
+    if geometry["popup"] is not None:
+        for rect, _, value in geometry["popup_rects"]:
+            if rect.collidepoint(position):
+                editor.choose_sound_link(value)
+                return
+        editor.close_sound_link_dropdown()
+        return
+    for row in geometry["rows"]:
+        if row["kind"] == "general":
+            field = (SOUND_GENERAL, "")
+        else:
+            field = (SOUND_PLAYER, row["action"])
+        if row["loop"].collidepoint(position):
+            editor.toggle_sound_link_loop(field)
+            return
+        if row["field"].collidepoint(position):
+            editor.toggle_sound_link_dropdown(field)
+            return
+    if geometry["ok"].collidepoint(position):
+        editor.close_sound_link(True)
+        return
+    if geometry["cancel"].collidepoint(position) or not geometry["panel"].collidepoint(
+        position
+    ):
+        editor.close_sound_link(False)
 
 
 def handle_animation_link_click(
