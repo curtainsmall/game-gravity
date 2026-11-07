@@ -231,7 +231,14 @@ class Editor:
         names = [name for name, _ in animation.PLAYER_ANIMATIONS]
         if action not in names:
             action = animation.DEFAULT_PREVIEW
-        frames, _, _, mirrored = animation.resolved(self.player_animations, action, "right")
+        side = str(
+            self.level.player.get(animation.PREVIEW_SIDE_KEY)
+            or animation.DEFAULT_PREVIEW_SIDE
+        )
+        sides = [name for name, _ in animation.PLAYER_SIDES]
+        if side not in sides:
+            side = animation.DEFAULT_PREVIEW_SIDE
+        frames, _, _, mirrored = animation.resolved(self.player_animations, action, side)
         if not frames:
             return None
         path = resolve_level_path(frames[0], self.media_base_dir)
@@ -487,11 +494,12 @@ class Editor:
             clamp_nozzle_power(nozzle)     # 力度至少比风区长 0.5 格
             level.nozzles.append(nozzle)
         elif self.tool == TOOL_PLAYER:
-            # 起点只有一份：再放一次就是把它挪过去；顺带记上默认要显示的动画
+            # 起点只有一份：再放一次就是把它挪过去；顺带记上默认显示的动画和方向
             level.player = {
                 "pos": [x, y],
                 "size": list(size),
                 animation.PREVIEW_KEY: animation.DEFAULT_PREVIEW,
+                animation.PREVIEW_SIDE_KEY: animation.DEFAULT_PREVIEW_SIDE,
             }
         elif self.tool == TOOL_DEST:
             # 终点也只有一份
@@ -2373,11 +2381,15 @@ class Editor:
             rows.append(("跟随", entry.get("follow") or "无"))
             rows.append(("隐藏", "是" if entry.get("hide") else "否"))
         elif kind == KIND_PLAYER:
-            # 起点上显示哪一套动画：只是给眼睛看的，方便核对玩家在关卡里的尺寸
+            # 起点上显示哪一套动画、哪一侧：只是给眼睛看的，方便核对玩家在关卡里的尺寸
             chosen = str(
                 entry.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW
             )
             rows.append(("动画", dict(animation.PLAYER_ANIMATIONS).get(chosen, "站立")))
+            side = str(
+                entry.get(animation.PREVIEW_SIDE_KEY) or animation.DEFAULT_PREVIEW_SIDE
+            )
+            rows.append(("方向", dict(animation.PLAYER_SIDES).get(side, "向右")))
         return rows
 
     def dialog_checkbox(self, index: int) -> bool | None:
@@ -2595,6 +2607,13 @@ class Editor:
                 current = str(entry.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
                 index = names.index(current) if current in names else 0
                 entry[animation.PREVIEW_KEY] = names[(index + delta) % len(names)]
+            elif field == 5:               # 显示哪一侧：右 / 左循环
+                sides = [name for name, _ in animation.PLAYER_SIDES]
+                current = str(
+                    entry.get(animation.PREVIEW_SIDE_KEY) or animation.DEFAULT_PREVIEW_SIDE
+                )
+                index = sides.index(current) if current in sides else 0
+                entry[animation.PREVIEW_SIDE_KEY] = sides[(index + delta) % len(sides)]
         elif kind == KIND_TEXTURE:
             if field == 5:                 # 朝向：顺时针转一格（向上也照样写 up）
                 face = str(entry.get("face", FACE_ORDER[0]))
@@ -2625,8 +2644,8 @@ class Editor:
     def dialog_options(self, field: int) -> list | None:
         """选择型字段的可选项 [(显示文字, 值)]；数字、开关字段返回 None。
 
-        朝向、传送门的目标、贴图的跟随、起点显示的动画，以及触发卡片上的来源、行为和
-        模式都从这里出下拉列表。
+        朝向、传送门的目标、贴图的跟随、起点显示的动画与方向，以及触发卡片上的来源、
+        行为和模式都从这里出下拉列表。
         """
         if self.dialog is None:
             return None
@@ -2664,6 +2683,8 @@ class Editor:
             return [("无", "")] + [(name, name) for name in names]
         if kind == KIND_PLAYER and field == 4:
             return [(label, name) for name, label in animation.PLAYER_ANIMATIONS]
+        if kind == KIND_PLAYER and field == 5:
+            return [(label, name) for name, label in animation.PLAYER_SIDES]
         return None
 
     def dialog_option_value(self, field: int):
@@ -2689,6 +2710,10 @@ class Editor:
             return entry.get("follow") or ""
         if kind == KIND_PLAYER and field == 4:
             return str(entry.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
+        if kind == KIND_PLAYER and field == 5:
+            return str(
+                entry.get(animation.PREVIEW_SIDE_KEY) or animation.DEFAULT_PREVIEW_SIDE
+            )
         return entry.get("face", FACE_ORDER[0])
 
     def toggle_dropdown(self, field: int) -> bool:
@@ -2732,6 +2757,8 @@ class Editor:
                 entry["follow"] = value or ""
             elif kind == KIND_PLAYER and field == 4:
                 entry[animation.PREVIEW_KEY] = value or animation.DEFAULT_PREVIEW
+            elif kind == KIND_PLAYER and field == 5:
+                entry[animation.PREVIEW_SIDE_KEY] = value or animation.DEFAULT_PREVIEW_SIDE
             else:
                 entry["face"] = value
         self.dropdown_field = None

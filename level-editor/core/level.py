@@ -185,13 +185,19 @@ class Level:
         )
         # 起点和终点都只有一份，没有就不写这个键。跳高、速度、动画属于整个游戏，
         # 写在 game.json 里；这一关原本写过的覆盖值原样留着，不动它。
-        # preview_animation 是起点自己的属性：在编辑器里显示哪一套动画，默认站立。
+        # preview_animation / preview_side 是起点自己的属性：在编辑器里显示哪一套动画的
+        # 哪一侧，默认站立、右侧。
         if self.player is not None:
             player = copy.deepcopy(self.player)
             action = str(player.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
             names = [name for name, _ in animation.PLAYER_ANIMATIONS]
             player[animation.PREVIEW_KEY] = (
                 action if action in names else animation.DEFAULT_PREVIEW
+            )
+            side = str(player.get(animation.PREVIEW_SIDE_KEY) or animation.DEFAULT_PREVIEW_SIDE)
+            sides = [name for name, _ in animation.PLAYER_SIDES]
+            player[animation.PREVIEW_SIDE_KEY] = (
+                side if side in sides else animation.DEFAULT_PREVIEW_SIDE
             )
             definition["player"] = player
         if self.destination is not None:
