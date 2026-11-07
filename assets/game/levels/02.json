@@ -1,15 +1,16 @@
 {
-  "width": 120,
-  "height": 8,
-  "flip_area_offsets": [0.0, 0.0],
+  "width": 240,
+  "height": 16,
+  "flip_area_offsets": [8.0, 8.0],
   "blocks": [],
   "planks": [],
   "movable_blocks": [],
-  "buttons": [],
+  "trigger_sources": [],
   "portals": [],
-  "items": [],
   "nozzles": [],
   "textures": [],
+  "animation_objects": [],
+  "sound_objects": [],
   "player": {
     "pos": [0.0, 0.0],
     "size": [1.0, 1.0]
@@ -18,10 +19,16 @@
     "pos": [7.0, 0.0],
     "size": [1.0, 1.0]
   },
+  "background": "",
   "sound": {
-    "bgm": "sounds/开场曲beta.mp3",
+    "sound": "开场曲beta",
     "loop": true,
     "fade_in": 0.5,
     "fade_out": 1.0
+  },
+  "cutscene": {
+    "pictures": [],
+    "cascade": false,
+    "sound": false
   }
 }

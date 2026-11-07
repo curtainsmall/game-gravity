@@ -1,0 +1,26 @@
+{
+  "width": 240,
+  "height": 16,
+  "flip_area_offsets": [8.0, 8.0],
+  "blocks": [],
+  "planks": [],
+  "movable_blocks": [],
+  "trigger_sources": [],
+  "portals": [],
+  "nozzles": [],
+  "textures": [],
+  "animation_objects": [],
+  "sound_objects": [],
+  "background": "textures/level3/background.png",
+  "sound": {
+    "sound": "",
+    "loop": true,
+    "fade_in": 0.5,
+    "fade_out": 1.0
+  },
+  "cutscene": {
+    "pictures": [],
+    "cascade": false,
+    "sound": false
+  }
+}
