@@ -81,6 +81,82 @@ def _fade_row(surface: pygame.Surface, rect: pygame.Rect, badge: pygame.Rect, en
     surface.blit(note, (badge.right + 12, badge.centery - note.get_height() // 2))
 
 
+# 结算画面的制作名单：一行为一个名字，一个职位的第一行带职位名。
+# 名单用满标题下面的整块区域，不给按钮留位置；名单放完以后按钮才出现在正中间。
+CREDITS_LINE_HEIGHT = 28
+CREDITS_PAGE_ROWS = 12         # 一页放几行（标题下方到窗口底部）；放不下的分页
+CREDITS_TOP_RATIO = 0.32       # 名单第一行的位置（窗口高度的比例）
+CREDITS_DOTS_BOTTOM = 22       # 页码小点离窗口底部多远
+CREDITS_FADE_IN = 0.25         # 每页淡入多久
+CREDITS_FADE_OUT = 0.2         # 翻到下一页之前淡出多久
+CREDITS_HOLD = 3.0             # 一页停多久再自动翻页
+CREDITS_PAGE_SECONDS = CREDITS_FADE_IN + CREDITS_HOLD + CREDITS_FADE_OUT
+
+
+def credits_lines(credits: dict) -> list:
+    """制作名单 → 行：职位和它的第一个名字同一行，后面的名字各占一行。"""
+    lines = []
+    for job, names in credits.items():
+        if not names:
+            lines.append((job, ""))
+            continue
+        lines.append((job, names[0]))
+        lines.extend((None, name) for name in names[1:])
+    return lines
+
+
+def credits_pages(credits: dict) -> list:
+    """按一页 CREDITS_PAGE_ROWS 行切页；没有名单也留一页（只是空白）。
+
+    一页如果从某个职位的续行开始，就把职位名再写一次，免得翻开新页只看到一排名字。
+    """
+    lines = credits_lines(credits)
+    pages = [
+        lines[index : index + CREDITS_PAGE_ROWS]
+        for index in range(0, len(lines), CREDITS_PAGE_ROWS)
+    ]
+    job = None
+    for page in pages:
+        if page and page[0][0] is None and job:
+            page[0] = (job, page[0][1])
+        for line in page:
+            if line[0]:
+                job = line[0]
+    return pages or [[]]
+
+
+def credits_alpha(elapsed: float) -> int:
+    """这一页当前的透明度：开头淡入，停一会儿，最后淡出交给结束画面。"""
+    if elapsed < CREDITS_FADE_IN:
+        return round(255 * max(0.0, elapsed) / CREDITS_FADE_IN)
+    hold_end = CREDITS_FADE_IN + CREDITS_HOLD
+    if elapsed > hold_end:
+        fade = min(1.0, (elapsed - hold_end) / CREDITS_FADE_OUT)
+        return round(255 * (1.0 - fade))
+    return 255
+
+
+def credits_done(app) -> bool:
+    """名单是不是放完了：最后一页也淡出完了，该换成按钮了。没有名单就直接算完。"""
+    if not credits_lines(app.credits):
+        return True
+    last = len(credits_pages(app.credits)) - 1
+    return app.credits_page >= last and app.credits_elapsed >= CREDITS_PAGE_SECONDS
+
+
+def _draw_credits_dots(surface: pygame.Surface, width: int, height: int, count: int, current: int) -> None:
+    """页数进度：走到第几页就把前几个点填实。"""
+    if count <= 1:
+        return
+    radius = 4
+    step = 18
+    left = width // 2 - (count - 1) * step // 2
+    y = height - CREDITS_DOTS_BOTTOM
+    for index in range(count):
+        color = ui.TEXT if index <= current else ui.BORDER
+        pygame.draw.circle(surface, color, (left + index * step, y), radius)
+
+
 def draw_ending(surface: pygame.Surface, app) -> None:
     surface.fill(ui.BACKGROUND)
     width, height = surface.get_size()
@@ -88,24 +164,37 @@ def draw_ending(surface: pygame.Surface, app) -> None:
     ui.draw_text(
         surface, "您已通过全部关卡", 20, center=(width // 2, int(height * 0.25)), color=ui.DIM_TEXT
     )
-    # 制作名单来自 game.json：职位在左边（右对齐），名字在右边（左对齐）
-    for index, (job, names) in enumerate(app.credits.items()):
-        y = int(height * 0.36) + index * 30
-        _draw_credits_row(surface, width, y, job, names)
 
-    rects = ui.ending_rects(surface)
-    ui.draw_button(surface, rects["title"], "返回标题界面")
-    ui.draw_button(surface, rects["quit"], "退出")
+    if credits_done(app):
+        # 名单放完了：没有名字，按钮出现在画面正中间
+        rects = ui.ending_rects(surface)
+        ui.draw_button(surface, rects["title"], "返回标题界面")
+        ui.draw_button(surface, rects["quit"], "退出")
+        return
 
+    # 制作名单来自 game.json：一行为一个名字，职位和第一个名字同一行。
+    # 横向还是「职位 | 名字」两栏，纵向用满标题下面到窗口底部的整块区域
+    pages = credits_pages(app.credits)
+    page = max(0, min(app.credits_page, len(pages) - 1))
+    lines = pages[page]
+    if lines:
+        layer = pygame.Surface((width, height), pygame.SRCALPHA)
+        top = int(height * CREDITS_TOP_RATIO)
+        for index, (job, name) in enumerate(lines):
+            y = top + index * CREDITS_LINE_HEIGHT
+            if job:
+                label = ui.font(18).render(job, True, ui.DIM_TEXT)
+                layer.blit(
+                    label,
+                    (width // 2 - 24 - label.get_width(), y - label.get_height() // 2),
+                )
+            if name:
+                text = ui.font(18).render(name, True, ui.TEXT)
+                layer.blit(text, (width // 2 + 24, y - text.get_height() // 2))
+        layer.set_alpha(credits_alpha(app.credits_elapsed))
+        surface.blit(layer, (0, 0))
 
-def _draw_credits_row(
-    surface: pygame.Surface, width: int, y: int, job: str, names: list[str]
-) -> None:
-    """一行制作名单：职位（暗色）贴着中线右侧结束，名字从另一侧开始。"""
-    label = ui.font(18).render(job, True, ui.DIM_TEXT)
-    surface.blit(label, (width // 2 - 24 - label.get_width(), y - label.get_height() // 2))
-    text = ui.font(18).render(", ".join(names), True, ui.TEXT)
-    surface.blit(text, (width // 2 + 24, y - text.get_height() // 2))
+    _draw_credits_dots(surface, width, height, len(pages), page)
 
 
 def draw_pause(surface: pygame.Surface) -> None:

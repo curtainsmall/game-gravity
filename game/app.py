@@ -81,6 +81,8 @@ class App:
         self.view_mode = ViewMode.VERTICAL_EXPAND
         self.paused = False
         self.settings_open = False
+        self.credits_page = 0        # 结局的制作名单停在第几页
+        self.credits_elapsed = 0.0   # 这一页已经展示了多少秒（管淡入淡出和自动翻页）
         self.level_scroll = 0
         self.unconsumed_seconds = 0.0
         self.jump_edge = False
@@ -252,10 +254,13 @@ class App:
             self.settings_open = False
 
     def handle_ending_event(self, event: pygame.event.Event) -> None:
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.quit_to_title()
+        """结局画面：空格跳过这一页；按钮要等最后一页淡入完才可点。"""
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            self.skip_credits_page()
             return
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if not screens.credits_done(self):
+                return
             rects = ui.ending_rects(self.surface)
             if rects["title"].collidepoint(event.pos):
                 self.quit_to_title()
@@ -386,8 +391,20 @@ class App:
 
     def finish_to_ending(self, fade_in: bool = False) -> None:
         self.screen = Screen.ENDING
+        self.credits_page = 0
+        self.credits_elapsed = 0.0
         self.sound.play(self.credits_bgm)
         self.fade_in_seconds = SCENE_FADE_SECONDS if fade_in else 0.0
+
+    def skip_credits_page(self) -> None:
+        """空格：把这一页的停留直接走完（随后淡出、翻页）；最后一页就让名单直接结束。"""
+        last = len(screens.credits_pages(self.credits)) - 1
+        if self.credits_page < last:
+            self.credits_elapsed = max(
+                self.credits_elapsed, screens.CREDITS_FADE_IN + screens.CREDITS_HOLD
+            )
+        else:
+            self.credits_elapsed = max(self.credits_elapsed, screens.CREDITS_PAGE_SECONDS)
 
     def next_playable_index(self, start: int) -> int | None:
         """从 start 起往后第一个能玩的关卡（不往回绕）。"""
@@ -450,6 +467,14 @@ class App:
             player.update(min(elapsed_seconds, CUTSCENE_STEP_SECONDS))
             if player.finished:
                 self.finish_cutscene()
+            return
+        if self.screen == Screen.ENDING:
+            # 制作名单分页：停够了就淡出、翻到下一页；最后一页淡出完就换成按钮
+            last = len(screens.credits_pages(self.credits)) - 1
+            self.credits_elapsed += min(elapsed_seconds, MAX_ELAPSED_SECONDS_PER_FRAME)
+            if self.credits_page < last and self.credits_elapsed >= screens.CREDITS_PAGE_SECONDS:
+                self.credits_page += 1
+                self.credits_elapsed = 0.0
             return
         if self.screen != Screen.PLAYING or self.paused or self.settings_open:
             return

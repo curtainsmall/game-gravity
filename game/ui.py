@@ -165,9 +165,11 @@ def back_rect(surface: pygame.Surface) -> pygame.Rect:
 
 # ---- 结算界面 -------------------------------------------------------
 def ending_rects(surface: pygame.Surface) -> dict:
+    """结局画面名单放完之后的两个按钮：竖着叠在画面正中间。"""
     width, height = surface.get_size()
     button_width, button_height = BUTTON_SIZE
-    top = int(height * 0.72)
+    total = button_height * 2 + BUTTON_GAP
+    top = (height - total) // 2
     return {
         "title": pygame.Rect((width - button_width) // 2, top, button_width, button_height),
         "quit": pygame.Rect(
