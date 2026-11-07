@@ -732,6 +732,12 @@
       "image": "textures/level1/按钮.png",
       "smooth": false,
       "face": "right"
+    },
+    {
+      "pos": [223.5, -0.5],
+      "size": [3.0, 16.5],
+      "image": "textures/level1/1x6 1.png",
+      "smooth": false
     }
   ],
   "player": {

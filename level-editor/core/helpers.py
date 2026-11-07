@@ -99,14 +99,6 @@ def nozzle_box(entry: dict) -> dict:
     return {"pos": [left, bottom], "size": [width, height]}
 
 
-def nozzle_marker_box(entry: dict) -> dict:
-    """喷口自己画出来的那块 1×1 标记，也按 face 摆。"""
-    marker = dict(entry)
-    marker["size"] = [1.0, 1.0]
-    left, bottom, width, height = facing_rect(marker, (1.0, 1.0))
-    return {"pos": [left, bottom], "size": [width, height]}
-
-
 def nozzle_face_axis(entry: dict) -> tuple[float, float]:
     """风区伸出的方向；老数据没有 face 时按 power 的正负当成上/下。"""
     face = entry.get("face")

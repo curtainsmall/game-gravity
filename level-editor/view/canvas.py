@@ -32,7 +32,6 @@ from core.constants import (
     PLAYER_COLOR,
     PORTAL_COLOR,
     PREVIEW,
-    RANGE_COLOR,
     RULER_STEP,
     TOOL_COLORS,
 )
@@ -40,7 +39,6 @@ from core.helpers import (
     normalize_rect,
     nozzle_box,
     nozzle_face_axis,
-    nozzle_marker_box,
     nozzle_power_tip,
     object_box,
     readable_color,
@@ -326,24 +324,10 @@ def _arrow_head(surface: pygame.Surface, tip: tuple, direction: tuple, color: tu
 
 
 def draw_nozzle(surface: pygame.Surface, layout: Layout, entry: dict, selected: bool = False) -> None:
-    """喷口：风区虚线框 + 底面朝 face 的三角 + 力度箭头（选中时末端有可拖的高亮把手）。"""
+    """喷口：风区（触发区）画成实心矩形，和其他机关一样；力度箭头照旧。"""
     range_rect = layout.entry_rect(nozzle_box(entry))
-    corners = [range_rect.topleft, range_rect.topright, range_rect.bottomright, range_rect.bottomleft]
-    for start, end in zip(corners, corners[1:] + corners[:1]):
-        _dotted_line(surface, start, end, RANGE_COLOR, dash=3.0, gap=3.0)
-
-    # 三角画在自己的 1×1 格里：底边中点落在 pos 上，尖端朝 face 那一边
-    marker = layout.entry_rect(nozzle_marker_box(entry))
-    step_x, step_y = nozzle_face_axis(entry)
-    if step_x:
-        base = marker.left if step_x > 0 else marker.right
-        apex = marker.right if step_x > 0 else marker.left
-        points = [(base, marker.top), (base, marker.bottom), (apex, marker.centery)]
-    else:
-        base = marker.bottom if step_y > 0 else marker.top
-        apex = marker.top if step_y > 0 else marker.bottom
-        points = [(marker.left, base), (marker.right, base), (marker.centerx, apex)]
-    pygame.draw.polygon(surface, NOZZLE_COLOR, points)
+    pygame.draw.rect(surface, NOZZLE_COLOR, range_rect)
+    pygame.draw.rect(surface, DIALOG_BORDER, range_rect, 1)
 
     draw_nozzle_power(surface, layout, entry, selected)
 

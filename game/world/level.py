@@ -459,7 +459,6 @@ def build_nozzles(level_definition: LevelDefinition) -> list[GameObject]:
         face = _read_face(entry)
         x, y = _read_position(entry)
         left, bottom, width, height = facing_rect(normalized, NOZZLE_DEFAULT_SIZE)
-        vertical = str(face) in (str(PlaceholderFace.UP), str(PlaceholderFace.DOWN))
         nozzles.append(
             GameObject(
                 kind=GameObjectKind.NOZZLE,
@@ -473,18 +472,10 @@ def build_nozzles(level_definition: LevelDefinition) -> list[GameObject]:
                     is_sensor=True,
                 ),
                 render=RenderSpec(
-                    # 上下朝向画三角，左右朝向画棱台：都是「窄端指向吹风方向」的标记
-                    placeholder_shape=(
-                        PlaceholderShape.TRIANGLE
-                        if vertical
-                        else PlaceholderShape.FRUSTUM
-                    ),
-                    placeholder_size_in_blocks=(1.0, 1.0),
+                    # 风区就是触发区：和其他机关一样画成实心矩形
+                    placeholder_size_in_blocks=(width, height),
                     placeholder_color=color_for_kind(GameObjectKind.NOZZLE),
                     placeholder_label_text=str(GameObjectKind.NOZZLE),
-                    placeholder_direction=1 if str(face) == str(PlaceholderFace.UP) else -1,
-                    placeholder_face=face,
-                    placeholder_has_axis=vertical,
                 ),
                 nozzle=Nozzle(face=str(face), power=power, origin=(x, y)),
             )
