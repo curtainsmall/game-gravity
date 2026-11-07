@@ -488,7 +488,10 @@ class Editor:
         if not self.undo_stack:
             self.status = "当前没有可撤销的操作。"
             return
+        # 关卡名就是文件名，不写在快照里：撤销时从当前关卡带过去，别把名字丢了
+        name = self.level.name
         self.level = Level.from_definition(self.undo_stack.pop())
+        self.level.name = name
         self.dialog = None
         self.dropdown_field = None
         self.selection = []
@@ -703,6 +706,9 @@ class Editor:
             return False
         old_path = os.path.normpath(self.path) if self.path else None
         wanted = file_name_for(self.level.name)
+        if not str(self.level.name or "").strip() and old_path is not None:
+            # 名字空着（比如老版本撤销把名字弄丢过）：沿用当前文件名，别改成「新关卡」
+            wanted = level_name_of(old_path)
         if self.levels_dir is None:
             self.status = "尚未打开游戏配置，无法保存关卡。"
             return False

@@ -343,7 +343,7 @@
       "name": "gate_1",
       "pos": [104.0, 8.0],
       "size": [2.0, 8.0],
-      "offset": [0, -8.0],
+      "offset": [0, -6.0],
       "triggers": [
         {
           "source": "button_1",
@@ -777,7 +777,7 @@
         {
           "source": "button_1",
           "behavior": "show",
-          "mode": "hold"
+          "mode": "once"
         }
       ],
       "hide": true
