@@ -13,7 +13,7 @@ from core.constants import (
     HEADER,
     HIGHLIGHT,
     KIND_HAS_NAME,
-    KIND_PLAYER,
+    KIND_ANIMATION,
     KIND_TEXTURE,
     MARGIN,
     ROW_HEIGHT,
@@ -52,7 +52,7 @@ def detail_viewport(panel: pygame.Rect) -> pygame.Rect:
 
 def _detail_slot_kinds(editor) -> list:
     """面板从上到下的槽位：名称、属性行（贴图在第 5 行后面插一个「选择图片」，
-    起点在最下面插一个「播放 / 暂停动画」）。"""
+    动画对象在最下面插一个「动画…」按钮）。"""
     slots = []
     kind = editor.dialog["kind"] if editor.dialog else None
     if kind in KIND_HAS_NAME:
@@ -61,8 +61,8 @@ def _detail_slot_kinds(editor) -> list:
         slots.append(("row", index))
         if kind == KIND_TEXTURE and index == 4:
             slots.append(("image", None))
-    if kind == KIND_PLAYER:
-        slots.append(("play", None))
+    if kind == KIND_ANIMATION:
+        slots.append(("anim_link", None))
     return slots
 
 
@@ -150,10 +150,10 @@ def detail_panel_rect(surface: pygame.Surface) -> pygame.Rect:
 
 
 def detail_slots(surface: pygame.Surface, editor: Editor) -> list:
-    """面板从上到下的槽位：('name', None) / ('row', 字段下标) / ('image', None) / ('play', None)。
+    """面板从上到下的槽位：('name', None) / ('row', 字段下标) / ('image', None) / ('anim_link', None)。
 
     有名字的对象最上面是名称输入框；贴图的「图片」下面插一个「选择图片」按钮；
-    起点最下面插一个「播放 / 暂停动画」按钮。内容按像素滚动，超出可视区的部分绘制时裁掉。
+    动画对象最下面插一个「动画…」按钮。内容按像素滚动，超出可视区的部分绘制时裁掉。
     """
     panel = detail_panel_rect(surface)
     viewport = detail_viewport(panel)
@@ -467,9 +467,14 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
         text = font.render("选择图片", True, TEXT)
         surface.blit(text, (image_rect.left + 8, image_rect.centery - text.get_height() // 2))
 
-    play_rect = detail_slot_rect(surface, editor, "play")
-    if play_rect is not None:
-        draw_button(surface, font, play_rect, editor.start_preview_button_label())
+    anim_link = detail_slot_rect(surface, editor, "anim_link")
+    if anim_link is not None and editor.dialog is not None:
+        draw_button(
+            surface,
+            font,
+            anim_link,
+            editor.animation_link_button_label(editor.dialog["entry"]),
+        )
 
     surface.set_clip(previous_clip)
     draw_scrollbar(surface, viewport, detail_content_height(editor), scroll)

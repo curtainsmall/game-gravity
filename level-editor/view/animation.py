@@ -1,21 +1,20 @@
-"""游戏配置里的「玩家动画」页：五个动作各有一条左右分开的帧动画。
+"""动画相关的界面：游戏配置里的「动画集」页、单条动画的编辑弹窗、动画对象的链接弹窗。
 
-上面一行是动作页签（站立 / 移动 / 上升 / 下落 / 翻转）；下面一行是方向下拉框、
-循环开关和「＋ / − / 预览」；再下面是这一侧帧的缩略图格子，每格一张图、下面一个
-停留时长（秒）。点缩略图选中一帧，按住拖动换顺序；点时长框直接敲数字，回车落下。
-哪一侧空着都不用管：游戏里会用另一侧镜像，预览也照这个样子放（见 core.animation.resolved）。
-GIF 加进来时由导入那一步拆成同名文件夹里的一串 PNG（见 editing.anim_import）。
+- 动画集页只列 game.json 动画库里的条目：键名 + 一行帧缩略图，点一行打开编辑弹窗。
+- 编辑弹窗：改键名、加/删/拖动帧、改每帧停留时长、循环、预览。
+- 链接弹窗：动画对象自己的预设（通用 / 玩家）和每个动作左/右链接；链接的是动画库的键。
 """
 
 import pygame
 
 from core.animation import (
-    DEFAULT_HOLD,
-    PLAYER_ANIMATIONS,
-    PLAYER_SIDES,
-    SIDE_NAMES,
+    GENERAL_CLIP,
+    PLAYER_ACTIONS,
+    PRESET_GENERAL,
+    PRESET_PLAYER,
+    PRESETS,
     holds_of,
-    resolved,
+    preset_label,
 )
 from core.constants import (
     BUTTON_HEIGHT,
@@ -36,427 +35,306 @@ from view.widgets import (
     place_panel,
 )
 
-ANIMATION_TAB_HEIGHT = 24
-ANIMATION_TAB_GAP = 4
-ANIMATION_TAB_WIDTH = 72
-ANIMATION_ROW_GAP = 6           # 页签与第二行、第二行与格子区之间的空隙
-ANIMATION_CONTROLS_HEIGHT = 24
-SIDE_BUTTON_WIDTH = 118
-LOOP_WIDTH = 76
-SMALL_BUTTON_WIDTH = 26
-PREVIEW_BUTTON_WIDTH = 62
+LIBRARY_ROW_HEIGHT = 54
+LIBRARY_ROW_GAP = 4
+LIBRARY_FRAME_SIZE = 30
+LIBRARY_FRAME_GAP = 4
+LIBRARY_SCROLLBAR = 10
 
-CELL_WIDTH = 100
-CELL_HEIGHT = 100
-CELL_GAP = 8
-THUMB_HEIGHT = 64
-DELAY_HEIGHT = 20
-DELAY_WIDTH = 64
-SCROLLBAR_WIDTH = 10            # 格子区右边留出来给滚动条
+EDIT_PANEL_WIDTH = 700
+EDIT_PANEL_HEIGHT = 480
+EDIT_CELL_WIDTH = 100
+EDIT_CELL_HEIGHT = 96
+EDIT_THUMB_HEIGHT = 64
+EDIT_CELL_GAP = 8
+EDIT_DELAY_WIDTH = 64
+EDIT_DELAY_HEIGHT = 20
 
-ANIMATION_HEAD_HEIGHT = (
-    ANIMATION_TAB_HEIGHT + ANIMATION_ROW_GAP + ANIMATION_CONTROLS_HEIGHT + ANIMATION_ROW_GAP
-)
-ANIMATION_GRID_ROWS = 3         # 面板默认留三行格子的高度
-
-PREVIEW_PANEL_WIDTH = 420
-PREVIEW_PANEL_HEIGHT = 430
-PREVIEW_IMAGE_HEIGHT = 250
-
-TOOLTIP_MAX_WIDTH = 340
-TOOLTIP_PAD = 6
-TOOLTIP_LINE_GAP = 2
+LINK_PANEL_WIDTH = 560
+LINK_GENERAL_HEIGHT = 220
+LINK_PLAYER_HEIGHT = 372
+LINK_ROW_HEIGHT = 28
+LINK_POPUP_ROW = 22
+LINK_POPUP_ROWS = 8
 
 
-def animation_page_height(top_offset: int) -> int:
-    grid = ANIMATION_GRID_ROWS * CELL_HEIGHT + (ANIMATION_GRID_ROWS - 1) * CELL_GAP
-    foot = CELL_GAP + ROW_HEIGHT + ANIMATION_ROW_GAP + BUTTON_HEIGHT + 12
-    return top_offset + ANIMATION_HEAD_HEIGHT + grid + foot
+def library_page_height(top_offset: int) -> int:
+    return top_offset + 32 + 5 * (LIBRARY_ROW_HEIGHT + LIBRARY_ROW_GAP) + 46
 
 
-def animation_geometry(
+def library_geometry(
     surface: pygame.Surface, editor, panel: pygame.Rect, top: int
 ) -> dict:
-    """玩家动画页的几何：动作页签、方向与开关、格子区和预览用的那一套。"""
+    """动画集页：新建按钮、动画列表和滚动。"""
     left = panel.left + MARGIN
     width = panel.width - 2 * MARGIN
-
-    tabs = []
-    x = left
-    for index, (_, label) in enumerate(PLAYER_ANIMATIONS):
-        tabs.append(
-            (pygame.Rect(x, top, ANIMATION_TAB_WIDTH, ANIMATION_TAB_HEIGHT), index, label)
+    new = pygame.Rect(left, top, 96, 24)
+    hint = pygame.Rect(left + 104, top, width - 104, 24)
+    list_top = top + 32
+    list_bottom = panel.bottom - 12 - BUTTON_HEIGHT - 10
+    area = pygame.Rect(left, list_top, width - LIBRARY_SCROLLBAR - 6, max(24, list_bottom - list_top))
+    items = editor.animation_library_items()
+    content = max(0, len(items) * (LIBRARY_ROW_HEIGHT + LIBRARY_ROW_GAP) - LIBRARY_ROW_GAP)
+    scroll = max(0.0, min(float(editor.animation_library_scroll), max(0.0, content - area.height)))
+    editor.animation_library_scroll = scroll
+    rows = []
+    for index, (key, clip) in enumerate(items):
+        y = area.top + index * (LIBRARY_ROW_HEIGHT + LIBRARY_ROW_GAP) - round(scroll)
+        if y + LIBRARY_ROW_HEIGHT < area.top or y > area.bottom:
+            continue
+        row = pygame.Rect(area.left, y, area.width, LIBRARY_ROW_HEIGHT)
+        frames = clip.get("frames") or []
+        strip = pygame.Rect(row.left + 156, row.top + 8, row.width - 156 - 8, LIBRARY_FRAME_SIZE)
+        thumbs = []
+        x = strip.left
+        while x + LIBRARY_FRAME_SIZE <= strip.right:
+            index_in_clip = len(thumbs)
+            if index_in_clip >= len(frames):
+                break
+            thumbs.append(
+                (pygame.Rect(x, strip.top, LIBRARY_FRAME_SIZE, LIBRARY_FRAME_SIZE), index_in_clip)
+            )
+            x += LIBRARY_FRAME_SIZE + LIBRARY_FRAME_GAP
+        rows.append(
+            {
+                "key": key,
+                "clip": clip,
+                "rect": row,
+                "thumbs": thumbs,
+                "count": len(frames),
+            }
         )
-        x += ANIMATION_TAB_WIDTH + ANIMATION_TAB_GAP
+    return {
+        "new": new,
+        "hint": hint,
+        "area": area,
+        "rows": rows,
+        "content": content,
+        "scroll": scroll,
+        "empty": not items,
+    }
 
-    controls_top = top + ANIMATION_TAB_HEIGHT + ANIMATION_ROW_GAP
-    side = pygame.Rect(left, controls_top, SIDE_BUTTON_WIDTH, ANIMATION_CONTROLS_HEIGHT)
-    loop = pygame.Rect(
-        side.right + 8, controls_top, LOOP_WIDTH, ANIMATION_CONTROLS_HEIGHT
-    )
-    preview = pygame.Rect(
-        left + width - PREVIEW_BUTTON_WIDTH, controls_top, PREVIEW_BUTTON_WIDTH, ANIMATION_CONTROLS_HEIGHT
-    )
-    remove = pygame.Rect(
-        preview.left - 6 - SMALL_BUTTON_WIDTH,
-        controls_top + 1,
-        SMALL_BUTTON_WIDTH,
-        ANIMATION_CONTROLS_HEIGHT - 2,
-    )
-    add = pygame.Rect(
-        remove.left - 4 - SMALL_BUTTON_WIDTH,
-        controls_top + 1,
-        SMALL_BUTTON_WIDTH,
-        ANIMATION_CONTROLS_HEIGHT - 2,
-    )
 
-    grid_top = top + ANIMATION_HEAD_HEIGHT
-    hint_top = panel.bottom - 12 - BUTTON_HEIGHT - 6 - ROW_HEIGHT
-    grid = pygame.Rect(left, grid_top, width - SCROLLBAR_WIDTH, max(24, hint_top - 8 - grid_top))
-    hint = pygame.Rect(left, hint_top, width, ROW_HEIGHT)
+def draw_library_page(
+    surface: pygame.Surface, editor, font: pygame.font.Font, geometry: dict
+) -> None:
+    draw_button(surface, font, geometry["new"], "新建动画")
+    hint = font.render("点一行编辑；被动画对象引用着的动画不能改名或删除", True, DIM_TEXT)
+    surface.blit(hint, (geometry["hint"].left, geometry["hint"].centery - hint.get_height() // 2))
 
-    clip = editor.animation_clip()
-    frames = clip["frames"]
-    holds = holds_of(clip)
+    area = geometry["area"]
+    pygame.draw.rect(surface, (44, 44, 50), area)
+    pygame.draw.rect(surface, (70, 70, 78), area, 1)
+    if geometry["empty"]:
+        text = font.render("还没有动画：点「新建动画」开始。", True, DIM_TEXT)
+        surface.blit(text, (area.centerx - text.get_width() // 2, area.centery - 8))
+        return
 
-    columns = max(1, (grid.width + CELL_GAP) // (CELL_WIDTH + CELL_GAP))
+    previous = surface.get_clip()
+    surface.set_clip(previous.clip(area))
+    for row in geometry["rows"]:
+        selected = row["key"] == editor.animation_selected
+        pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), row["rect"])
+        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), row["rect"], 1)
+        name = font.render(row["key"], True, HIGHLIGHT if selected else TEXT)
+        surface.blit(
+            name,
+            (row["rect"].left + 8, row["rect"].centery - name.get_height() // 2),
+            (0, 0, min(name.get_width(), 140), name.get_height()),
+        )
+        count = font.render(f"共 {row['count']} 帧", True, DIM_TEXT)
+        surface.blit(
+            count,
+            (row["rect"].right - 8 - count.get_width(), row["rect"].top + 6),
+        )
+        for thumb, index in row["thumbs"]:
+            _draw_frame(surface, thumb, row["clip"], index, editor.media_base_dir, False)
+        if row["count"] > len(row["thumbs"]) and row["thumbs"]:
+            more = font.render("…", True, DIM_TEXT)
+            last = row["thumbs"][-1][0]
+            surface.blit(more, (min(last.right + 4, row["rect"].right - 14), last.top + 2))
+    surface.set_clip(previous)
+    draw_scrollbar(surface, area, geometry["content"], geometry["scroll"])
+
+
+# ---- 单条动画的编辑弹窗 ---------------------------------------------
+def animation_edit_geometry(surface: pygame.Surface, editor) -> dict:
+    edit = editor.animation_edit
+    width = min(EDIT_PANEL_WIDTH, max(360, surface.get_width() - 2 * MARGIN))
+    panel = place_panel(surface, pygame.Rect(0, 0, width, EDIT_PANEL_HEIGHT))
+    if edit is None:
+        return {"panel": panel}
+    left = panel.left + 16
+    width = panel.width - 32
+    title = pygame.Rect(left, panel.top + 10, width, 24)
+    name = pygame.Rect(left, title.bottom + 8, width, 24)
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    controls_y = button_y - 8 - 24
+    grid = pygame.Rect(
+        left, name.bottom + 10, width - LIBRARY_SCROLLBAR - 6, max(24, controls_y - 10 - (name.bottom + 10))
+    )
+    columns = max(1, (grid.width + EDIT_CELL_GAP) // (EDIT_CELL_WIDTH + EDIT_CELL_GAP))
+    frames = edit["frames"]
+    holds = [animation_hold(value) for value in holds_of({"frames": frames, "holds": edit["holds"]})]
     rows = (len(frames) + columns - 1) // columns if frames else 0
-    content_height = max(0, rows * (CELL_HEIGHT + CELL_GAP) - CELL_GAP)
-    scroll = max(0.0, min(float(editor.animation_scroll), max(0.0, content_height - grid.height)))
-    editor.animation_scroll = scroll
-
+    content = max(0, rows * (EDIT_CELL_HEIGHT + EDIT_CELL_GAP) - EDIT_CELL_GAP)
+    scroll = max(0.0, min(float(edit["scroll"]), max(0.0, content - grid.height)))
+    edit["scroll"] = scroll
     cells = []
-    delays = []
     for index, frame in enumerate(frames):
         column = index % columns
         row = index // columns
         thumb = pygame.Rect(
-            grid.left + column * (CELL_WIDTH + CELL_GAP),
-            grid.top + row * (CELL_HEIGHT + CELL_GAP) - round(scroll),
-            CELL_WIDTH,
-            THUMB_HEIGHT,
+            grid.left + column * (EDIT_CELL_WIDTH + EDIT_CELL_GAP),
+            grid.top + row * (EDIT_CELL_HEIGHT + EDIT_CELL_GAP) - round(scroll),
+            EDIT_CELL_WIDTH,
+            EDIT_THUMB_HEIGHT,
         )
         if thumb.bottom < grid.top or thumb.top > grid.bottom:
             continue
         delay = pygame.Rect(
-            thumb.centerx - DELAY_WIDTH // 2,
+            thumb.centerx - EDIT_DELAY_WIDTH // 2,
             thumb.bottom + 4,
-            DELAY_WIDTH,
-            DELAY_HEIGHT,
+            EDIT_DELAY_WIDTH,
+            EDIT_DELAY_HEIGHT,
         )
-        cells.append({"index": index, "frame": frame, "rect": thumb, "delay": delay,
-                      "hold": holds[index]})
-        delays.append({"index": index, "rect": delay})
-
-    side_menu = [
-        (
-            pygame.Rect(
-                side.left,
-                side.bottom + 2 + index * ANIMATION_CONTROLS_HEIGHT,
-                side.width,
-                ANIMATION_CONTROLS_HEIGHT,
-            ),
-            name,
-            label,
-        )
-        for index, (name, label) in enumerate(PLAYER_SIDES)
-    ]
-
+        cells.append({"index": index, "frame": frame, "thumb": thumb, "delay": delay, "hold": holds[index]})
+    add = pygame.Rect(left, controls_y, 26, 24)
+    remove = pygame.Rect(add.right + 4, controls_y, 26, 24)
+    loop = pygame.Rect(remove.right + 10, controls_y, 90, 24)
+    preview = pygame.Rect(loop.right + 8, controls_y, 82, 24)
+    delete = pygame.Rect(left, button_y, 96, BUTTON_HEIGHT)
+    ok = pygame.Rect(panel.right - 16 - 76, button_y, 76, BUTTON_HEIGHT)
+    cancel = pygame.Rect(ok.left - 8 - 76, button_y, 76, BUTTON_HEIGHT)
     return {
-        "tabs": tabs,
-        "side": side,
-        "side_menu": side_menu,
-        "side_menu_open": bool(editor.animation_side_menu_open),
-        "loop": loop,
+        "panel": panel,
+        "title": title,
+        "name": name,
+        "grid": grid,
+        "cells": cells,
+        "columns": columns,
+        "cell_width": EDIT_CELL_WIDTH,
+        "cell_height": EDIT_CELL_HEIGHT,
+        "cell_gap": EDIT_CELL_GAP,
+        "count": len(frames),
+        "content": content,
+        "scroll": scroll,
         "add": add,
         "remove": remove,
+        "loop": loop,
         "preview": preview,
-        "grid": grid,
-        "grid_columns": columns,
-        "cell_width": CELL_WIDTH,
-        "cell_height": CELL_HEIGHT,
-        "cell_gap": CELL_GAP,
-        "content_height": content_height,
-        "scroll": scroll,
-        "hint": hint,
-        "cells": cells,
-        "delays": delays,
-        "count": len(frames),
+        "delete": delete,
+        "ok": ok,
+        "cancel": cancel,
     }
 
 
-def _wrap_path(font: pygame.font.Font, text: str, width: int) -> list:
-    """路径优先按 / 折行，单段还是太长再按字符切。"""
-    lines = []
-    line = ""
-    for part in str(text).split("/"):
-        piece = part if not line else "/" + part
-        if line and font.size(line + piece)[0] > width:
-            lines.append(line)
-            line = part
-        else:
-            line += piece
-    lines.append(line)
-    chunks = []
-    for line in lines:
-        chunk = ""
-        for character in line:
-            if chunk and font.size(chunk + character)[0] > width:
-                chunks.append(chunk)
-                chunk = character
-            else:
-                chunk += character
-        chunks.append(chunk)
-    return chunks
+def animation_hold(value: float) -> float:
+    return max(0.01, min(10.0, float(value)))
 
 
-def draw_tooltip(
-    surface: pygame.Surface, font: pygame.font.Font, text: str, mouse: tuple
+def draw_animation_edit(
+    surface: pygame.Surface, editor, font: pygame.font.Font
 ) -> None:
-    """在鼠标旁边画一小块说明；靠右边或下边时自动往里挪。"""
-    lines = _wrap_path(font, text, TOOLTIP_MAX_WIDTH)
-    rendered = [font.render(line, True, TEXT) for line in lines]
-    width = max(image.get_width() for image in rendered) + TOOLTIP_PAD * 2
-    height = (
-        sum(image.get_height() + TOOLTIP_LINE_GAP for image in rendered)
-        - TOOLTIP_LINE_GAP
-        + TOOLTIP_PAD * 2
+    edit = editor.animation_edit
+    if edit is None:
+        return
+    geometry = animation_edit_geometry(surface, editor)
+    panel = geometry["panel"]
+    draw_panel(surface, panel)
+    title = font.render(
+        "编辑动画（预览中）" if edit["previewing"] else "编辑动画",
+        True,
+        TEXT,
     )
-    left = mouse[0] + 14
-    top = mouse[1] + 16
-    if left + width > surface.get_width() - 4:
-        left = surface.get_width() - 4 - width
-    if top + height > surface.get_height() - 4:
-        top = mouse[1] - 6 - height
-    rect = pygame.Rect(left, top, width, height)
-    pygame.draw.rect(surface, (36, 36, 42), rect)
-    pygame.draw.rect(surface, DIALOG_BORDER, rect, 1)
-    y = top + TOOLTIP_PAD
-    for image in rendered:
-        surface.blit(image, (left + TOOLTIP_PAD, y))
-        y += image.get_height() + TOOLTIP_LINE_GAP
+    surface.blit(title, (geometry["title"].left, geometry["title"].top))
+
+    name_rect = geometry["name"]
+    focused = edit["name_focus"]
+    pygame.draw.rect(surface, (62, 62, 72) if focused else (48, 48, 54), name_rect)
+    pygame.draw.rect(surface, HIGHLIGHT if focused else (86, 86, 94), name_rect, 1)
+    caret = "|" if focused else ""
+    name_text = font.render(f"名称：{edit['name']}{caret}", True, HIGHLIGHT if focused else TEXT)
+    surface.blit(
+        name_text,
+        (name_rect.left + 6, name_rect.centery - name_text.get_height() // 2),
+        (0, 0, max(1, name_rect.width - 12), name_text.get_height()),
+    )
+
+    grid = geometry["grid"]
+    pygame.draw.rect(surface, (44, 44, 50), grid)
+    pygame.draw.rect(surface, (70, 70, 78), grid, 1)
+    previous = surface.get_clip()
+    surface.set_clip(previous.clip(grid))
+    shown = editor.animation_edit_shown_frame()
+    for cell in geometry["cells"]:
+        highlight = cell["index"] == shown
+        _draw_frame(surface, cell["thumb"], edit, cell["index"], editor.media_base_dir, highlight)
+        _draw_delay(surface, font, cell, edit["delay"])
+        number = font.render(str(cell["index"] + 1), True, DIM_TEXT)
+        surface.blit(number, (cell["thumb"].left + 2, cell["thumb"].top + 1))
+    if not geometry["cells"]:
+        hint = font.render(
+            "还没有帧：点「＋」选图片或 GIF。" if not edit["frames"] else "",
+            True,
+            DIM_TEXT,
+        )
+        surface.blit(hint, (grid.centerx - hint.get_width() // 2, grid.centery - 8))
+    drag = edit["drag"]
+    if drag is not None and drag["moved"]:
+        x, top = _edit_drag_marker(geometry, drag["slot"])
+        pygame.draw.line(surface, HIGHLIGHT, (x, top), (x, top + EDIT_THUMB_HEIGHT), 3)
+    surface.set_clip(previous)
+    draw_scrollbar(surface, grid, geometry["content"], geometry["scroll"])
+
+    draw_button(surface, font, geometry["add"], "＋")
+    draw_button(surface, font, geometry["remove"], "−")
+    draw_checkbox(surface, font, geometry["loop"], "循环", bool(edit["loop"]), inset=4)
+    draw_button(surface, font, geometry["preview"], "停止预览" if edit["previewing"] else "预览")
+    draw_button(surface, font, geometry["delete"], "删除动画")
+    draw_button(surface, font, geometry["ok"], "确定")
+    draw_button(surface, font, geometry["cancel"], "取消")
+
+    count = font.render(f"共 {len(edit['frames'])} 帧", True, DIM_TEXT)
+    surface.blit(
+        count,
+        (geometry["preview"].right + 10, geometry["preview"].centery - 8),
+    )
 
 
-def _draw_thumbnail(
+def _edit_drag_marker(geometry: dict, slot: int) -> tuple:
+    grid = geometry["grid"]
+    columns = max(1, geometry["columns"])
+    row = slot // columns
+    column = slot % columns
+    x = grid.left + column * (EDIT_CELL_WIDTH + EDIT_CELL_GAP) - EDIT_CELL_GAP // 2
+    x = max(grid.left + 2, min(x, grid.right - 2))
+    top = grid.top + row * (EDIT_CELL_HEIGHT + EDIT_CELL_GAP) - round(geometry["scroll"]) + 2
+    top = max(grid.top + 2, min(top, grid.bottom - EDIT_THUMB_HEIGHT - 2))
+    return x, top
+
+
+def _draw_frame(
     surface: pygame.Surface,
     rect: pygame.Rect,
-    frame: str,
+    clip: dict,
+    index: int,
     base_dir: str | None,
     selected: bool,
-    number: int,
-    font: pygame.font.Font,
 ) -> None:
-    """画一帧的缩略图：等比缩进格子、居中；图片找不到时铺黑紫棋盘格，选中的描亮边。"""
     pygame.draw.rect(surface, (40, 40, 46), rect)
-    path = resolve_level_path(frame, base_dir)
-    size = image_size(path) if path is not None else None
+    frames = clip.get("frames") or []
+    path = resolve_level_path(frames[index], base_dir) if 0 <= index < len(frames) else None
     image = None
-    if size is not None:
-        image = load_scaled(path, _fit_within(size, rect.size), False)
+    if path is not None:
+        size = image_size(path)
+        if size is not None:
+            image = load_scaled(path, _fit_within(size, rect.size), True)
     if image is None:
         draw_missing_texture(surface, rect)
     else:
         surface.blit(image, image.get_rect(center=rect.center))
     pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 2 if selected else 1)
-    tag = font.render(str(number), True, TEXT)
-    backing = pygame.Rect(rect.left + 1, rect.top + 1, tag.get_width() + 6, tag.get_height() + 2)
-    surface.blit(_shade(backing), backing.topleft)
-    surface.blit(tag, (backing.left + 3, backing.top + 1))
-
-
-def _shade(rect: pygame.Rect) -> pygame.Surface:
-    surface = pygame.Surface(rect.size, pygame.SRCALPHA)
-    surface.fill((0, 0, 0, 150))
-    return surface
-
-
-def _draw_delay(
-    surface: pygame.Surface,
-    font: pygame.font.Font,
-    cell: dict,
-    editing: dict | None,
-) -> None:
-    """缩略图下面的停留时长：正在输入时显示原文，否则显示夹好的秒数。"""
-    rect = cell["delay"]
-    active = editing is not None and editing["index"] == cell["index"]
-    pygame.draw.rect(surface, (62, 62, 72) if active else (48, 48, 54), rect)
-    pygame.draw.rect(surface, HIGHLIGHT if active else (86, 86, 94), rect, 1)
-    text = editing["text"] if active else f"{cell['hold']:g}s"
-    rendered = font.render(text, True, TEXT if active else DIM_TEXT)
-    clip = max(1, rect.width - 10)
-    surface.blit(
-        rendered,
-        (rect.left + 5, rect.centery - rendered.get_height() // 2),
-        (0, 0, min(rendered.get_width(), clip), rendered.get_height()),
-    )
-
-
-def _draw_empty_hint(
-    surface: pygame.Surface, font: pygame.font.Font, grid: pygame.Rect, editor, side: str
-) -> None:
-    """这一侧没有帧时，说清楚游戏里会用另一侧镜像。"""
-    other = "left" if side == "right" else "right"
-    lines = ["这一侧还没有帧：点「＋」选一张图。"]
-    if editor.animation_frames_of(other):
-        lines.append(f"空着不要紧：游戏里会用{SIDE_NAMES[other]}的帧镜像播放，预览也是。")
-    else:
-        lines.append("两侧都空着时，会退到站立；站立也没有就不画玩家贴图。")
-    y = grid.centery - len(lines) * 11
-    for line in lines:
-        rendered = font.render(line, True, DIM_TEXT)
-        surface.blit(rendered, (grid.centerx - rendered.get_width() // 2, y))
-        y += 22
-
-
-def draw_animation_page(
-    surface: pygame.Surface,
-    editor,
-    font: pygame.font.Font,
-    geometry: dict,
-    mouse: tuple | None = None,
-) -> None:
-    position = mouse if mouse is not None else pygame.mouse.get_pos()
-    current = editor.animation_state
-
-    for rect, index, label in geometry["tabs"]:
-        selected = index == current
-        pygame.draw.rect(surface, (80, 80, 90) if selected else (48, 48, 54), rect)
-        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
-        rendered = font.render(label, True, HIGHLIGHT if selected else TEXT)
-        surface.blit(
-            rendered,
-            (rect.centerx - rendered.get_width() // 2, rect.centery - rendered.get_height() // 2),
-        )
-
-    side = editor.animation_side
-    side_label = dict(PLAYER_SIDES)[side]
-    draw_button(surface, font, geometry["side"], f"方向：{side_label}")
-    # 下拉框右边的三角（不靠字体里有没有这个符号）
-    middle = geometry["side"].centery
-    tip = geometry["side"].right - 11
-    pygame.draw.polygon(
-        surface,
-        TEXT,
-        [(tip - 4, middle - 2), (tip + 4, middle - 2), (tip, middle + 4)],
-    )
-    clip = editor.animation_clip()
-    draw_checkbox(surface, font, geometry["loop"], "循环", bool(clip["loop"]), inset=4)
-    draw_button(surface, font, geometry["add"], "＋")
-    draw_button(surface, font, geometry["remove"], "−")
-    draw_button(surface, font, geometry["preview"], "预览")
-
-    grid = geometry["grid"]
-    pygame.draw.rect(surface, (44, 44, 50), grid)
-    pygame.draw.rect(surface, (70, 70, 78), grid, 1)
-
-    if not geometry["cells"]:
-        _draw_empty_hint(surface, font, grid, editor, side)
-    else:
-        previous = surface.get_clip()
-        surface.set_clip(previous.clip(grid))
-        for cell in geometry["cells"]:
-            selected = cell["index"] == editor.animation_frame
-            _draw_thumbnail(
-                surface,
-                cell["rect"],
-                cell["frame"],
-                editor.media_base_dir,
-                selected,
-                cell["index"] + 1,
-                font,
-            )
-            _draw_delay(surface, font, cell, editor.animation_delay_edit)
-        surface.set_clip(previous)
-
-    draw_scrollbar(surface, grid, geometry["content_height"], geometry["scroll"])
-
-    if geometry["count"]:
-        total = font.render(f"共 {geometry['count']} 帧", True, DIM_TEXT)
-        surface.blit(
-            total, (geometry["hint"].right - total.get_width(), geometry["hint"].centery - 8)
-        )
-    hint = font.render("点缩略图选中，拖动换顺序；点秒数可以改；Delete 删除选中帧", True, DIM_TEXT)
-    surface.blit(hint, (geometry["hint"].left, geometry["hint"].centery - hint.get_height() // 2))
-
-    # 正在拖一帧：在它要落下去的位置画一条竖线
-    drag = editor.animation_drag
-    if drag is not None and drag["moved"]:
-        x, top = _drag_marker(geometry, drag["slot"])
-        bottom = min(geometry["grid"].bottom - 2, top + THUMB_HEIGHT)
-        pygame.draw.line(surface, HIGHLIGHT, (x, top), (x, bottom), 3)
-
-    # 方向下拉菜单画在格子上层
-    if geometry["side_menu_open"]:
-        for rect, name, label in geometry["side_menu"]:
-            selected = name == side
-            pygame.draw.rect(surface, (80, 80, 90) if selected else (48, 48, 54), rect)
-            pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), rect, 1)
-            if selected:                # 当前这一侧：画一个小三角当记号
-                middle = rect.centery
-                pygame.draw.polygon(
-                    surface,
-                    HIGHLIGHT,
-                    [
-                        (rect.left + 7, middle - 3),
-                        (rect.left + 13, middle - 3),
-                        (rect.left + 10, middle + 3),
-                    ],
-                )
-            rendered = font.render(label, True, HIGHLIGHT if selected else TEXT)
-            surface.blit(
-                rendered,
-                (rect.left + (20 if selected else 10), rect.centery - rendered.get_height() // 2),
-            )
-
-    # 鼠标停在缩略图上：浮出这一帧的图片路径
-    if (
-        editor.animation_preview is not None
-        or drag is not None
-        or editor.animation_delay_edit is not None
-        or geometry["side_menu_open"]
-    ):
-        return
-    for cell in geometry["cells"]:
-        if cell["rect"].collidepoint(position):
-            draw_tooltip(surface, font, cell["frame"], position)
-            return
-
-
-def _drag_marker(geometry: dict, slot: int) -> tuple:
-    """插入线的位置：按格子排法算出插槽所在的列和行，落在格子左边。"""
-    grid = geometry["grid"]
-    columns = geometry["grid_columns"]
-    row = slot // columns
-    column = slot % columns
-    x = grid.left + column * (CELL_WIDTH + CELL_GAP) - CELL_GAP // 2
-    x = max(grid.left + 2, min(x, grid.right - 2))
-    top = grid.top + row * (CELL_HEIGHT + CELL_GAP) - round(geometry["scroll"]) + 2
-    top = max(grid.top + 2, min(top, grid.bottom - THUMB_HEIGHT - 2))
-    return x, top
-
-
-def animation_preview_geometry(surface: pygame.Surface) -> dict:
-    """预览浮层：标题、图、第几帧 / 时长 / 循环、提示和「关闭」。"""
-    panel = place_panel(
-        surface, pygame.Rect(0, 0, PREVIEW_PANEL_WIDTH, PREVIEW_PANEL_HEIGHT)
-    )
-    title = pygame.Rect(panel.left + 14, panel.top + 10, panel.width - 28, ROW_HEIGHT)
-    note = pygame.Rect(panel.left + 14, title.bottom + 2, panel.width - 28, ROW_HEIGHT)
-    image = pygame.Rect(
-        panel.left + 14, note.bottom + 6, panel.width - 28, PREVIEW_IMAGE_HEIGHT
-    )
-    info = pygame.Rect(panel.left + 14, image.bottom + 6, panel.width - 28, ROW_HEIGHT)
-    hint = pygame.Rect(panel.left + 14, info.bottom + 2, panel.width - 28, ROW_HEIGHT)
-    close = pygame.Rect(panel.centerx - 40, panel.bottom - 12 - BUTTON_HEIGHT, 80, BUTTON_HEIGHT)
-    return {
-        "panel": panel,
-        "title": title,
-        "note": note,
-        "image": image,
-        "info": info,
-        "hint": hint,
-        "close": close,
-    }
 
 
 def _fit_within(size: tuple, box: tuple) -> tuple:
@@ -468,68 +346,218 @@ def _fit_within(size: tuple, box: tuple) -> tuple:
     return max(1, round(width * scale)), max(1, round(height * scale))
 
 
-def _draw_preview_image(
-    surface: pygame.Surface,
-    font: pygame.font.Font,
-    box: pygame.Rect,
-    path: str | None,
-    mirror: bool,
+def _draw_delay(
+    surface: pygame.Surface, font: pygame.font.Font, cell: dict, delay: dict | None
 ) -> None:
-    pygame.draw.rect(surface, (40, 40, 46), box)
-    size = image_size(path) if path is not None else None
-    image = None
-    if size is not None:
-        image = load_scaled(path, _fit_within(size, box.size), True)
-    if image is None:
-        draw_missing_texture(surface, box)
-        text = font.render("找不到这张图", True, DIM_TEXT)
-        surface.blit(
-            text, (box.centerx - text.get_width() // 2, box.bottom - text.get_height() - 6)
-        )
-        return
-    if mirror:
-        image = pygame.transform.flip(image, True, False)
-    surface.blit(image, image.get_rect(center=box.center))
+    rect = cell["delay"]
+    active = delay is not None and delay["index"] == cell["index"]
+    pygame.draw.rect(surface, (62, 62, 72) if active else (48, 48, 54), rect)
+    pygame.draw.rect(surface, HIGHLIGHT if active else (86, 86, 94), rect, 1)
+    text = delay["text"] if active else f"{cell['hold']:g}s"
+    rendered = font.render(text, True, TEXT if active else DIM_TEXT)
+    surface.blit(
+        rendered,
+        (rect.left + 5, rect.centery - rendered.get_height() // 2),
+        (0, 0, max(1, rect.width - 10), rendered.get_height()),
+    )
 
 
-def draw_animation_preview(
+# ---- 动画对象的链接弹窗 ---------------------------------------------
+def animation_link_geometry(surface: pygame.Surface, editor) -> dict:
+    link = editor.animation_link
+    height = LINK_GENERAL_HEIGHT if link is not None and link["preset"] == PRESET_GENERAL else LINK_PLAYER_HEIGHT
+    panel = place_panel(surface, pygame.Rect(0, 0, LINK_PANEL_WIDTH, height))
+    left = panel.left + 16
+    width = panel.width - 32
+    title = pygame.Rect(left, panel.top + 10, width, 24)
+    preset = pygame.Rect(left, title.bottom + 8, 220, 24)
+    rows_top = preset.bottom + 12
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    rows = []
+    if link is not None:
+        if link["preset"] == PRESET_GENERAL:
+            y = rows_top
+            label = pygame.Rect(left, y, 110, 24)
+            field = pygame.Rect(left + 118, y, width - 118, 24)
+            rows.append({"kind": "general", "label": label, "field": field})
+        else:
+            for action, action_text in PLAYER_ACTIONS:
+                y = rows_top + len(rows) * LINK_ROW_HEIGHT
+                label = pygame.Rect(left, y, 84, 24)
+                half = (width - 84 - 8 - 8) // 2
+                left_field = pygame.Rect(left + 92, y, half, 24)
+                right_field = pygame.Rect(left_field.right + 8, y, half, 24)
+                rows.append(
+                    {
+                        "kind": "player",
+                        "action": action,
+                        "label": label,
+                        "left": left_field,
+                        "right": right_field,
+                    }
+                )
+    hint = pygame.Rect(left, rows_top + (1 if link is not None and link["preset"] == PRESET_GENERAL else len(rows)) * LINK_ROW_HEIGHT + 8, width, 20)
+    ok = pygame.Rect(panel.right - 16 - 76, button_y, 76, BUTTON_HEIGHT)
+    cancel = pygame.Rect(ok.left - 8 - 76, button_y, 76, BUTTON_HEIGHT)
+    geometry = {
+        "panel": panel,
+        "title": title,
+        "preset": preset,
+        "rows": rows,
+        "hint": hint,
+        "ok": ok,
+        "cancel": cancel,
+        "popup": None,
+        "popup_rects": [],
+    }
+    if link is not None and link["dropdown"] is not None:
+        anchor = _link_field_rect(geometry, link["dropdown"])
+        if anchor is not None:
+            options = (
+                [(label, value) for value, label in PRESETS]
+                if link["dropdown"] == "preset"
+                else editor.animation_link_options()
+            )
+            geometry.update(_popup_geometry(panel, anchor, options, int(link.get("dropdown_scroll") or 0)))
+    return geometry
+
+
+def _link_field_rect(geometry: dict, field) -> pygame.Rect | None:
+    if field == "preset":
+        return geometry["preset"]
+    for row in geometry["rows"]:
+        if row["kind"] == "general":
+            return row["field"]
+        if isinstance(field, tuple) and field[0] == PRESET_PLAYER and row["kind"] == "player":
+            if row["action"] == field[1]:
+                return row["left"] if field[2] == "left" else row["right"]
+    return None
+
+
+def _popup_geometry(
+    panel: pygame.Rect, anchor: pygame.Rect, options: list, scroll: int
+) -> dict:
+    visible = min(LINK_POPUP_ROWS, len(options))
+    height = max(1, visible) * LINK_POPUP_ROW + 2
+    top = anchor.bottom + 2
+    if top + height > panel.bottom - 8:
+        top = max(panel.top + 8, anchor.top - 2 - height)
+    popup = pygame.Rect(anchor.left, top, anchor.width, height)
+    scroll = max(0, min(scroll, max(0, len(options) - visible)))
+    rects = []
+    for row in range(visible):
+        index = scroll + row
+        if index >= len(options):
+            break
+        label, value = options[index]
+        rects.append((pygame.Rect(popup.left, popup.top + 1 + row * LINK_POPUP_ROW, popup.width - 2, LINK_POPUP_ROW), label, value))
+    return {"popup": popup, "popup_rects": rects, "popup_scroll": scroll}
+
+
+def draw_animation_link(
     surface: pygame.Surface, editor, font: pygame.font.Font
 ) -> None:
-    """预览浮层：按每帧的停留时长播放；本侧空着时和游戏里一样镜像另一侧。"""
-    geometry = animation_preview_geometry(surface)
+    link = editor.animation_link
+    if link is None:
+        return
+    geometry = animation_link_geometry(surface, editor)
     panel = geometry["panel"]
     draw_panel(surface, panel)
-    preview = editor.animation_preview
-    if preview is None:
-        return
-    action = preview["action"]
-    side = preview["side"]
-    label = dict(PLAYER_ANIMATIONS).get(action, action)
-    side_label = dict(PLAYER_SIDES)[side]
-    title = font.render(f"播放预览：{label}（{side_label}）", True, HIGHLIGHT)
-    surface.blit(title, (geometry["title"].left, geometry["title"].centery - title.get_height() // 2))
-
-    frames, holds, loop, mirrored = resolved(editor.game_animations, action, side)
-    if not frames:
-        empty = font.render("两侧都还没有帧", True, DIM_TEXT)
-        surface.blit(empty, (geometry["image"].centerx - empty.get_width() // 2, geometry["image"].centery))
-        return
-    if mirrored is not None:
-        note = font.render(
-            f"镜像自{SIDE_NAMES[mirrored]}：本侧空着，游戏里也这样放", True, DIM_TEXT
-        )
-        surface.blit(note, (geometry["note"].left, geometry["note"].centery - note.get_height() // 2))
-
-    frame = max(0, min(preview["frame"], len(frames) - 1))
-    path = resolve_level_path(frames[frame], editor.media_base_dir)
-    _draw_preview_image(surface, font, geometry["image"], path, mirrored is not None)
-
-    hold = holds[frame] if frame < len(holds) else DEFAULT_HOLD
-    loop_text = "循环" if loop else "播完停在最后一帧"
-    info = font.render(
-        f"第 {frame + 1}/{len(frames)} 帧 · 停留 {hold:g} 秒 · {loop_text}", True, TEXT
+    title = font.render("动画对象：预设与链接", True, TEXT)
+    surface.blit(title, (geometry["title"].left, geometry["title"].top))
+    draw_button(surface, font, geometry["preset"], f"预设：{preset_label(link['preset'])}")
+    triangle = geometry["preset"].right - 12
+    middle = geometry["preset"].centery
+    pygame.draw.polygon(
+        surface,
+        TEXT,
+        [(triangle - 4, middle - 2), (triangle + 4, middle - 2), (triangle, middle + 4)],
     )
-    surface.blit(info, (geometry["info"].left, geometry["info"].centery - info.get_height() // 2))
-    hint = font.render("Esc 或点面板外关闭", True, DIM_TEXT)
-    surface.blit(hint, (geometry["hint"].left, geometry["hint"].centery - hint.get_height() // 2))
-    draw_button(surface, font, geometry["close"], "关闭")
+
+    for row in geometry["rows"]:
+        label = font.render(
+            "动画" if row["kind"] == "general" else dict(PLAYER_ACTIONS)[row["action"]],
+            True,
+            TEXT,
+        )
+        surface.blit(label, (row["label"].left, row["label"].centery - label.get_height() // 2))
+        if row["kind"] == "general":
+            key = link["links"].get(PRESET_GENERAL, {}).get(GENERAL_CLIP, "")
+            _draw_key_field(surface, font, row["field"], key or "（未选择）", bool(key))
+        else:
+            pair = link["links"].get(PRESET_PLAYER, {}).get(row["action"], {})
+            left_key = pair.get("left", "")
+            right_key = pair.get("right", "")
+            _draw_key_field(
+                surface, font, row["left"], f"左：{left_key or '（未选择）'}", bool(left_key)
+            )
+            _draw_key_field(
+                surface, font, row["right"], f"右：{right_key or '（未选择）'}", bool(right_key)
+            )
+
+    hint = font.render("「左」「右」各指一个动画库里的剪辑；确定后随关卡保存。", True, DIM_TEXT)
+    surface.blit(
+        hint,
+        (geometry["hint"].left, geometry["hint"].centery - hint.get_height() // 2),
+    )
+    draw_button(surface, font, geometry["ok"], "确定")
+    draw_button(surface, font, geometry["cancel"], "取消")
+
+    if geometry["popup"] is not None:
+        pygame.draw.rect(surface, (36, 36, 42), geometry["popup"])
+        pygame.draw.rect(surface, DIALOG_BORDER, geometry["popup"], 1)
+        current_preset = link["preset"]
+        current_field = (
+            animation_link_current(link, link["dropdown"])
+            if link["dropdown"] != "preset"
+            else current_preset
+        )
+        for rect, label, value in geometry["popup_rects"]:
+            hovered = rect.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (80, 80, 90) if hovered else (48, 48, 54), rect)
+            pygame.draw.rect(surface, (86, 86, 94), rect, 1)
+            text = f"● {label}" if value == current_field else label
+            rendered = font.render(text, True, HIGHLIGHT if value == current_field else TEXT)
+            surface.blit(
+                rendered,
+                (rect.left + 6, rect.centery - rendered.get_height() // 2),
+                (0, 0, max(1, rect.width - 10), rendered.get_height()),
+            )
+
+
+def animation_link_current(link: dict, field) -> str:
+    if field == "preset":
+        return str(link["preset"])
+    if not isinstance(field, tuple):
+        return ""
+    preset, action, side = field
+    if preset == PRESET_GENERAL:
+        return str((link["links"].get(PRESET_GENERAL) or {}).get(GENERAL_CLIP) or "")
+    pair = (link["links"].get(PRESET_PLAYER) or {}).get(action)
+    pair = pair if isinstance(pair, dict) else {}
+    return str(pair.get(side) or "")
+
+
+def _draw_key_field(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    rect: pygame.Rect,
+    text: str,
+    chosen: bool,
+) -> None:
+    pygame.draw.rect(surface, (48, 48, 54), rect)
+    pygame.draw.rect(surface, (86, 86, 94), rect, 1)
+    rendered = font.render(text, True, TEXT if chosen else DIM_TEXT)
+    surface.blit(
+        rendered,
+        (rect.left + 6, rect.centery - rendered.get_height() // 2),
+        (0, 0, max(1, rect.width - 24), rendered.get_height()),
+    )
+    # 右边的小三角，表示可以点开下拉
+    middle = rect.centery
+    tip = rect.right - 11
+    pygame.draw.polygon(
+        surface,
+        TEXT,
+        [(tip - 4, middle - 2), (tip + 4, middle - 2), (tip, middle + 4)],
+    )

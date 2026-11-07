@@ -53,6 +53,7 @@ HIGHLIGHT = (255, 230, 120)
 BUTTON_BG = (70, 70, 78)
 PREVIEW = (255, 230, 120, 90)
 TEXTURE_COLOR = (150, 150, 170)
+ANIMATION_COLOR = (110, 190, 220)
 HANDLE_COLOR = (255, 255, 255)
 VIEW_MENU_WIDTH = 170          # 视图设置菜单宽度
 LEVEL_SELECT_WIDTH = 420       # 关卡列表浮层宽度
@@ -69,7 +70,8 @@ LEVEL_SELECT_WIDTH = 420       # 关卡列表浮层宽度
     TOOL_DEST,
     TOOL_TEXTURE,
     TOOL_PORTAL,
-) = range(10)
+    TOOL_ANIMATION,
+) = range(11)
 
 TOOL_SPECS = {
     TOOL_BLOCK: ("方块", "rect"),
@@ -82,6 +84,7 @@ TOOL_SPECS = {
     TOOL_PLAYER: ("起点", "single"),
     TOOL_DEST: ("终点", "single"),
     TOOL_TEXTURE: ("贴图", "import"),   # import：选图直接导入，不进创建模式
+    TOOL_ANIMATION: ("动画", "single"),
 }
 
 TOOL_ORDER = [
@@ -95,6 +98,7 @@ TOOL_ORDER = [
     TOOL_PLAYER,
     TOOL_DEST,
     TOOL_TEXTURE,
+    TOOL_ANIMATION,
 ]
 
 # 新建时预览框用的颜色：和画布里这种对象本身的颜色一致
@@ -109,6 +113,7 @@ TOOL_COLORS = {
     TOOL_PLAYER: PLAYER_COLOR,
     TOOL_DEST: DESTINATION_COLOR,
     TOOL_TEXTURE: TEXTURE_COLOR,
+    TOOL_ANIMATION: ANIMATION_COLOR,
 }
 
 # ---- 默认值 ----
@@ -160,8 +165,8 @@ SETTINGS_TABS = (
     ("过场", ()),
 )
 SETTINGS_CUTSCENE_TAB = 3
-# 游戏配置分五页：常规、玩家动画、制作名单、声音、过场。每页有哪些格子由 editor.game_cells 按页给。
-GAME_SETTINGS_TABS = ("常规", "玩家动画", "制作名单", "声音", "过场")
+# 游戏配置分五页：常规、动画集、制作名单、声音、过场。每页有哪些格子由 editor.game_cells 按页给。
+GAME_SETTINGS_TABS = ("常规", "动画集", "制作名单", "声音", "过场")
 GAME_ANIMATION_TAB = 1
 GAME_CUTSCENE_TAB = 4
 BACKGROUND_MAX_LENGTH = 120
@@ -180,6 +185,7 @@ KIND_NOZZLE = "nozzle"
 KIND_PLAYER = "player"
 KIND_DESTINATION = "destination"
 KIND_TEXTURE = "texture"
+KIND_ANIMATION = "animation"
 MIN_SIZE = 0.05   # 对象最小宽高（格），防止拖成一条看不见的线
 HANDLE_PIXELS = 7  # 缩放手柄的热区半径（像素）：比画出来的把手大一点点
 NUMBER_TEXT_MAX_LENGTH = 8  # 属性面板里数字字段最多敲几个字符（含负号和小数点）
@@ -199,6 +205,7 @@ KIND_TITLES = {
     KIND_PLAYER: "起点",
     KIND_DESTINATION: "终点",
     KIND_TEXTURE: "贴图",
+    KIND_ANIMATION: "动画",
 }
 
 # ---- 触发行为 ----
@@ -207,6 +214,7 @@ KIND_TITLES = {
 # 只负责列出每种对象能填哪些。
 KIND_BEHAVIORS = {
     KIND_TEXTURE: (("隐藏", "hide"), ("显示", "show")),
+    KIND_ANIMATION: (("隐藏", "hide"), ("显示", "show")),
     KIND_MOVABLE: (("移动", "move"),),
 }
 

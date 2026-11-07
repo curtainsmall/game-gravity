@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pygame
 
-from animation.player import PlayerAnimator
+from animation.library import library_animations
+from animation.sprite import AnimationSystem
 from controller.controller_system import ControllerSystem
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
@@ -21,6 +22,7 @@ from trigger.trigger_system import TriggerSystem
 from world.follower import FollowSystem
 from world.level import (
     LevelDefinition,
+    build_animation_objects,
     build_blocks,
     build_boundaries,
     build_buttons,
@@ -36,7 +38,6 @@ from world.level import (
     jump_height_of,
     load_level_file,
     move_speed_of,
-    player_animations,
 )
 from world.world import World
 
@@ -69,8 +70,7 @@ class Scene:
         self.debug: bool = False
         self.player_debug: bool = False
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
-        self.player_animation: dict = {}     # 玩家动画：动作名 → {"right": 剪辑, "left": 剪辑}
-        self.player_animator: PlayerAnimator | None = None
+        self.animation_system: AnimationSystem = AnimationSystem({})
         self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
         self.cutscene: Cutscene | None = None  # 进这一关之前的过场
 
@@ -83,7 +83,8 @@ class Scene:
     ) -> "Scene":
         """由关卡数据建场景：方块、机关与物件都成为 GameObject。
 
-        玩家的跳高、速度、动画以 game.json 为准，关卡里的 player 写了就覆盖它；
+        玩家的跳高、速度以 game.json 为准，关卡里的 player 写了就覆盖它；动画来自
+        game.json 的动画库，由动画对象自己带预设和链接。
         base_dir 就是 game.json 所在的文件夹，两份 json 里的相对路径都以它为基准。
         """
         game_player = player_of(game_settings or {})
@@ -101,6 +102,7 @@ class Scene:
             + build_boundaries(world)                      # 地面/天花板/墙
             # 贴图由渲染先铺一层，调试显示再整层压上来；列表顺序只影响占位之间的先后
             + build_textures(level_definition, base_dir)
+            + build_animation_objects(level_definition)
             + build_items(level_definition)
             + buttons
             + build_portals(level_definition)
@@ -115,9 +117,11 @@ class Scene:
         # 触发行为：来源名字解析一次，之后每帧派发事件
         scene.trigger_system.attach(objects)
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
-        # 玩家动画：game.json 的 player.animations（关卡里的同名项按方向覆盖），按物理状态轮播
-        scene.player_animation = player_animations(level_definition, game_settings, base_dir)
-        scene.player_animator = PlayerAnimator(scene.player, scene.player_animation)
+        # 动画对象：预设/链接写在关卡里，帧来自 game.json 的动画库
+        scene.animation_system = AnimationSystem(
+            library_animations(game_settings, base_dir)
+        )
+        scene.animation_system.attach(objects, scene.player)
         # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐
         scene.bgm = level_bgm(level_definition, base_dir)
         # 进这一关之前的过场：没图就当作没有
@@ -146,7 +150,7 @@ class Scene:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
     def update(self, delta_seconds: float) -> None:
-        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 玩家动画 → 道具 → 传送门。"""
+        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 道具 → 传送门 → 动画对象。"""
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
@@ -154,10 +158,10 @@ class Scene:
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.follow_system.update()
         self.physics_system.update(self.objects, self.world, delta_seconds)
-        if self.player_animator is not None:
-            self.player_animator.update(delta_seconds)
         self.item_system.update(self.objects)
         self.portal_system.update(self.objects, self.player)
+        # 跟玩家的动画对象要在物理和传送之后才摆位
+        self.animation_system.update(delta_seconds)
 
     @property
     def destination_reached(self) -> bool:

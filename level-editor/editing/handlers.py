@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 import pygame
 
 from core.constants import ROW_HEIGHT
-from view.animation import animation_preview_geometry
+from core.animation import PRESET_GENERAL, PRESET_PLAYER
+from view.animation import animation_edit_geometry, animation_link_geometry
 from view.chrome import create_menu_rects, toolbar_rects
 from view.modals import (
     game_settings_geometry,
@@ -140,11 +141,12 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         editor.blur_number()
         editor.pick_texture_image()
         return
-    play_rect = detail_slot_rect(surface, editor, "play")
-    if play_rect is not None and play_rect.collidepoint(position):
+    anim_link = detail_slot_rect(surface, editor, "anim_link")
+    if anim_link is not None and anim_link.collidepoint(position):
         editor.blur_name()
         editor.blur_number()
-        editor.toggle_start_preview_play()
+        if editor.dialog is not None:
+            editor.open_animation_link(editor.dialog["entry"])
         return
     name_rect = detail_slot_rect(surface, editor, "name")
     if name_rect is not None and name_rect.collidepoint(position):
@@ -312,70 +314,123 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
         editor.close_settings(False)
 
 
-def handle_animation_click(editor: Editor, position: tuple, page: dict) -> None:
-    """玩家动画页：点动作页签切动作，点方向选左右；点缩略图选中帧、按住可以拖动换顺序，
-    点秒数直接改这一帧的停留时长；＋ / − 加删帧，预览弹出播放小窗。"""
-    if page["side_menu_open"]:
-        for rect, side, _ in page["side_menu"]:
-            if rect.collidepoint(position):
-                editor.select_animation_side(side)
-                return
-        editor.close_animation_side_menu()      # 点别处：菜单收起来，这一次点击就到此为止
+def handle_library_click(editor: Editor, position: tuple, page: dict) -> None:
+    """动画集页：点「新建动画」或点一行打开编辑弹窗。"""
+    if page["new"].collidepoint(position):
+        editor.open_animation_edit(None)
         return
-    for rect, index, _ in page["tabs"]:
-        if rect.collidepoint(position):
-            editor.select_animation_state(index)
+    for row in page["rows"]:
+        if row["rect"].collidepoint(position):
+            editor.select_animation_key(row["key"])
+            editor.open_animation_edit(row["key"])
             return
-    if page["side"].collidepoint(position):
-        editor.toggle_animation_side_menu()
+
+
+def handle_animation_edit_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """单条动画的编辑弹窗：改名字、帧、时长、循环、预览、删除、确定/取消。"""
+    if editor.animation_edit is None:
         return
-    if page["loop"].collidepoint(position):
-        editor.toggle_animation_loop()
+    editor.commit_animation_delay()
+    geometry = animation_edit_geometry(surface, editor)
+    if geometry.get("panel") is None:
         return
-    if page["add"].collidepoint(position):
-        editor.add_animation_frame()
+    if geometry["name"].collidepoint(position):
+        editor.focus_animation_name()
         return
-    if page["remove"].collidepoint(position):
+    editor.blur_animation_name()
+    for cell in geometry["cells"]:
+        if cell["delay"].collidepoint(position):
+            editor.begin_animation_delay_edit(cell["index"])
+            return
+    if geometry["add"].collidepoint(position):
+        editor.add_animation_frames()
+        return
+    if geometry["remove"].collidepoint(position):
         editor.remove_animation_frame()
         return
-    if page["preview"].collidepoint(position):
-        editor.open_animation_preview(editor.animation_action_name(), editor.animation_side)
+    if geometry["loop"].collidepoint(position):
+        editor.toggle_animation_edit_loop()
         return
-    for delay in page["delays"]:
-        if delay["rect"].collidepoint(position):
-            editor.begin_animation_delay_edit(delay["index"])
-            return
-    for cell in page["cells"]:
-        if cell["rect"].collidepoint(position):
+    if geometry["preview"].collidepoint(position):
+        editor.toggle_animation_edit_preview()
+        return
+    if geometry["delete"].collidepoint(position):
+        original = editor.animation_edit["original"]
+        if original:
+            editor.delete_animation(original)
+        else:
+            editor.close_animation_edit(False)
+        return
+    if geometry["ok"].collidepoint(position):
+        editor.close_animation_edit(True)
+        return
+    if geometry["cancel"].collidepoint(position):
+        editor.close_animation_edit(False)
+        return
+    for cell in geometry["cells"]:
+        if cell["thumb"].collidepoint(position):
             editor.select_animation_frame(cell["index"])
-            editor.begin_animation_drag(
-                editor.animation_action_name(), editor.animation_side, cell["index"], position
-            )
+            editor.begin_animation_frame_drag(cell["index"], position)
             return
 
 
-def handle_animation_drag_motion(
+def handle_animation_edit_drag_motion(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
-    """拖动画帧：把鼠标位置换算成缩略图之间的插入点。"""
-    if not editor.game_animation_tab():
+    """编辑弹窗里拖动帧：按格子区的位置换算插入点。"""
+    if editor.animation_edit is None or editor.animation_edit["drag"] is None:
         return
-    geometry = game_settings_geometry(surface, editor)
-    editor.update_animation_drag(position, geometry["animation"])
+    editor.update_animation_frame_drag(position, animation_edit_geometry(surface, editor))
 
 
-def handle_animation_drag_release(editor: Editor) -> None:
-    """松开鼠标：真的拖动过就把这一帧插到新的位置。"""
-    editor.finish_animation_drag()
+def handle_animation_edit_drag_release(editor: Editor) -> None:
+    editor.finish_animation_frame_drag()
 
 
-def handle_animation_preview_click(
+def handle_animation_link_click(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
-    """动画预览浮层：点「关闭」或面板外都关掉它。"""
-    geometry = animation_preview_geometry(surface)
-    if geometry["close"].collidepoint(position) or not geometry["panel"].collidepoint(position):
-        editor.close_animation_preview()
+    """动画对象的链接弹窗：预设下拉、动作左右下拉、确定/取消。"""
+    link = editor.animation_link
+    if link is None:
+        return
+    geometry = animation_link_geometry(surface, editor)
+    if geometry["popup"] is not None:
+        for rect, _, value in geometry["popup_rects"]:
+            if rect.collidepoint(position):
+                if link["dropdown"] == "preset":
+                    editor.set_animation_link_preset(value)
+                else:
+                    editor.choose_animation_link(value)
+                return
+        editor.close_animation_link_dropdown()
+        return
+    if geometry["preset"].collidepoint(position):
+        editor.toggle_animation_link_dropdown("preset")
+        return
+    for row in geometry["rows"]:
+        if row["kind"] == "general":
+            if row["field"].collidepoint(position):
+                editor.toggle_animation_link_dropdown((PRESET_GENERAL, "", ""))
+                return
+        else:
+            if row["left"].collidepoint(position):
+                editor.toggle_animation_link_dropdown(
+                    (PRESET_PLAYER, row["action"], "left")
+                )
+                return
+            if row["right"].collidepoint(position):
+                editor.toggle_animation_link_dropdown(
+                    (PRESET_PLAYER, row["action"], "right")
+                )
+                return
+    if geometry["ok"].collidepoint(position):
+        editor.close_animation_link(True)
+        return
+    if geometry["cancel"].collidepoint(position) or not geometry["panel"].collidepoint(position):
+        editor.close_animation_link(False)
 
 
 def handle_game_settings_click(
@@ -387,6 +442,9 @@ def handle_game_settings_click(
     """
     geometry = game_settings_geometry(surface, editor)
     panel = geometry["panel"]
+    if editor.animation_edit is not None:
+        handle_animation_edit_click(surface, editor, position)
+        return
     # 正在改某一帧的时长：点到别的任何地方就先把它收下
     if editor.animation_delay_active():
         page = geometry["animation"]
@@ -412,7 +470,7 @@ def handle_game_settings_click(
             editor.close_game_settings(False)
         return
     if editor.game_animation_tab():
-        handle_animation_click(editor, position, geometry["animation"])
+        handle_library_click(editor, position, geometry["animation"])
         if not panel.collidepoint(position):
             editor.close_game_settings(False)
         return

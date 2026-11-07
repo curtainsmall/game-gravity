@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from core.constants import BACKGROUND, FOOTER, MARGIN, STATUS_TEXT
-from view.animation import draw_animation_preview
+from view.animation import draw_animation_link
 from view.canvas import draw_canvas, draw_ruler
 from view.chrome import draw_create_menu, draw_file_menu, draw_header, draw_view_menu
 from view.layout import Layout
@@ -50,8 +50,8 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_settings(surface, editor, font)
     if editor.game_settings is not None:
         draw_game_settings(surface, editor, font)
-    if editor.animation_preview is not None:
-        draw_animation_preview(surface, editor, font)
+    if editor.animation_link is not None:
+        draw_animation_link(surface, editor, font)
     if editor.startup:
         draw_startup(surface, font)
     if editor.level_select_open:

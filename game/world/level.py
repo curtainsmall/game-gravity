@@ -26,12 +26,14 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动；
                              hide 表示初始隐藏，triggers 的 hide / show 由按钮或道具切换显示
                              （卡片同样带 mode：一次 / 按住 / 切换）
-    player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖。
-                             animations 是玩家动画：名字固定（idle/run/jump/fall/flip），每个动作分
-                             right / left 两侧，各写 {"frames": [相对路径…],
-                             "holds": [每帧停留秒数…], "loop": true}；一侧空着就用另一侧的帧
-                             镜像（游戏里也这样画）。game.json 的 player.animations 也能写，
-                             关卡里的同名动作按方向盖住它
+    animation_objects        动画对象：和贴图一样只显示、不碰撞，pos/size 是自己的；
+                             follow 写对象名字（或 "@player"）就跟着它平移；
+                             preset 是 general（links.general.clip 一条剪辑）或 player
+                             （links.player.<动作>.<left/right> 指向动画库的键），
+                             动作来自玩家的物理状态，空着的一侧用另一侧镜像；
+                             帧来自 game.json 的 animation_library
+    player                   起点；跳高和速度默认来自 game.json，这里写了就覆盖。
+                             玩家自己不再有动画，显示用动画对象（跟随玩家、预设 player）
     destination              终点
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
     sound                    这一关的音乐：bgm（相对 game.json 的路径）、loop、fade_in、fade_out
@@ -40,18 +42,15 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
 （传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是
 「底面」的中点、size 是没转过的宽高，face（up/right/down/left）决定从底面往哪边
 长出去，左右朝向时屏幕上的宽高是对调的。
-玩家参数一般写在 game.json 的 player 里（jump_height 格、可以是小数，move_speed 格/秒、
-animations 动画）；关卡 json 的 player 里写同名键就是这一关的覆盖值。老数据把动画写成
-动作 → 一套 frames + fps（读成右侧），更早一版把动作写成单张图放在 player.animation，
-或者把整张表写在顶层 animations，也都读。
+玩家参数一般写在 game.json 的 player 里（jump_height 格、可以是小数，move_speed 格/秒）；
+关卡 json 的 player 里写同名键就是这一关的覆盖值。
 图片路径都相对游戏根。
 """
 
 import json
 from pathlib import Path
 
-from animation.clip import AnimationClip
-from animation.player import PLAYER_SIDES
+from animation.sprite import PRESET_GENERAL, AnimationSprite
 from controller.controller import Controller
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
@@ -170,82 +169,26 @@ def move_speed_of(level_definition: LevelDefinition, game_player: dict | None = 
     return max(0.0, value)
 
 
-def player_animations(
-    level_definition: LevelDefinition,
-    game_settings: dict | None = None,
-    base_dir: str | Path | None = None,
-) -> dict:
-    """玩家的帧动画：动作 → {"right": 剪辑, "left": 剪辑}。
+def build_animation_objects(level_definition: LevelDefinition) -> list[GameObject]:
+    """动画对象：只显示、不碰撞，和贴图同级。
 
-    基础是 game.json 的 player.animations，关卡 json 里的 player.animations 按动作、按方向
-    覆盖它。每一侧写 {"frames": [...], "holds": [...], "loop": true}；名字固定（见
-    animation.player.PLAYER_STATES）。帧路径相对 game.json，找不到的帧跳过，一侧一帧都不剩
-    就不算这一侧。老格式（动作 → 一套 frames + fps）读成 right 侧；更早的顶层 animations、
-    player.animation（动作名 → 单张图）也读。
+    条目写 pos / size / follow / preset / links；预设和链接由 animation.sprite 解释，
+    帧来自 game.json 的动画库。follow 写名字就跟着那个对象走，写 "@player" 跟玩家。
+    位置尺寸是它自己的，跟随只平移。
     """
-    clips: dict = {}
-    settings = game_settings or {}
-    for source in (settings, level_definition):
-        if not isinstance(source, dict):
-            continue
-        _merge_animation_table(clips, source.get("animations"), base_dir)   # 顶层的旧位置
-        player = source.get("player")
-        if isinstance(player, dict):
-            _merge_animation_table(clips, player.get("animations"), base_dir)
-    # 老格式：player 里的 animation，动作名 → 单张图；只补还没配的 right 侧
-    for source in (settings.get("player"), player_settings(level_definition)):
-        legacy = source.get("animation") if isinstance(source, dict) else None
-        if not isinstance(legacy, dict):
-            continue
-        for action, value in legacy.items():
-            path = resolve_texture(value, base_dir)
-            if path is None:
-                continue
-            sides = clips.setdefault(str(action), {})
-            if "right" not in sides:
-                sides["right"] = AnimationClip([path])
-    return clips
-
-
-def _merge_animation_table(clips: dict, table, base_dir: str | Path | None) -> None:
-    """把一张 animations 表并进 clips；新格式按动作、按方向覆盖，老格式只当 right 侧。"""
-    if not isinstance(table, dict):
-        return
-    for name, entry in table.items():
+    sprites = []
+    for entry in level_definition.get("animation_objects", []):
         if not isinstance(entry, dict):
             continue
-        sides: dict = {}
-        if "frames" in entry or "holds" in entry or "fps" in entry:
-            clip = _animation_clip(entry, base_dir)
-            if clip is not None:
-                sides["right"] = clip
-        else:
-            for side in PLAYER_SIDES:
-                value = entry.get(side)
-                if isinstance(value, dict):
-                    clip = _animation_clip(value, base_dir)
-                    if clip is not None:
-                        sides[side] = clip
-        if not sides:
-            continue
-        clips.setdefault(str(name), {}).update(sides)
-
-
-def _animation_clip(entry: dict, base_dir: str | Path | None) -> AnimationClip | None:
-    """一侧的帧 + 每帧时长 → 剪辑；缺帧跳过，一帧都没有返回 None。"""
-    given = entry.get("holds")
-    given = given if isinstance(given, list) else []
-    frames = []
-    holds = []
-    for index, frame in enumerate(entry.get("frames") or []):
-        found = resolve_texture(frame, base_dir)
-        if found is None:
-            continue
-        frames.append(found)
-        holds.append(given[index] if index < len(given) else None)
-    if not frames:
-        return None
-    return AnimationClip(frames, holds, bool(entry.get("loop", True)), fps=entry.get("fps"))
+        game_object = _make(
+            entry, GameObjectKind.ANIMATION, is_static=True, is_sensor=True
+        )
+        game_object.follow = str(entry.get("follow") or "").strip()
+        game_object.sprite = AnimationSprite(
+            str(entry.get("preset") or PRESET_GENERAL), entry.get("links")
+        )
+        sprites.append(game_object)
+    return sprites
 
 
 def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, float]:

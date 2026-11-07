@@ -2,8 +2,8 @@
 
 游戏根就是 assets/game 这个文件夹：
     game.json          游戏自己的设置：title 是标题，credits 是制作名单（职位 → 名字数组），
-                       player 是玩家默认的跳高、速度与动画，sounds 是标题与制作名单的音乐，
-                       backgrounds 是标题画面和结算画面的背景图
+                       player 是玩家默认的跳高和速度，animation_library 是动画库，
+                       sounds 是标题与制作名单的音乐，backgrounds 是标题画面和结算画面的背景图
     levels/<名字>.json 一个文件是一关，文件名（去掉 .json）就是关卡名
 game.json 和 levels/*.json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
 图片、曲目放哪儿都行，只要能按相对路径找到。打包后 game/ 必须和 exe 放在一起。

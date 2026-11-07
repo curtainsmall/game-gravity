@@ -38,7 +38,7 @@ class RenderSystem:
         draw_background(surface, world, self.viewport)
         playable = self.viewport.playable_rect(world)
         # 先铺一层美术：调试显示整层压在贴图上面，开着调试时占位和翻转带都看得见。
-        # 有贴图路径的对象都画图（贴图、带动画的玩家等），贴图没图时在调试里铺棋盘格
+        # 有贴图路径的对象都画图（贴图、动画对象等），贴图没图时在调试里铺棋盘格
         for game_object in objects:
             body = game_object.body
             render = game_object.render

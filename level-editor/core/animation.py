@@ -1,170 +1,305 @@
-"""玩家动画：game.json 里 player 的 animations 表。
+"""动画库：game.json 里 animation_library 的「键 → 一条动画」。
 
-每个动作分左右两侧，各自一组帧、每帧一个停留时长：
-    {"idle": {"right": {"frames": [相对路径…], "holds": [0.1, …], "loop": true},
-              "left":  {"frames": [], "holds": [], "loop": true}}, ...}
-动作名固定（见 PLAYER_ANIMATIONS），方向固定（见 PLAYER_SIDES）。编辑器里每帧的时长
-写成字符串（和别的数字字段一样），存盘时再变成数字。两侧没有主次：空着的一侧在游戏里
-用另一侧的帧镜像出来，所以预览时也要能算出「实际会放什么」（见 resolved）。
-老格式（动作 → 一套 frames + fps + loop）读成右侧，fps 换算成每帧 1/fps 秒；更早一版
-把动画表写在顶层 animations、把动作写成单张图放在 player.animation，也都读。
+一条动画只有帧、每帧停留秒数、循环；它不知道左右，也不知道预设——左右和预设是
+动画对象自己的事（见编辑器里的动画对象弹窗）：
+
+    general   一条剪辑，没有动作名、没有左右
+    player    五个动作（站立 / 移动 / 上升 / 下落 / 翻转），每个动作左、右两个链接；
+              空着的一侧用另一侧镜像
+
+老数据（player.animations 里按动作分左右）在读取时一次性迁进动画库，键名是
+「动作_left / 动作_right」；应用游戏配置后旧字段就删掉，之后只认新结构。
 """
+
+import copy
 
 from core.helpers import clamp_float
 
-PLAYER_ANIMATIONS = (
+LIBRARY_KEY = "animation_library"
+
+PRESET_GENERAL = "general"
+PRESET_PLAYER = "player"
+PRESETS = ((PRESET_GENERAL, "通用"), (PRESET_PLAYER, "玩家"))
+GENERAL_CLIP = "clip"
+PLAYER_ACTIONS = (
     ("idle", "站立"),
     ("run", "移动"),
     ("jump", "上升"),
     ("fall", "下落"),
     ("flip", "翻转"),
 )
-PLAYER_SIDES = (
-    ("right", "向右"),
-    ("left", "向左"),
-)
-SIDE_NAMES = {"right": "右侧", "left": "左侧"}
-PREVIEW_KEY = "preview_animation"   # 起点里记着显示哪一套动画；游戏不读，只给编辑器看
-PREVIEW_SIDE_KEY = "preview_side"   # 起点里记着显示哪一侧；空着的那一侧游戏里是镜像
-DEFAULT_PREVIEW = "idle"
-DEFAULT_PREVIEW_SIDE = "right"
-DEFAULT_HOLD = 0.1          # 一帧默认停 0.1 秒
+SIDES = (("left", "左"), ("right", "右"))
+
+DEFAULT_HOLD = 0.1
 MIN_HOLD = 0.01
 MAX_HOLD = 10.0
 HOLD_STEP = 0.01
-DEFAULT_FPS = 8.0           # 老数据没写 fps 时的默认值
-DRAG_THRESHOLD = 4          # 鼠标挪开几个像素才算开始拖一帧（免得手一抖就换了顺序）
+DEFAULT_FPS = 8.0
+DRAG_THRESHOLD = 4
+NAME_MAX_LENGTH = 40
 
 
-def other_side(side: str) -> str:
-    return "left" if side == "right" else "right"
+def action_label(action: str) -> str:
+    return dict(PLAYER_ACTIONS).get(action, action)
+
+
+def preset_label(preset: str) -> str:
+    return dict(PRESETS).get(preset, preset)
+
+
+def side_label(side: str) -> str:
+    return dict(SIDES).get(side, side)
 
 
 def hold_text(value) -> str:
-    """停顿秒数 → 编辑框里的文字（夹在 0.01–10 之间）。"""
     return f"{clamp_float(value, MIN_HOLD, MAX_HOLD, DEFAULT_HOLD):g}"
 
 
-def new_side() -> dict:
+def new_animation() -> dict:
     return {"frames": [], "holds": [], "loop": True}
 
 
-def new_state() -> dict:
-    """五个动作、两个方向一开始就都在（没帧的也留着，存盘时写空表）。"""
+def new_links() -> dict:
+    """动画对象的链接默认值：两套预设都写全，切换预设不丢另一套。"""
     return {
-        name: {"right": new_side(), "left": new_side()}
-        for name, _ in PLAYER_ANIMATIONS
+        PRESET_GENERAL: {GENERAL_CLIP: ""},
+        PRESET_PLAYER: {
+            action: {"left": "", "right": ""} for action, _ in PLAYER_ACTIONS
+        },
     }
 
 
+def links_of(entry: dict) -> dict:
+    """条目里的 links 整理成完整形状：缺的预设/动作/方向都补空字符串。"""
+    links = new_links()
+    value = entry.get("links") if isinstance(entry, dict) else None
+    if not isinstance(value, dict):
+        return links
+    general = value.get(PRESET_GENERAL)
+    if isinstance(general, dict):
+        links[PRESET_GENERAL][GENERAL_CLIP] = str(general.get(GENERAL_CLIP) or "")
+    player = value.get(PRESET_PLAYER)
+    if isinstance(player, dict):
+        for action, _ in PLAYER_ACTIONS:
+            pair = player.get(action)
+            if isinstance(pair, dict):
+                for side, _ in SIDES:
+                    links[PRESET_PLAYER][action][side] = str(pair.get(side) or "")
+    return links
+
+
+# ---- 读 / 写 -------------------------------------------------------
 def from_settings(settings: dict) -> dict:
-    """game.json → 编辑用的状态：固定五个动作、两个方向，写了帧的才盖掉默认。"""
-    state = new_state()
+    """game.json → 动画库；老格式动画在这时一次性迁进来。"""
+    library = _read_library((settings or {}).get(LIBRARY_KEY))
+    _migrate_legacy(library, settings or {})
+    return library
+
+
+def _read_library(table) -> dict:
+    library: dict = {}
+    if not isinstance(table, dict):
+        return library
+    for key, value in table.items():
+        name = str(key).strip()
+        if not name or not isinstance(value, dict):
+            continue
+        frames = [
+            str(frame)
+            for frame in value.get("frames") or []
+            if isinstance(frame, str) and frame.strip()
+        ]
+        given = value.get("holds")
+        given = given if isinstance(given, list) else []
+        holds = [
+            hold_text(given[index] if index < len(given) else None)
+            for index in range(len(frames))
+        ]
+        library[name] = {
+            "frames": frames,
+            "holds": holds,
+            "loop": bool(value.get("loop", True)),
+        }
+    return library
+
+
+def _migrate_legacy(library: dict, settings: dict) -> None:
+    """老 player.animations（动作 → 左右两侧）拆成动画库条目。
+
+    每个动作的右侧 → 「动作_right」，左侧 → 「动作_left」；库里已经有同名键就不动。
+    老的单张图（player.animation）也按右侧一帧迁过来。
+    """
     player = settings.get("player")
     player = player if isinstance(player, dict) else {}
-    _apply_table(state, settings.get("animations"))       # 更早一版的顶层写法
-    _apply_table(state, player.get("animations"))
-    # 老格式：player.animation 动作名 → 单张图；对应右侧还没帧才用它
+    for table in (settings.get("animations"), player.get("animations")):
+        _migrate_action_table(library, table)
     legacy = player.get("animation")
     if isinstance(legacy, dict):
-        for name, _ in PLAYER_ANIMATIONS:
-            path = legacy.get(name)
-            clip = state[name]["right"]
-            if path and not clip["frames"]:
-                clip["frames"] = [str(path)]
-                clip["holds"] = [hold_text(DEFAULT_HOLD)]
-    return state
+        for action, value in legacy.items():
+            key = f"{action}_right"
+            if key in library or not isinstance(value, str) or not value.strip():
+                continue
+            library[key] = {
+                "frames": [value.strip()],
+                "holds": [hold_text(DEFAULT_HOLD)],
+                "loop": True,
+            }
 
 
-def _apply_table(state: dict, table) -> None:
-    """把一张 animations 表盖到编辑状态上；坏条目、不认识的动作名都跳过。"""
+def _migrate_action_table(library: dict, table) -> None:
     if not isinstance(table, dict):
         return
-    for name, _ in PLAYER_ANIMATIONS:
-        value = table.get(name)
-        if not isinstance(value, dict):
+    for action, entry in table.items():
+        if not isinstance(entry, dict):
             continue
-        if "frames" in value or "holds" in value or "fps" in value:
-            _apply_side(state[name]["right"], value)       # 老格式：整套就在这一层
+        if "frames" in entry or "holds" in entry or "fps" in entry:
+            _migrate_clip(library, f"{action}_right", entry)
             continue
-        for side, _ in PLAYER_SIDES:
-            side_value = value.get(side)
-            if isinstance(side_value, dict):
-                _apply_side(state[name][side], side_value)
+        for side, _ in SIDES:
+            value = entry.get(side)
+            if isinstance(value, dict):
+                _migrate_clip(library, f"{action}_{side}", value)
 
 
-def _apply_side(clip: dict, value: dict) -> None:
-    """一侧的 frames / holds / loop；没有 holds 时按 fps 换算。"""
+def _migrate_clip(library: dict, key: str, entry: dict) -> None:
+    if key in library:
+        return
     frames = [
         str(frame)
-        for frame in value.get("frames") or []
+        for frame in entry.get("frames") or []
         if isinstance(frame, str) and frame.strip()
     ]
-    given = value.get("holds")
+    if not frames:
+        return
+    given = entry.get("holds")
     given = given if isinstance(given, list) else []
-    fps = value.get("fps")
+    fps = entry.get("fps")
     fallback = None
     try:
         fallback = 1.0 / float(fps) if fps else None
     except (TypeError, ValueError):
         fallback = None
-    clip["frames"] = frames
-    clip["holds"] = [
-        hold_text(given[index] if index < len(given) else fallback)
-        for index in range(len(frames))
-    ]
-    clip["loop"] = bool(value.get("loop", True))
+    library[key] = {
+        "frames": frames,
+        "holds": [
+            hold_text(given[index] if index < len(given) else fallback)
+            for index in range(len(frames))
+        ],
+        "loop": bool(entry.get("loop", True)),
+    }
 
 
-def to_table(state: dict) -> dict:
-    """编辑状态 → 写回 game.json 的 player.animations。
-
-    五个动作、两个方向全写：这一页管的就是整张表。没帧的侧写空 frames / holds。
-    """
+def to_settings(settings: dict, library: dict) -> dict:
+    """编辑状态 → 写回 game.json：写动画库，删掉旧的玩家动画字段。"""
     table = {}
-    for name, _ in PLAYER_ANIMATIONS:
-        entry = state.get(name) or {}
-        table[name] = {}
-        for side, _ in PLAYER_SIDES:
-            clip = entry.get(side) or {}
-            frames = [
-                str(frame).strip()
-                for frame in clip.get("frames") or []
-                if str(frame).strip()
-            ]
-            holds = holds_of(clip)[: len(frames)]
-            table[name][side] = {
-                "frames": frames,
-                "holds": [round(hold, 2) for hold in holds],
-                "loop": bool(clip.get("loop", True)),
-            }
-    return table
+    for key, clip in library.items():
+        name = str(key).strip()
+        if not name:
+            continue
+        frames = [
+            str(frame).strip()
+            for frame in clip.get("frames") or []
+            if str(frame).strip()
+        ]
+        holds = holds_of(clip)[: len(frames)]
+        table[name] = {
+            "frames": frames,
+            "holds": [round(hold, 2) for hold in holds],
+            "loop": bool(clip.get("loop", True)),
+        }
+    settings[LIBRARY_KEY] = table
+    player = settings.get("player")
+    if isinstance(player, dict):
+        player.pop("animations", None)
+        player.pop("animation", None)
+    settings.pop("animations", None)
+    return settings
 
 
 def holds_of(clip: dict) -> list:
-    """一侧每帧停留多少秒（浮点、夹好范围），和 frames 一样长。"""
+    """一条动画的每帧停留秒数（浮点，夹好范围），和 frames 一样长。"""
     frames = clip.get("frames") or []
     given = clip.get("holds") or []
     return [
-        clamp_float(given[index] if index < len(given) else None, MIN_HOLD, MAX_HOLD, DEFAULT_HOLD)
+        clamp_float(
+            given[index] if index < len(given) else None, MIN_HOLD, MAX_HOLD, DEFAULT_HOLD
+        )
         for index in range(len(frames))
     ]
 
 
-def resolved(state: dict, action: str, side: str) -> tuple:
-    """这一侧实际会播什么：(frames, holds, loop, 镜像自哪一侧或 None)。
+# ---- 动画对象 ------------------------------------------------------
+def preset_of(entry: dict) -> str:
+    preset = str(entry.get("preset") or PRESET_GENERAL) if isinstance(entry, dict) else ""
+    return preset if preset in (PRESET_GENERAL, PRESET_PLAYER) else PRESET_GENERAL
 
-    本侧有帧就用本侧；本侧空着就用另一侧，播放时水平镜像（见游戏端的 PlayerAnimator）；
-    两侧都没有就是空，游戏里退到 idle。
+
+def link_key(links: dict, preset: str, action: str = "", side: str = "") -> str:
+    if preset == PRESET_GENERAL:
+        return str((links.get(PRESET_GENERAL) or {}).get(GENERAL_CLIP) or "")
+    pair = (links.get(PRESET_PLAYER) or {}).get(action)
+    pair = pair if isinstance(pair, dict) else {}
+    return str(pair.get(side) or "")
+
+
+def set_link(links: dict, preset: str, action: str, side: str, key: str) -> None:
+    if preset == PRESET_GENERAL:
+        links.setdefault(PRESET_GENERAL, {})[GENERAL_CLIP] = key
+        return
+    player = links.setdefault(PRESET_PLAYER, {})
+    pair = player.setdefault(action, {"left": "", "right": ""})
+    pair[side] = key
+
+
+def resolve_for_editor(
+    library: dict, entry: dict, action: str | None = None, side: str = "right"
+) -> tuple[list, list, bool, str]:
+    """编辑器画布用：这个动画对象现在该显示哪条剪辑。
+
+    返回 (帧路径, 每帧时长, 要不要镜像, 实际动作名)。玩家预设默认用 idle、右侧；
+    找不到剪辑就是空列表。
     """
-    entry = state.get(action) or {}
-    clip = entry.get(side) or {}
-    frames = [str(frame) for frame in clip.get("frames") or []]
-    if frames:
-        return frames, holds_of(clip), bool(clip.get("loop", True)), None
-    other = other_side(side)
-    fallback = entry.get(other) or {}
-    frames = [str(frame) for frame in fallback.get("frames") or []]
-    if frames:
-        return frames, holds_of(fallback), bool(fallback.get("loop", True)), other
-    return [], [], True, None
+    links = links_of(entry)
+    if preset_of(entry) == PRESET_GENERAL:
+        key = link_key(links, PRESET_GENERAL)
+        clip = library.get(key)
+        if clip is None:
+            return [], [], False, GENERAL_CLIP
+        return list(clip["frames"]), holds_of(clip), False, GENERAL_CLIP
+    action = action or "idle"
+    for candidate in (action, "idle", *[name for name, _ in PLAYER_ACTIONS]):
+        key = link_key(links, PRESET_PLAYER, candidate, side)
+        mirror = False
+        if not key:
+            other = "left" if side == "right" else "right"
+            key = link_key(links, PRESET_PLAYER, candidate, other)
+            mirror = bool(key)
+        clip = library.get(key) if key else None
+        if clip is not None:
+            return list(clip["frames"]), holds_of(clip), mirror, candidate
+    return [], [], False, action
+
+
+def referenced_keys(level_definition: dict) -> set:
+    """一个关卡里所有动画对象链接到的动画库键。"""
+    keys: set = set()
+    entries = level_definition.get("animation_objects")
+    if not isinstance(entries, list):
+        return keys
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        links = links_of(entry)
+        key = link_key(links, PRESET_GENERAL)
+        if key:
+            keys.add(key)
+        for action, _ in PLAYER_ACTIONS:
+            for side, _ in SIDES:
+                key = link_key(links, PRESET_PLAYER, action, side)
+                if key:
+                    keys.add(key)
+    return keys
+
+
+def copy_links(links: dict) -> dict:
+    return copy.deepcopy(links)

@@ -28,6 +28,7 @@ class GameObjectKind(StrEnum):
     PORTAL = "portal"
     DESTINATION = "destination"
     TEXTURE = "texture"    # 只显示美术图，不参与碰撞
+    ANIMATION = "animation"  # 只显示一段动画，不参与碰撞；预设和链接在 sprite 部件里
 
 
 class GameObject:
@@ -55,6 +56,7 @@ class GameObject:
         self.item: Item | None = item                     # 道具参数
         self.portal: Portal | None = portal               # 传送门参数
         self.triggers: TriggerSheet | None = triggers     # 触发行为卡片，空表示不接触发器
+        self.sprite = None                                # 动画对象的预设与链接（animation.sprite）
         self.interaction_state: int = interaction_state   # 交互状态，由系统写入
         self.events: set[str] = set()                     # 当前生效的事件名，由 TriggerSystem 写入
 

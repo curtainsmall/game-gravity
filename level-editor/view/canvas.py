@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from core.constants import (
+    ANIMATION_COLOR,
     BLOCK_COLOR,
     BUTTON_COLOR,
     DESTINATION_COLOR,
@@ -152,28 +153,20 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for entry in level.nozzles:
             draw_nozzle(surface, layout, entry, selected=id(entry) in selected_ids)
 
-    # 贴图压在方块、按钮、道具、喷口上面；传送门、起点、终点的标记再压在贴图上。
-    # 缺图时调试显示里铺黑紫棋盘格；「视图 → 显示贴图」关掉时整层都不画，连描边也一起藏起来
+    # 贴图压在方块、按钮、道具、喷口上面；动画对象再压在贴图上，传送门、起点、终点的标记最上面。
+    # 缺图时调试显示里铺黑紫棋盘格；「视图 → 显示贴图」关掉时贴图层不画，连描边也一起藏起来
     show_textures = editor.show_textures()
     if show_textures:
         draw_textures(surface, layout, level, editor.media_base_dir, debug)
+    draw_animation_objects(surface, layout, level, editor)
 
     if debug:
         for entry in level.portals:
             draw_portal(surface, layout, entry)
 
-        # 起点和终点都画成同一款标记：2px 方框 + 中心小方点。
-        # 起点还会按属性面板选的那套动画画第一帧，只为核对玩家在关卡里的尺寸；没有就不画
+        # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
         if level.player is not None:
-            marker = layout.entry_rect(level.player)
-            preview = editor.start_preview()
-            image = None
-            if preview is not None:
-                path, mirror = preview
-                image = load_scaled(path, marker.size, True, flip=mirror)
-            if image is not None:
-                surface.blit(image, marker.topleft)
-            draw_cell_marker(surface, marker, PLAYER_COLOR)
+            draw_cell_marker(surface, layout.entry_rect(level.player), PLAYER_COLOR)
         if level.destination:
             draw_cell_marker(surface, layout.entry_rect(level.destination), DESTINATION_COLOR)
 
@@ -248,6 +241,21 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         if picked is not None:
             kind, entry = editor.pick_menu["stack"][picked]
             draw_object_outline(surface, layout, kind, entry, HIGHLIGHT, 2)
+
+
+def draw_animation_objects(
+    surface: pygame.Surface, layout: Layout, level, editor
+) -> None:
+    """动画对象：画这一刻的帧；没链接/没图片也画一圈淡描边，空的也看得见、点得中。"""
+    for entry in level.animation_objects:
+        rect = layout.entry_rect(entry)
+        frame = editor.animation_object_frame(entry)
+        if frame is not None:
+            path, mirror = frame
+            image = load_scaled(path, rect.size, True, flip=mirror)
+            if image is not None:
+                surface.blit(image, rect.topleft)
+        pygame.draw.rect(surface, ANIMATION_COLOR, rect, 1)
 
 
 def draw_object_outline(

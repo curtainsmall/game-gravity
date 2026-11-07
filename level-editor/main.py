@@ -14,9 +14,9 @@ from core.constants import (
 )
 from editing.editor import Editor
 from editing.handlers import (
-    handle_animation_drag_motion,
-    handle_animation_drag_release,
-    handle_animation_preview_click,
+    handle_animation_edit_drag_motion,
+    handle_animation_edit_drag_release,
+    handle_animation_link_click,
     handle_create_menu,
     handle_detail_click,
     handle_dropdown_click,
@@ -119,6 +119,19 @@ def run() -> None:
                         if rect.collidepoint(event.pos):
                             editor.create_game() if action == "create" else editor.open_game()
                             break
+            elif editor.animation_link is not None:
+                # 动画对象的链接弹窗：Esc 取消、回车确定，滚轮翻下拉列表
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    editor.close_animation_link(False)
+                elif event.type == pygame.KEYDOWN and event.key in (
+                    pygame.K_RETURN,
+                    pygame.K_KP_ENTER,
+                ):
+                    editor.close_animation_link(True)
+                elif event.type == pygame.MOUSEWHEEL:
+                    editor.scroll_animation_link_popup(-event.y)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    handle_animation_link_click(screen, editor, event.pos)
             elif editor.level_select_open:
                 # 关卡列表：点一行切过去，另有「新建关卡」「关闭」，滚轮上下滚
                 if event.type == pygame.KEYDOWN:
@@ -162,36 +175,42 @@ def run() -> None:
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
-                # 游戏配置：Tab 切常规/玩家动画/制作名单/声音/过场，↑↓ 选格子，←→ 调值，敲字直接改，
-                # 制作名单用滚轮按像素上下滚、过场的卡片按张翻；玩家动画页点动作页签换动作、
-                # 方向下拉框换左右、点缩略图选帧（拖动换顺序）、点秒数改停留时长（回车落下、
-                # Esc 取消），←→ 按 0.01 秒调、Delete 删帧、滚轮翻格子；「预览」弹出的小窗自己吃
-                # 事件，Esc / 回车 / 点面板外关掉
-                if editor.animation_preview is not None:
-                    if event.type == pygame.KEYDOWN and event.key in (
-                        pygame.K_ESCAPE,
-                        pygame.K_RETURN,
-                        pygame.K_KP_ENTER,
-                    ):
-                        editor.close_animation_preview()
-                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                        handle_animation_preview_click(screen, editor, event.pos)
-                    continue
-                if event.type == pygame.KEYDOWN and editor.animation_delay_active():
-                    # 正在敲某一帧的时长：回车落下，Esc 撤回，退格删字；别的键先落下再照常处理
+                # 游戏配置：Tab 切页；动画集里点「新建动画」或点一行开编辑弹窗；
+                # 弹窗里 Esc 取消、回车确定、点秒数改停留时长、滚轮翻格子。
+                if event.type == pygame.KEYDOWN and editor.animation_edit is not None:
                     if event.key == pygame.K_ESCAPE:
-                        editor.cancel_animation_delay()
-                        continue
-                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        editor.commit_animation_delay()
-                        continue
-                    if event.key == pygame.K_BACKSPACE:
-                        editor.erase_animation_delay_char()
-                        continue
-                    if event.unicode and event.unicode.isprintable():
-                        editor.type_animation_delay(event.unicode)
-                        continue
-                    editor.commit_animation_delay()
+                        if editor.animation_delay_active():
+                            editor.cancel_animation_delay()
+                        else:
+                            editor.close_animation_edit(False)
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        if editor.animation_delay_active():
+                            editor.commit_animation_delay()
+                        elif editor.animation_edit["name_focus"]:
+                            editor.blur_animation_name()
+                        else:
+                            editor.close_animation_edit(True)
+                    elif event.key == pygame.K_BACKSPACE:
+                        if editor.animation_delay_active():
+                            editor.erase_animation_delay_char()
+                        elif editor.animation_edit["name_focus"]:
+                            editor.erase_animation_name_char()
+                    elif event.key == pygame.K_DELETE:
+                        editor.remove_animation_frame()
+                    elif event.key == pygame.K_LEFT:
+                        editor.adjust_animation_hold(-1)
+                    elif event.key == pygame.K_RIGHT:
+                        editor.adjust_animation_hold(1)
+                    elif event.key == pygame.K_UP:
+                        editor.move_animation_frame(-1)
+                    elif event.key == pygame.K_DOWN:
+                        editor.move_animation_frame(1)
+                    elif event.unicode and event.unicode.isprintable():
+                        if editor.animation_delay_active():
+                            editor.type_animation_delay(event.unicode)
+                        elif editor.animation_edit["name_focus"]:
+                            editor.type_animation_name(event.unicode)
+                    continue
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_game_settings(False)
@@ -208,25 +227,29 @@ def run() -> None:
                         editor.adjust_game_number(-1)
                     elif event.key == pygame.K_RIGHT:
                         editor.adjust_game_number(1)
-                    elif event.key == pygame.K_DELETE:
-                        if editor.game_animation_tab():
-                            editor.remove_animation_frame()
                     elif event.key == pygame.K_BACKSPACE:
                         editor.erase_game_settings_char()
                     elif event.unicode and event.unicode.isprintable():
                         editor.type_game_settings(event.unicode)
                 elif event.type == pygame.MOUSEWHEEL:
                     editor.scroll_game_cards(-event.y)
-                elif event.type == pygame.MOUSEMOTION and editor.animation_drag is not None:
-                    # 拖动缩略图：按着左键就更新插入点，松手在外不算
-                    if event.buttons[0]:
-                        handle_animation_drag_motion(screen, editor, event.pos)
-                    else:
-                        editor.cancel_animation_drag()
-                elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and (
-                    editor.animation_drag is not None
+                elif (
+                    event.type == pygame.MOUSEMOTION
+                    and editor.animation_edit is not None
+                    and editor.animation_edit["drag"] is not None
                 ):
-                    handle_animation_drag_release(editor)
+                    # 拖动帧：按着左键就更新插入点，松手在外不算
+                    if event.buttons[0]:
+                        handle_animation_edit_drag_motion(screen, editor, event.pos)
+                    else:
+                        editor.cancel_animation_frame_drag()
+                elif (
+                    event.type == pygame.MOUSEBUTTONUP
+                    and event.button == 1
+                    and editor.animation_edit is not None
+                    and editor.animation_edit["drag"] is not None
+                ):
+                    handle_animation_edit_drag_release(editor)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_game_settings_click(screen, editor, event.pos)
             elif editor.pending_switch is not None:
@@ -424,10 +447,9 @@ def run() -> None:
                 elif editor.dialog is not None and event.key == pygame.K_RIGHT:
                     editor.adjust_dialog(1)
 
-        # 起点上那段预览一直在走（暂停时它自己不动），和游戏配置里的播放预览互不影响
-        editor.advance_start_preview(dt)
-        if editor.animation_preview is not None:
-            editor.advance_animation_preview(dt)
+        # 动画集里的预览和画布上的动画对象各走各的
+        editor.advance_animation_edit(dt)
+        editor.advance_animation_objects(dt)
 
         draw(screen, editor, font, layout)
         pygame.display.flip()

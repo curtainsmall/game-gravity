@@ -1,8 +1,9 @@
 """关卡数据模型。
 
 键和形状与游戏端一一对应，细节见 game/world/level.py 的模块说明；这里只额外记着
-编辑器自己关心的事：玩家的跳高、速度、动画属于整个游戏（game.json，见 core.game），
+编辑器自己关心的事：玩家的跳高、速度属于整个游戏（game.json，见 core.game），
 不归 Level 管；关卡 json 的 player 里如果还留着这几个键，原样保留当这一关的覆盖值。
+动画库在 game.json 里；关卡自己的动画对象（animation_objects）归 Level 管。
 关卡名就是文件名（levels/<名字>.json），json 里不再写 name。
 这一关的背景音乐（sound）跟着关卡文件走，归 Level 管；标题和制作名单的音乐在 game.json 的
 sounds 里，由「游戏配置」的声音页改（见 core.sound）。
@@ -54,6 +55,7 @@ LEVEL_KEYS = {
     "items",
     "nozzles",
     "textures",
+    "animation_objects",
     "player",
 }
 
@@ -162,6 +164,7 @@ class Level:
         self.items: list = []
         self.nozzles: list = []
         self.textures: list = []   # 贴图：浮点世界矩形 + 图片名，不吸格子
+        self.animation_objects: list = []  # 动画对象：pos/size + follow + 预设 + 链接
         self.player: dict | None = None
         self.destination: dict | None = None
 
@@ -181,24 +184,16 @@ class Level:
                 "items": copy.deepcopy(self.items),
                 "nozzles": copy.deepcopy(self.nozzles),
                 "textures": copy.deepcopy(self.textures),
+                "animation_objects": copy.deepcopy(self.animation_objects),
             }
         )
-        # 起点和终点都只有一份，没有就不写这个键。跳高、速度、动画属于整个游戏，
+        # 起点和终点都只有一份，没有就不写这个键。跳高、速度属于整个游戏，
         # 写在 game.json 里；这一关原本写过的覆盖值原样留着，不动它。
-        # preview_animation / preview_side 是起点自己的属性：在编辑器里显示哪一套动画的
-        # 哪一侧，默认站立、右侧。
+        # 起点以前那两个预览字段不再写（编辑器已经不做起点预览了）。
         if self.player is not None:
             player = copy.deepcopy(self.player)
-            action = str(player.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
-            names = [name for name, _ in animation.PLAYER_ANIMATIONS]
-            player[animation.PREVIEW_KEY] = (
-                action if action in names else animation.DEFAULT_PREVIEW
-            )
-            side = str(player.get(animation.PREVIEW_SIDE_KEY) or animation.DEFAULT_PREVIEW_SIDE)
-            sides = [name for name, _ in animation.PLAYER_SIDES]
-            player[animation.PREVIEW_SIDE_KEY] = (
-                side if side in sides else animation.DEFAULT_PREVIEW_SIDE
-            )
+            player.pop("preview_animation", None)
+            player.pop("preview_side", None)
             definition["player"] = player
         if self.destination is not None:
             definition["destination"] = copy.deepcopy(self.destination)
@@ -267,9 +262,23 @@ class Level:
         for entry in level.textures:
             if isinstance(entry, dict):
                 _migrate_triggers(entry)
+        # 动画对象：位置尺寸、跟随、预设、两套链接；链接缺的项补空
+        level.animation_objects = []
+        for entry in copy.deepcopy(list(definition.get("animation_objects", []))):
+            if not isinstance(entry, dict):
+                continue
+            entry.setdefault("size", [1.0, 1.0])
+            entry.setdefault("follow", "")
+            entry.setdefault("preset", animation.PRESET_GENERAL)
+            entry["links"] = animation.links_of(entry)
+            level.animation_objects.append(entry)
 
-        # 玩家：这里只放位置和大小，跳高/速度/动画属于整个游戏（game.json，编辑器不写）；
+        # 玩家：这里只放位置和大小，跳高/速度属于整个游戏（game.json，编辑器不写）；
         # 老关卡里写过的这几项原样留着，游戏读的时候当成这一关的覆盖值
         player = definition.get("player")
         level.player = copy.deepcopy(player) if isinstance(player, dict) else None
+        if level.player is not None:
+            # 起点预览已经删掉，这两个旧字段不再保留
+            level.player.pop("preview_animation", None)
+            level.player.pop("preview_side", None)
         return level
