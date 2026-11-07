@@ -1,14 +1,15 @@
 """打包：把游戏和关卡编辑器编成 bin/ 下的两个可执行文件。
 
-运行：uv run build.py
+运行：uv run build.py [--with-asset]
 
 产物：
   bin/gravity.exe        游戏
   bin/level-editor.exe   关卡编辑器
 
 两个程序都按「exe 旁边的 assets/」找资源，所以 assets/ 必须和 exe 放在一起，
-单独挪走 exe 会找不到关卡。打包不会往 bin/ 里拷资源：bin/assets 自己放、自己改，
-重新打包不会把它盖掉。
+单独挪走 exe 会找不到关卡。默认打包不碰 bin/assets：自己放、自己改，重新打包
+不会把它盖掉。加 --with-asset 时，打包完会把仓库里的 assets/ 整个覆盖到
+bin/assets/（先删旧的再拷，源目录里删掉的文件不会残留在 bin 里）。
 
 打包参数都显式写出来，不依赖 PyInstaller 的自动推断：
   --paths           每个项目自己的模块根（core/、view/ 这些是顶层模块）
@@ -23,6 +24,7 @@
 用 uv run 启动时这步其实已经做过了，直接 python build.py 时它才是必要的。
 """
 
+import argparse
 import shutil
 import subprocess
 import sys
@@ -31,6 +33,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 BIN_DIR = ROOT / "bin"
 WORK_DIR = ROOT / "build" / "pyinstaller"
+ASSETS_DIR = ROOT / "assets"
+BIN_ASSETS_DIR = BIN_DIR / "assets"
 
 TARGETS = [
     {
@@ -99,11 +103,31 @@ def build(target: dict) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
+def copy_assets() -> None:
+    """把仓库里的 assets/ 整个覆盖到 bin/assets/：先删旧的，再拷一份新的。"""
+    if not ASSETS_DIR.is_dir():
+        raise SystemExit(f"[build] 找不到资源目录：{ASSETS_DIR}")
+    if BIN_ASSETS_DIR.exists():
+        shutil.rmtree(BIN_ASSETS_DIR)
+    shutil.copytree(ASSETS_DIR, BIN_ASSETS_DIR)
+    print(f"[build] assets -> {BIN_ASSETS_DIR.relative_to(ROOT)}")
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="打包游戏和关卡编辑器到 bin/")
+    parser.add_argument(
+        "--with-asset",
+        action="store_true",
+        help="打包后把 assets/ 整个覆盖到 bin/assets/（原有的 bin/assets 会先删掉）",
+    )
+    args = parser.parse_args()
+
     sync_environment()
     BIN_DIR.mkdir(exist_ok=True)
     for target in TARGETS:
         build(target)
+    if args.with_asset:
+        copy_assets()
 
     print("[build] done:")
     for path in sorted(BIN_DIR.iterdir()):
