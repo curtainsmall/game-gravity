@@ -270,7 +270,7 @@
   ],
   "planks": [
     {
-      "pos": [71.75, 6.5],
+      "pos": [71.5, 6.0],
       "size": [2.75, 1.0]
     },
     {
@@ -459,7 +459,7 @@
       "smooth": false
     },
     {
-      "pos": [71.5, 6.0],
+      "pos": [71.5, 5.5],
       "size": [3.0, 2.0],
       "image": "textures/level1/1.5x1.png",
       "smooth": false
@@ -869,54 +869,61 @@
   ],
   "animation_objects": [
     {
-      "pos": [0.37, -0.2],
+      "pos": [0.46, -0.24],
       "size": [3.0, 4.0],
       "follow": "@player",
       "preset": "player",
       "links": {
         "general": {
-          "clip": "",
-          "loop": true
+          "clip": ""
         },
         "player": {
           "idle": {
             "left": {
-              "clip": "idle_left",
-              "loop": true
+              "clip": "idle_left"
             },
             "right": {
-              "clip": "idle_right",
-              "loop": true
+              "clip": "idle_right"
             }
           },
           "run": {
             "left": {
-              "clip": "run_left",
-              "loop": true
+              "clip": "run_left"
             },
             "right": {
-              "clip": "run_right",
-              "loop": true
+              "clip": "run_right"
             }
           },
-          "jump": {
+          "takeoff": {
             "left": {
-              "clip": "",
-              "loop": true
+              "clip": "takeoff_left"
             },
             "right": {
-              "clip": "",
-              "loop": true
+              "clip": "takeoff_right"
+            }
+          },
+          "raise": {
+            "left": {
+              "clip": "raise_left"
+            },
+            "right": {
+              "clip": "raise_right"
             }
           },
           "fall": {
             "left": {
-              "clip": "",
-              "loop": true
+              "clip": "raise_left"
             },
             "right": {
-              "clip": "",
-              "loop": true
+              "clip": "raise_right"
+            }
+          },
+          "landing": {
+            "left": {
+              "clip": "landing_left"
+            },
+            "right": {
+              "clip": "landing_right"
             }
           }
         }
@@ -925,8 +932,8 @@
   ],
   "sound_objects": [],
   "player": {
-    "pos": [1.0, 0.0],
-    "size": [2.0, 3.0]
+    "pos": [1.2, -0.02],
+    "size": [1.8, 2.6]
   },
   "destination": {
     "pos": [235.0, 6.0],

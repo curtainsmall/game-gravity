@@ -10,10 +10,11 @@ from enum import StrEnum
 
 import pygame
 
+import debug_display
 import screens
 import ui
 import user_settings
-from controller.input_source import InputState
+from controller.input_source import InputSource, InputState
 from cutscene.cutscene import Cutscene, cutscene_of
 from cutscene.player import CutscenePlayer
 from game_settings import (
@@ -522,6 +523,8 @@ class App:
             self.scene.player_debug = self.player_debug
             surface.fill(BACKGROUND_COLOR)
             self.scene.draw(surface)
+            if self.player_debug:
+                debug_display.draw_player_debug(surface, InputSource.jump_height())
         elif self.screen == Screen.LEVEL_SELECT:
             screens.draw_level_select(surface, self)
         elif self.screen == Screen.ENDING:

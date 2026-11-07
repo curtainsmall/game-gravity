@@ -53,70 +53,6 @@
     "sound": false
   },
   "animation_library": {
-    "idle_left": {
-      "frames": [
-        "animations/player/idle-left/01.png",
-        "animations/player/idle-left/02.png",
-        "animations/player/idle-left/03.png",
-        "animations/player/idle-left/04.png",
-        "animations/player/idle-left/05.png",
-        "animations/player/idle-left/06.png",
-        "animations/player/idle-left/07.png",
-        "animations/player/idle-left/08.png",
-        "animations/player/idle-left/09.png",
-        "animations/player/idle-left/10.png",
-        "animations/player/idle-left/11.png",
-        "animations/player/idle-left/12.png",
-        "animations/player/idle-left/13.png"
-      ],
-      "holds": [
-        0.36,
-        0.06,
-        0.18,
-        0.06,
-        0.06,
-        0.12,
-        0.06,
-        0.06,
-        0.06,
-        0.06,
-        0.06,
-        0.06,
-        0.18
-      ]
-    },
-    "idle_right": {
-      "frames": [
-        "animations/player/idle-right/01.png",
-        "animations/player/idle-right/02.png",
-        "animations/player/idle-right/03.png",
-        "animations/player/idle-right/04.png",
-        "animations/player/idle-right/05.png",
-        "animations/player/idle-right/06.png",
-        "animations/player/idle-right/07.png",
-        "animations/player/idle-right/08.png",
-        "animations/player/idle-right/09.png",
-        "animations/player/idle-right/10.png",
-        "animations/player/idle-right/11.png",
-        "animations/player/idle-right/12.png",
-        "animations/player/idle-right/13.png"
-      ],
-      "holds": [
-        0.36,
-        0.06,
-        0.18,
-        0.06,
-        0.06,
-        0.12,
-        0.06,
-        0.06,
-        0.06,
-        0.06,
-        0.06,
-        0.06,
-        0.18
-      ]
-    },
     "run_left": {
       "frames": [
         "animations/player/walk-left/01.png",
@@ -279,7 +215,91 @@
         0.08
       ]
     },
-    "jump_left": {
+    "takeoff_right": {
+      "frames": [
+        "animations/player/jump-right/01.png",
+        "animations/player/jump-right/02.png",
+        "animations/player/jump-right/03.png",
+        "animations/player/jump-right/04.png",
+        "animations/player/jump-right/05.png",
+        "animations/player/jump-right/06.png",
+        "animations/player/jump-right/07.png"
+      ],
+      "holds": [
+        0.3,
+        0.05,
+        0.15,
+        0.05,
+        0.05,
+        0.5,
+        0.05
+      ]
+    },
+    "idle_left": {
+      "frames": [
+        "animations/player/idle-left/01.png",
+        "animations/player/idle-left/02.png",
+        "animations/player/idle-left/03.png",
+        "animations/player/idle-left/04.png",
+        "animations/player/idle-left/05.png",
+        "animations/player/idle-left/06.png",
+        "animations/player/idle-left/07.png",
+        "animations/player/idle-left/08.png",
+        "animations/player/idle-left/09.png",
+        "animations/player/idle-left/10.png",
+        "animations/player/idle-left/11.png",
+        "animations/player/idle-left/12.png",
+        "animations/player/idle-left/13.png"
+      ],
+      "holds": [
+        0.36,
+        0.06,
+        0.18,
+        0.06,
+        0.06,
+        0.12,
+        0.06,
+        0.06,
+        0.06,
+        0.06,
+        0.06,
+        0.06,
+        0.18
+      ]
+    },
+    "idle_right": {
+      "frames": [
+        "animations/player/idle-right/01.png",
+        "animations/player/idle-right/02.png",
+        "animations/player/idle-right/03.png",
+        "animations/player/idle-right/04.png",
+        "animations/player/idle-right/05.png",
+        "animations/player/idle-right/06.png",
+        "animations/player/idle-right/07.png",
+        "animations/player/idle-right/08.png",
+        "animations/player/idle-right/09.png",
+        "animations/player/idle-right/10.png",
+        "animations/player/idle-right/11.png",
+        "animations/player/idle-right/12.png",
+        "animations/player/idle-right/13.png"
+      ],
+      "holds": [
+        0.36,
+        0.06,
+        0.18,
+        0.06,
+        0.06,
+        0.12,
+        0.06,
+        0.06,
+        0.06,
+        0.06,
+        0.06,
+        0.06,
+        0.18
+      ]
+    },
+    "takeoff_left": {
       "frames": [
         "animations/player/jump-left/01.png",
         "animations/player/jump-left/02.png",
@@ -299,24 +319,92 @@
         0.45
       ]
     },
-    "jump_right": {
+    "raise_left": {
       "frames": [
-        "animations/player/jump-right/01.png",
-        "animations/player/jump-right/02.png",
-        "animations/player/jump-right/03.png",
+        "animations/player/jump-left/04.png",
+        "animations/player/jump-left/05.png",
+        "animations/player/jump-left/06.png",
+        "animations/player/jump-left/07.png",
+        "animations/player/jump-left/08.png",
+        "animations/player/jump-left/09.png"
+      ],
+      "holds": [
+        0.05,
+        0.05,
+        0.05,
+        0.45,
+        0.05,
+        0.55
+      ]
+    },
+    "raise_right": {
+      "frames": [
         "animations/player/jump-right/04.png",
         "animations/player/jump-right/05.png",
         "animations/player/jump-right/06.png",
-        "animations/player/jump-right/07.png"
+        "animations/player/jump-right/07.png",
+        "animations/player/jump-right/08.png"
       ],
       "holds": [
-        0.3,
+        0.05,
+        0.05,
+        0.5,
+        0.05,
+        0.55
+      ]
+    },
+    "landing_left": {
+      "frames": [
+        "animations/player/jump-left/09.png",
+        "animations/player/jump-left/10.png",
+        "animations/player/jump-left/11.png",
+        "animations/player/jump-left/12.png",
+        "animations/player/jump-left/13.png",
+        "animations/player/jump-left/14.png",
+        "animations/player/jump-left/15.png",
+        "animations/player/jump-left/16.png",
+        "animations/player/jump-left/17.png",
+        "animations/player/jump-left/18.png",
+        "animations/player/jump-left/19.png"
+      ],
+      "holds": [
+        0.55,
         0.05,
         0.15,
         0.05,
         0.05,
-        0.5,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
         0.05
+      ]
+    },
+    "landing_right": {
+      "frames": [
+        "animations/player/jump-right/08.png",
+        "animations/player/jump-right/09.png",
+        "animations/player/jump-right/10.png",
+        "animations/player/jump-right/11.png",
+        "animations/player/jump-right/12.png",
+        "animations/player/jump-right/13.png",
+        "animations/player/jump-right/14.png",
+        "animations/player/jump-right/15.png",
+        "animations/player/jump-right/16.png",
+        "animations/player/jump-right/17.png"
+      ],
+      "holds": [
+        0.55,
+        0.05,
+        0.15,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.1
       ]
     }
   },
