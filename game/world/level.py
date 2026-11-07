@@ -35,7 +35,8 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
 （传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是
 「底面」的中点、size 是没转过的宽高，face（up/right/down/left）决定从底面往哪边
 长出去，左右朝向时屏幕上的宽高是对调的。
-玩家参数一般写在 game.json 的 player 里（jump_height 格、move_speed 格/秒、animations 动画）；
+玩家参数一般写在 game.json 的 player 里（jump_height 格、可以是小数，move_speed 格/秒、
+animations 动画）；
 关卡 json 的 player 里写同名键就是这一关的覆盖值。老数据把玩家动画写在 player.animation
 里（动作名 → 单张图），读成只有一帧的剪辑；更早一版写在顶层的 animations，也当成同一张表。
 图片路径都相对游戏根。
@@ -146,13 +147,13 @@ def _player_value(
     return default
 
 
-def jump_height_of(level_definition: LevelDefinition, game_player: dict | None = None) -> int:
-    """玩家初始跳高（格）：再按关卡高度夹一下，矮关卡里一蹦不会穿过天花板。"""
+def jump_height_of(level_definition: LevelDefinition, game_player: dict | None = None) -> float:
+    """玩家初始跳高（格，可以是小数）：再按关卡高度夹一下，矮关卡里一蹦不会穿过天花板。"""
     value = _player_value(
-        level_definition, game_player, "jump_height", InputSource.JUMP_HEIGHT_DEFAULT, int
+        level_definition, game_player, "jump_height", InputSource.JUMP_HEIGHT_DEFAULT, float
     )
     level_height = int(level_definition.get("height", HEIGHT_IN_BLOCKS))
-    return max(InputSource.JUMP_HEIGHT_MIN, min(value, level_height - 1))
+    return max(float(InputSource.JUMP_HEIGHT_MIN), min(value, level_height - 1.0))
 
 
 def move_speed_of(level_definition: LevelDefinition, game_player: dict | None = None) -> float:

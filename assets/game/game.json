@@ -9,9 +9,8 @@
     ]
   },
   "player": {
-    "jump_height": 8,
-    "move_speed": 8.0,
-    "animation": {}
+    "jump_height": 8.5,
+    "move_speed": 8.0
   },
   "sounds": {
     "title": {

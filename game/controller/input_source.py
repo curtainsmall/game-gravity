@@ -1,7 +1,7 @@
 """InputSource：玩家输入；InputState 是一帧的输入快照。
 
-跳高按格数记（关卡设的初始值，变重道具会再降），起跳速度不查表：
-用和物理同一套离散积分现算，重力与步长固定，反解一次就够。
+跳高按格数记，可以是小数（关卡设的初始值，变重道具会再降）：
+起跳速度不查表，用和物理同一套离散积分现算，重力与步长固定，反解一次就够。
 """
 
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT, can_flip_gravity, flip_gravity
@@ -21,8 +21,8 @@ class InputState:
 class InputSource:
     MOVE_SPEED_DEFAULT = 8.0  # 方块/秒
 
-    JUMP_HEIGHT_DEFAULT = 2  # 默认跳 2 格
-    JUMP_HEIGHT_MIN = 0      # 0 = 跳不起来
+    JUMP_HEIGHT_DEFAULT = 2.0  # 默认跳 2 格（可以填小数）
+    JUMP_HEIGHT_MIN = 0.0      # 0 = 跳不起来
 
     move_speed = MOVE_SPEED_DEFAULT   # 关卡可以覆盖
     jump_height_blocks = JUMP_HEIGHT_DEFAULT
@@ -43,7 +43,7 @@ class InputSource:
         cls.level_height_blocks = float(level_height)
 
     @classmethod
-    def jump_height(cls) -> int:
+    def jump_height(cls) -> float:
         return cls.jump_height_blocks
 
     @classmethod
@@ -54,12 +54,12 @@ class InputSource:
     @classmethod
     def decrease_jump_height(cls) -> None:
         """变重：跳高降一格，到 0 不再降。"""
-        cls.jump_height_blocks = max(cls.JUMP_HEIGHT_MIN, cls.jump_height_blocks - 1)
+        cls.jump_height_blocks = max(cls.JUMP_HEIGHT_MIN, cls.jump_height_blocks - 1.0)
 
     @classmethod
-    def set_jump_height(cls, height: int) -> None:
-        """关卡给定的初始跳高（格）。"""
-        cls.jump_height_blocks = max(cls.JUMP_HEIGHT_MIN, int(height))
+    def set_jump_height(cls, height: float) -> None:
+        """关卡给定的初始跳高（格，可以是小数）。"""
+        cls.jump_height_blocks = max(cls.JUMP_HEIGHT_MIN, float(height))
 
     def advance(self, game_object, delta_seconds: float, input_state) -> None:
         body = game_object.body

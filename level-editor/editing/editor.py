@@ -20,6 +20,7 @@ from core.constants import (
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
+    JUMP_HEIGHT_STEP,
     KIND_BEHAVIORS,
     KIND_BLOCK,
     KIND_BUTTON,
@@ -178,7 +179,7 @@ class Editor:
         """图片路径的基准目录：game.json 所在的文件夹（游戏根），关卡里的路径也相对它。"""
         return game.game_root_of(self.game_path) if self.game_path else None
 
-    def player_stats(self) -> tuple[int, float, bool]:
+    def player_stats(self) -> tuple[float, float, bool]:
         """当前关卡实际用的跳高和速度：关卡 player 里写了就盖住 game.json 的玩家参数。
 
         第三个返回值是「这一关有没有覆盖」，顶栏用它标一下。
@@ -187,7 +188,7 @@ class Editor:
         if self.level_in_view and isinstance(self.level.player, dict):
             override = self.level.player
         overridden = "jump_height" in override or "move_speed" in override
-        jump = clamp_int(
+        jump = clamp_float(
             override.get("jump_height", self.game_player.get("jump_height")),
             JUMP_HEIGHT_MIN,
             JUMP_HEIGHT_MAX,
@@ -786,9 +787,9 @@ class Editor:
         self.game_settings = settings
         player = game.player_of(settings)
         self.game_numbers = {
-            "jump_height": str(clamp_int(
-                player.get("jump_height"), JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
-            )),
+            "jump_height": f"{clamp_float(
+                player.get('jump_height'), JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
+            ):g}",
             "move_speed": f"{clamp_float(
                 player.get('move_speed'), MOVE_SPEED_MIN, MOVE_SPEED_MAX, MOVE_SPEED_DEFAULT
             ):g}",
@@ -837,8 +838,11 @@ class Editor:
         settings["title"] = title
         settings["credits"] = game.cards_to_credits(cards)
         player = dict(game.player_of(settings))
-        player["jump_height"] = clamp_int(
-            numbers.get("jump_height"), JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
+        player["jump_height"] = round(
+            clamp_float(
+                numbers.get("jump_height"), JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX, JUMP_HEIGHT_DEFAULT
+            ),
+            2,
         )
         player["move_speed"] = round(
             clamp_float(
@@ -883,7 +887,7 @@ class Editor:
         pictures = len(cutscene_value["pictures"]) if cutscene_value else 0
         frames = sum(len(clip["frames"]) for clip in animation_table.values())
         self.status = (
-            f"游戏配置已保存：{title}，跳高 {player['jump_height']}，"
+            f"游戏配置已保存：{title}，跳高 {player['jump_height']:g}，"
             f"速度 {player['move_speed']:g}，动画 {len(animation_table)} 个状态、"
             f"{frames} 帧，制作名单 {len(settings['credits'])} 个职位、"
             f"{names} 个名字，音乐 {len(block)} 幕，结尾过场 {pictures} 张图。"
@@ -992,7 +996,7 @@ class Editor:
                 card["names"][cell[2]] = text
 
     def type_game_settings(self, char: str) -> None:
-        """键盘输入：跳高只吃数字，速度、淡入淡出吃数字和小数点，路径与文字什么都能打。"""
+        """键盘输入：跳高、速度、淡入淡出吃数字和小数点，路径与文字什么都能打。"""
         if self.game_cutscene_tab():
             self.type_cutscene(char)
             return
@@ -1004,7 +1008,7 @@ class Editor:
         if kind == "loop":
             return
         if kind == "jump":
-            if char.isdigit() and len(text) < 2:
+            if (char.isdigit() or char == ".") and len(text) < 4:
                 self.set_game_field_text(text + char)
             return
         if kind == "speed":
@@ -1031,7 +1035,7 @@ class Editor:
         self.set_game_field_text(self.game_field_text()[:-1])
 
     def adjust_game_number(self, delta: int) -> None:
-        """跳高按 1 格、速度和高低音淡入淡出按 0.5 一格，循环是开关。"""
+        """跳高、速度和高低音淡入淡出都按 0.5 一格，循环是开关。"""
         if self.game_cutscene_tab():
             self.adjust_cutscene(delta)
             return
@@ -1059,15 +1063,16 @@ class Editor:
             fields[kind] = f"{stepped:g}"
             return
         if kind == "jump":
-            current = clamp_int(
+            current = clamp_float(
                 self.game_numbers.get("jump_height"),
                 JUMP_HEIGHT_MIN,
                 JUMP_HEIGHT_MAX,
                 JUMP_HEIGHT_DEFAULT,
             )
-            self.game_numbers["jump_height"] = str(
-                max(JUMP_HEIGHT_MIN, min(JUMP_HEIGHT_MAX, current + delta))
+            stepped = max(
+                JUMP_HEIGHT_MIN, min(JUMP_HEIGHT_MAX, current + JUMP_HEIGHT_STEP * delta)
             )
+            self.game_numbers["jump_height"] = f"{stepped:g}"
             return
         if kind == "speed":
             current = clamp_float(
@@ -2607,7 +2612,7 @@ class Editor:
                 f"关卡设置：名称 {self.level.name or '（空）'}，"
                 f"尺寸 {self.level.width}×{self.level.height}，"
                 f"翻转带 上 {flip_up:g} / 下 {flip_down:g}，背景 {background}，"
-                f"跳高 {jump} / 速度 {speed:g}"
+                f"跳高 {jump:g} / 速度 {speed:g}"
                 f"{'（本关覆盖游戏配置）' if overridden else '（跟随游戏配置）'}，"
                 f"音乐 {music}，过场 {pictures} 张图。"
             )
@@ -2623,10 +2628,10 @@ class Editor:
             return
         jump_text = str(self.settings.get("jump_height") or "").strip()
         speed_text = str(self.settings.get("move_speed") or "").strip()
-        limit = max(JUMP_HEIGHT_MIN, self.level.height - 1)
+        limit = max(JUMP_HEIGHT_MIN, float(self.level.height) - 1.0)
         if jump_text:
-            self.level.player["jump_height"] = clamp_int(
-                jump_text, JUMP_HEIGHT_MIN, limit, JUMP_HEIGHT_DEFAULT
+            self.level.player["jump_height"] = round(
+                clamp_float(jump_text, JUMP_HEIGHT_MIN, limit, JUMP_HEIGHT_DEFAULT), 2
             )
         else:
             self.level.player.pop("jump_height", None)
@@ -2718,14 +2723,21 @@ class Editor:
             current = clamp_float(self.settings[key], 0.0, float(height), 0.0)
             self.settings[key] = f"{max(0.0, min(float(height), current + 0.5 * delta)):g}"
         elif field == 6:
-            # 跳高覆盖：空着时从游戏配置的值起步，±1 格
+            # 跳高覆盖：空着时从游戏配置的值起步，±0.5 格（可以填小数）
             height = clamp_int(
                 self.settings["height"], LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, self.level.height
             )
-            limit = max(JUMP_HEIGHT_MIN, height - 1)
-            fallback = clamp_int(self.game_player.get("jump_height"), 0, limit, JUMP_HEIGHT_DEFAULT)
-            current = clamp_int(self.settings["jump_height"], JUMP_HEIGHT_MIN, limit, fallback)
-            self.settings["jump_height"] = str(max(JUMP_HEIGHT_MIN, min(limit, current + delta)))
+            limit = max(JUMP_HEIGHT_MIN, float(height) - 1.0)
+            fallback = clamp_float(
+                self.game_player.get("jump_height"), JUMP_HEIGHT_MIN, limit, JUMP_HEIGHT_DEFAULT
+            )
+            current = clamp_float(
+                self.settings["jump_height"], JUMP_HEIGHT_MIN, limit, fallback
+            )
+            stepped = max(
+                JUMP_HEIGHT_MIN, min(limit, current + JUMP_HEIGHT_STEP * delta)
+            )
+            self.settings["jump_height"] = f"{stepped:g}"
         elif field == 7:
             # 速度覆盖：空着时从游戏配置的值起步，±0.5
             fallback = clamp_float(
@@ -2782,8 +2794,8 @@ class Editor:
             if char.isprintable() and len(self.settings["background"]) < BACKGROUND_MAX_LENGTH:
                 self.settings["background"] += char
         elif field == 6:
-            # 跳高覆盖：整数，最多 2 位
-            if char.isdigit() and len(self.settings["jump_height"]) < 2:
+            # 跳高覆盖：数字和小数点，最多 4 位
+            if (char.isdigit() or char == ".") and len(self.settings["jump_height"]) < 4:
                 self.settings["jump_height"] += char
         elif field == 7:
             # 速度覆盖：数字和小数点，最多 5 位

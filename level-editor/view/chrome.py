@@ -189,7 +189,7 @@ def draw_header(surface: pygame.Surface, editor: Editor, layout: Layout, font: p
         suffix = "（关卡覆盖）" if overridden else ""
         head += (
             f"   尺寸 {editor.level.width}×{editor.level.height}"
-            f"   跳高：{jump}{suffix}   速度：{speed:g}{suffix}"
+            f"   跳高：{jump:g}{suffix}   速度：{speed:g}{suffix}"
             f"   撤销 {len(editor.undo_stack)} 步"
         )
     surface.blit(font.render(head, True, TEXT), (MARGIN, 8))

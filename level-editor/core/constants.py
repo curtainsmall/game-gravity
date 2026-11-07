@@ -129,8 +129,10 @@ FACE_DIRECTIONS = {
     "down": (0.0, -1.0),
     "left": (-1.0, 0.0),
 }
-JUMP_HEIGHT_DEFAULT = 2
-JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX = 0, 99   # 输入上限；实际还要看关卡高度
+# 跳高（格）：可以是小数，加减按半格一步；输入上限还要看关卡高度
+JUMP_HEIGHT_DEFAULT = 2.0
+JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX = 0.0, 99.0
+JUMP_HEIGHT_STEP = 0.5
 
 # 水平移动速度（方块/秒）
 MOVE_SPEED_DEFAULT = 8.0
