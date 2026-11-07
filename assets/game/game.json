@@ -36,5 +36,8 @@
       "fade_in": 0.5,
       "fade_out": 1.0
     }
+  },
+  "backgrounds": {
+    "title": "textures/cutscene_test_1.jpeg"
   }
 }

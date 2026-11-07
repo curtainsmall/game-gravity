@@ -64,12 +64,16 @@ def fields_of(value) -> dict:
     }
 
 
-def to_object(fields: dict) -> dict | None:
-    """编辑用的四项 → 写回 json 的 sound；没有曲子就返回 None（不写这个键）。"""
+def to_object(fields: dict, keep_empty: bool = False) -> dict | None:
+    """编辑用的四项 → 写回 json 的 sound。
+
+    keep_empty 为真时，没有曲子也把四项都写出来（bgm 是空字符串）；否则返回 None，
+    调用方就不会写这个键。
+    """
     if not isinstance(fields, dict):
         return None
     path = str(fields.get("bgm") or "").strip()
-    if not path:
+    if not path and not keep_empty:
         return None
     return {
         "bgm": path,

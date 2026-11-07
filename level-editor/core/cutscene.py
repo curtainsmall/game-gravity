@@ -62,8 +62,12 @@ def from_value(value) -> dict:
     return state
 
 
-def to_object(state: dict) -> dict | None:
-    """编辑用的状态 → 写回 json 的 cutscene；没有图片就返回 None（不写这个键）。"""
+def to_object(state: dict, keep_all: bool = False) -> dict | None:
+    """编辑用的状态 → 写回 json 的 cutscene。
+
+    keep_all 为真时，没有图片也把 pictures / cascade / sound 都写出来（默认值照写）；
+    否则没有图片返回 None，调用方就不写这个键。
+    """
     pictures = []
     for picture in state.get("pictures") or []:
         path = str(picture.get("path") or "").strip()
@@ -81,18 +85,22 @@ def to_object(state: dict) -> dict | None:
                 ),
             }
         )
-    if not pictures:
+    if not pictures and not keep_all:
         return None
     value: dict = {"pictures": pictures}
     if state.get("cascade"):
         value["cascade"] = True
+    elif keep_all:
+        value["cascade"] = False
     mode = state.get("sound_mode")
     if mode == SOUND_MODE_SCENE:
         value["sound"] = True
     elif mode == SOUND_MODE_CUSTOM:
-        sound = sound_to_object(state.get("sound") or {})
+        sound = sound_to_object(state.get("sound") or {}, keep_empty=keep_all)
         if sound is not None:
             value["sound"] = sound
+    elif keep_all:
+        value["sound"] = False
     return value
 
 

@@ -70,3 +70,19 @@ def draw_missing_texture(surface: pygame.Surface, rect: pygame.Rect) -> None:
                     min(MISSING_SQUARE, rect.height - row),
                 ),
             )
+
+
+# 原图尺寸：路径 -> (宽, 高)；读不出来是 None，坏图只尝试一次
+_SIZE_CACHE: dict[str, tuple[int, int] | None] = {}
+
+
+def image_size(path: str) -> tuple[int, int] | None:
+    """读图片的像素尺寸（带缓存）；读不出来返回 None。"""
+    if path in _SIZE_CACHE:
+        return _SIZE_CACHE[path]
+    try:
+        size = pygame.image.load(path).get_size()
+    except (pygame.error, OSError):
+        size = None
+    _SIZE_CACHE[path] = size
+    return size

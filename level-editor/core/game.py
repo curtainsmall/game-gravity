@@ -1,7 +1,8 @@
 """游戏配置：用户挑的 game.json，和它旁边的 levels/。
 
 游戏根就是 game.json 所在的那个文件夹：
-    game.json    游戏自己的配置：title 是标题，credits 是制作名单（职位 → 名字数组）
+    game.json    游戏自己的配置：title 是标题，credits 是制作名单（职位 → 名字数组），
+                 backgrounds 是标题画面 / 结算画面的背景
     levels/      一个 <名字>.json 是一关
 编辑器在启动时让用户打开或新建一份 game.json，之后关卡都从它的兄弟目录 levels/ 里找。
 配置里只改自己认识的键，别的键原样保留。
@@ -13,6 +14,10 @@ import os
 from core.constants import LEVEL_FILE_SUFFIX, LEVELS_DIR_NAME
 
 DEFAULT_TITLE = "重力"      # game.json 丢了或没写标题时用它，编辑器照常能用
+
+# 标题画面 / 结算画面的背景图，写在 game.json 的 backgrounds 里
+BACKGROUNDS_KEY = "backgrounds"
+SCREEN_BACKGROUND_KEYS = ("title", "credits")
 
 
 def new_settings() -> dict:
@@ -47,6 +52,19 @@ def player_of(settings: dict) -> dict:
     """玩家的默认参数：跳高、速度、动画；没写就是空表（关卡里的 player 可以覆盖）。"""
     value = settings.get("player")
     return value if isinstance(value, dict) else {}
+
+
+def backgrounds_of(settings: dict) -> dict:
+    """两个画面的背景：{"title": 相对路径, "credits": 相对路径}；没写或写坏了就是空表。"""
+    value = settings.get(BACKGROUNDS_KEY)
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    for key in SCREEN_BACKGROUND_KEYS:
+        path = value.get(key)
+        if isinstance(path, str) and path.strip():
+            result[key] = path
+    return result
 
 
 def credits_of(settings: dict) -> dict[str, list[str]]:

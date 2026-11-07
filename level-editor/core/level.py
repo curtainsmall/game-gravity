@@ -31,6 +31,28 @@ from core.constants import (
     TRIGGER_MODE_VALUES,
 )
 from core.helpers import clamp_float, clamp_int
+from core.cutscene import new_state as new_cutscene_state, to_object as cutscene_to_object
+from core.sound import fields_of as sound_fields_of, to_object as sound_to_object
+
+# 编辑器认识的顶层键；不认识的（老字段、手写的东西）原样留在 extra 里，保存时一起写回去
+LEVEL_KEYS = {
+    "width",
+    "height",
+    "flip_area_offsets",
+    "background",
+    "sound",
+    "cutscene",
+    "destination",
+    "blocks",
+    "planks",
+    "movable_blocks",
+    "buttons",
+    "portals",
+    "items",
+    "nozzles",
+    "textures",
+    "player",
+}
 
 
 def dump_level(definition: dict) -> str:
@@ -64,13 +86,13 @@ def _format_block(value, depth: int) -> str:
 def _migrate_triggers(entry: dict) -> None:
     """老数据把来源写在 sources（只有 move）、「仅触发一次」写在方块自己身上。
 
-    读成 triggers 卡片，写盘只写新格式：卡片上写 mode（once / hold / switch）。
-    老卡片的 once 换成 mode：真 = once，假 = hold；方块自己的 once 也一样。
+    读的时候补出 triggers 卡片、给卡片补上 mode；老的 once / sources 原样留着——
+    编辑器只写自己认识的东西，不删自己没有的键。
     """
-    block_once = bool(entry.pop("once", False))
+    block_once = bool(entry.get("once", False))
     cards = entry.get("triggers")
     if not isinstance(cards, list):
-        sources = entry.pop("sources", None)
+        sources = entry.get("sources")
         if not isinstance(sources, list):
             return
         cards = [
@@ -86,16 +108,15 @@ def _migrate_triggers(entry: dict) -> None:
             if card["mode"] not in TRIGGER_MODE_VALUES:
                 card["mode"] = TRIGGER_DEFAULT_MODE
         else:
-            card["mode"] = "once" if bool(card.pop("once", block_once)) else "hold"
-        card.pop("once", None)
+            card["mode"] = "once" if bool(card.get("once", block_once)) else "hold"
 
 
 def _migrate_item_jump_offset(entry: dict) -> None:
-    """道具：老数据用 heavy 表示变重（跳高降 1 格），读成 jump_offset = -1。
+    """道具：老数据用 heavy 表示变重（跳高降 1 格），读出来补一个 jump_offset。
 
-    写盘只写新格式（jump_offset，0 表示不变）；heavy 键读进来就丢掉。
+    heavy 键原样留着，不删。
     """
-    heavy = bool(entry.pop("heavy", False))
+    heavy = bool(entry.get("heavy", False))
     if "jump_offset" not in entry:
         entry["jump_offset"] = -1.0 if heavy else 0.0
 
@@ -117,6 +138,7 @@ def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
 class Level:
     def __init__(self) -> None:
         self.name = ""             # 关卡名 = 文件名（levels/<名字>.json）；不写进 json
+        self.extra: dict = {}      # 关卡 json 里编辑器不认识的键，保存时原样写回去
         self.width = COLS          # 关卡宽度，格
         self.height = ROWS         # 关卡高度，格
         self.background = ""       # 背景图，相对游戏根的路径；空串表示没有背景
@@ -135,40 +157,53 @@ class Level:
         self.destination: dict | None = None
 
     def to_definition(self) -> dict:
-        definition = {
-            "width": self.width,
-            "height": self.height,
-            "flip_area_offsets": list(self.flip_area_offsets),
-            "blocks": copy.deepcopy(self.blocks),
-            "planks": copy.deepcopy(self.planks),
-            "movable_blocks": copy.deepcopy(self.movable_blocks),
-            "buttons": copy.deepcopy(self.buttons),
-            "portals": copy.deepcopy(self.portals),
-            "items": copy.deepcopy(self.items),
-            "nozzles": copy.deepcopy(self.nozzles),
-            "textures": copy.deepcopy(self.textures),
-        }
+        # 编辑器不认识的键先铺进来；认识的字段后面覆盖自己那几项
+        definition = copy.deepcopy(self.extra)
+        definition.update(
+            {
+                "width": self.width,
+                "height": self.height,
+                "flip_area_offsets": list(self.flip_area_offsets),
+                "blocks": copy.deepcopy(self.blocks),
+                "planks": copy.deepcopy(self.planks),
+                "movable_blocks": copy.deepcopy(self.movable_blocks),
+                "buttons": copy.deepcopy(self.buttons),
+                "portals": copy.deepcopy(self.portals),
+                "items": copy.deepcopy(self.items),
+                "nozzles": copy.deepcopy(self.nozzles),
+                "textures": copy.deepcopy(self.textures),
+            }
+        )
         # 起点和终点都只有一份，没有就不写这个键。跳高、速度、动画属于整个游戏，
         # 写在 game.json 里；这一关原本写过的覆盖值原样留着，不动它。
         if self.player is not None:
             definition["player"] = copy.deepcopy(self.player)
         if self.destination is not None:
             definition["destination"] = copy.deepcopy(self.destination)
-        # 没有背景就不写这个键
-        if self.background:
-            definition["background"] = self.background
-        # 没有曲子就不写这个键
-        if self.sound:
-            definition["sound"] = copy.deepcopy(self.sound)
-        # 没有过场就不写这个键
-        if self.cutscene:
-            definition["cutscene"] = copy.deepcopy(self.cutscene)
+        # 背景、音乐、过场这三项在编辑器里都有字段，空着也照写（空值表示没有）
+        definition["background"] = self.background
+        definition["sound"] = (
+            copy.deepcopy(self.sound)
+            if self.sound
+            else sound_to_object(sound_fields_of(None), keep_empty=True)
+        )
+        definition["cutscene"] = (
+            copy.deepcopy(self.cutscene)
+            if self.cutscene
+            else cutscene_to_object(new_cutscene_state(), keep_all=True)
+        )
         return definition
 
     @classmethod
     def from_definition(cls, definition: dict) -> "Level":
         level = cls()
-        # 关卡名来自文件名，json 里的 name 不读（老文件里还有，存回去时就没了）
+        # 编辑器不认识的顶层键（老字段、手写的东西）原样留着，保存时照写回去
+        level.extra = {
+            key: copy.deepcopy(value)
+            for key, value in definition.items()
+            if key not in LEVEL_KEYS
+        }
+        # 关卡名来自文件名，json 里的 name 不读；它在 extra 里原样保留
         level.width = clamp_int(definition.get("width"), LEVEL_WIDTH_MIN, LEVEL_WIDTH_MAX, COLS)
         level.height = clamp_int(definition.get("height"), LEVEL_HEIGHT_MIN, LEVEL_HEIGHT_MAX, ROWS)
         level.flip_area_offsets = _read_flip_area_offsets(definition, level.height)
@@ -185,12 +220,8 @@ class Level:
             if isinstance(entry, dict):
                 _migrate_triggers(entry)
         level.buttons = copy.deepcopy(list(definition.get("buttons", [])))
-        # 门本身就是触发区了：老数据里的 range 读进来就丢掉，省得存回去又冒出来
-        level.portals = [
-            {key: value for key, value in entry.items() if key != "range"}
-            for entry in copy.deepcopy(list(definition.get("portals", [])))
-            if isinstance(entry, dict)
-        ]
+        # 门本身就是触发区；老数据里的 range 原样留着，不删
+        level.portals = copy.deepcopy(list(definition.get("portals", [])))
         # 按钮和门的「画出来的矩形」就是触发区，缺 size 时按默认补上，别和游戏里不一致
         for entries, default in ((level.buttons, BUTTON_SIZE), (level.portals, PORTAL_SIZE)):
             for entry in entries:
@@ -200,14 +231,13 @@ class Level:
         for entry in level.items:
             if isinstance(entry, dict):
                 _migrate_item_jump_offset(entry)
-        # 喷口的风区现在是 size；老数据写的 range 读进来换成 [1, range]
+        # 喷口的风区现在是 size；老数据写的 range 补出 size 之外原样留着
         level.nozzles = []
         for entry in copy.deepcopy(list(definition.get("nozzles", []))):
             if not isinstance(entry, dict):
                 continue
             if "size" not in entry and "range" in entry:
-                entry["size"] = [1.0, entry.pop("range")]
-            entry.pop("range", None)
+                entry["size"] = [1.0, entry.get("range")]
             entry.setdefault("size", list(NOZZLE_DEFAULT_SIZE))
             level.nozzles.append(entry)
         level.textures = copy.deepcopy(list(definition.get("textures", [])))

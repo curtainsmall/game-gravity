@@ -2,7 +2,8 @@
 
 游戏根就是 assets/game 这个文件夹：
     game.json          游戏自己的设置：title 是标题，credits 是制作名单（职位 → 名字数组），
-                       player 是玩家默认的跳高、速度与动画，sounds 是标题与制作名单的音乐
+                       player 是玩家默认的跳高、速度与动画，sounds 是标题与制作名单的音乐，
+                       backgrounds 是标题画面和结算画面的背景图
     levels/<名字>.json 一个文件是一关，文件名（去掉 .json）就是关卡名
 game.json 和 levels/*.json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
 图片、曲目放哪儿都行，只要能按相对路径找到。打包后 game/ 必须和 exe 放在一起。
@@ -69,3 +70,32 @@ def player_of(settings: dict) -> dict:
 def game_root() -> Path:
     """game.json 所在的文件夹：game.json 里的相对路径都相对它。"""
     return GAME_DIR
+
+
+# 标题画面 / 结算画面的背景图，写在 game.json 的 backgrounds 里
+BACKGROUNDS_KEY = "backgrounds"
+SCREEN_BACKGROUND_KEYS = ("title", "credits")
+
+
+def screen_backgrounds_of(settings: dict) -> dict:
+    """两个画面的背景：{"title": 相对路径, "credits": 相对路径}；没写或写坏了就是空表。"""
+    value = settings.get(BACKGROUNDS_KEY)
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    for key in SCREEN_BACKGROUND_KEYS:
+        path = value.get(key)
+        if isinstance(path, str) and path.strip():
+            result[key] = path
+    return result
+
+
+def screen_background(settings: dict, key: str, base_dir: str | Path | None) -> str | None:
+    """某个画面的背景图（绝对路径）；没写、写坏了或文件找不到都返回 None。"""
+    relative = screen_backgrounds_of(settings).get(key)
+    if relative is None:
+        return None
+    path = Path(relative)
+    if not path.is_absolute() and base_dir is not None:
+        path = Path(base_dir) / path
+    return str(path) if path.is_file() else None

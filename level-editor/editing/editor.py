@@ -154,6 +154,7 @@ class Editor:
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
+        self.game_backgrounds: dict = {}           # 浮层里的标题 / 结算背景：键 → 相对路径
         self.game_cards: list = []                 # 浮层里的制作名单卡片：{job, names: [名字…]}
         self.game_card_scroll = 0                  # 制作名单滚轮滚了多少像素
         self.game_animations: dict = animation.new_state()  # 玩家动画：状态名 → {frames, fps, loop}
@@ -788,7 +789,7 @@ class Editor:
 
     # ---- 游戏配置（game.json） --------------------------------------
     def open_game_settings(self) -> None:
-        """打开游戏配置：常规（标题、玩家参数）、动画、制作名单、声音与结尾过场。"""
+        """打开游戏配置：常规（标题、玩家参数、画面背景）、动画、制作名单、声音与结尾过场。"""
         if self.game_path is None:
             self.status = "尚未打开游戏配置。"
             return
@@ -805,6 +806,10 @@ class Editor:
             ):g}",
         }
         self.game_cards = game.credit_cards(game.credits_of(settings))
+        backgrounds = game.backgrounds_of(settings)
+        self.game_backgrounds = {
+            key: backgrounds.get(key, "") for key in game.SCREEN_BACKGROUND_KEYS
+        }
         block = settings.get(sound.GAME_SOUNDS_KEY)
         block = block if isinstance(block, dict) else {}
         self.game_sound = {
@@ -833,10 +838,12 @@ class Editor:
         sounds = self.game_sound
         cutscene_state = self.cutscene
         animations = self.game_animations
+        backgrounds = dict(self.game_backgrounds)
         self.game_settings = None
         self.game_cards = []
         self.game_numbers = {}
         self.game_sound = {}
+        self.game_backgrounds = {}
         self.game_animations = animation.new_state()
         self.animation_preview = None
         self.animation_drag = None
@@ -860,32 +867,27 @@ class Editor:
             ),
             2,
         )
-        # 玩家动画：有帧的状态才写进 player.animations，一个都没有就把这个键删掉；
-        # 老的 player.animation（动作名 → 单张图）和顶层的 animations 迁移完就不再写
-        player.pop("animation", None)
+        # 玩家动画：这个字段一直都在，没有帧就写空表。老的 player.animation（动作名 →
+        # 单张图）和顶层的 animations 不归这一页管，原样留着，不删
         animation_table = animation.to_table(animations)
-        if animation_table:
-            player["animations"] = animation_table
-        else:
-            player.pop("animations", None)
+        player["animations"] = animation_table
         settings["player"] = player
-        settings.pop("animations", None)
-        # 声音：填了曲子的一幕才写进 sounds，一幕都没有就把这个键删掉
-        block = {}
-        for key, _ in sound.SCENE_KEYS:
-            spec = sound.to_object(self._rebase_sound(sounds.get(key) or {}))
-            if spec is not None:
-                block[key] = spec
-        if block:
-            settings[sound.GAME_SOUNDS_KEY] = block
-        else:
-            settings.pop(sound.GAME_SOUNDS_KEY, None)
-        # 结尾过场：没有图片就把 cutscene 键整个去掉
-        cutscene_value = cutscene.to_object(cutscene_state) if cutscene_state else None
-        if cutscene_value is not None:
-            settings[cutscene.CUTSCENE_KEY] = cutscene_value
-        else:
-            settings.pop(cutscene.CUTSCENE_KEY, None)
+        # 声音：每一幕的四项一直都在，没有曲子也写（bgm 是空字符串）
+        block = {
+            key: sound.to_object(self._rebase_sound(sounds.get(key) or {}), keep_empty=True)
+            for key, _ in sound.SCENE_KEYS
+        }
+        settings[sound.GAME_SOUNDS_KEY] = block
+        # 标题 / 结算画面的背景：这两个字段一直都在，空着也照写（空字符串就是没有背景）
+        settings[game.BACKGROUNDS_KEY] = {
+            key: str(backgrounds.get(key) or "").strip()
+            for key in game.SCREEN_BACKGROUND_KEYS
+        }
+        # 结尾过场：图片、级联、声音三个字段一直都在，没有图片也照写
+        cutscene_value = cutscene.to_object(
+            cutscene_state or cutscene.new_state(), keep_all=True
+        )
+        settings[cutscene.CUTSCENE_KEY] = cutscene_value
         try:
             game.save_settings(settings, self.game_path)
         except OSError as error:
@@ -894,13 +896,15 @@ class Editor:
         # 顶栏显示的跳高、速度跟着更新
         self.game_player = player
         names = sum(len(names) for names in settings["credits"].values())
-        pictures = len(cutscene_value["pictures"]) if cutscene_value else 0
+        pictures = len(cutscene_value["pictures"])
+        tracks = sum(1 for spec in block.values() if spec.get("bgm"))
         frames = sum(len(clip["frames"]) for clip in animation_table.values())
         self.status = (
             f"游戏配置已保存：{title}，跳高 {player['jump_height']:g}，"
             f"速度 {player['move_speed']:g}，动画 {len(animation_table)} 个状态、"
             f"{frames} 帧，制作名单 {len(settings['credits'])} 个职位、"
-            f"{names} 个名字，音乐 {len(block)} 幕，结尾过场 {pictures} 张图。"
+            f"{names} 个名字，音乐 {tracks} 幕，"
+            f"结尾过场 {pictures} 张图。"
         )
 
     # ---- 游戏配置的分页 ---------------------------------------------
@@ -934,7 +938,13 @@ class Editor:
     # 制作名单是每张卡片的职位、每个名字；声音是标题和制作名单各四项（路径、循环、淡入淡出）。
     def game_cells(self) -> list[tuple]:
         if self.game_tab == 0:
-            return [("title",), ("jump",), ("speed",)]
+            return [
+                ("title",),
+                ("jump",),
+                ("speed",),
+                ("title_bg",),
+                ("credits_bg",),
+            ]
         if self.game_tab in (GAME_ANIMATION_TAB, GAME_CUTSCENE_TAB):
             return []
         if self.game_tab == 2:              # 制作名单
@@ -972,6 +982,8 @@ class Editor:
             return str(self.game_numbers.get("jump_height") or "")
         if kind == "speed":
             return str(self.game_numbers.get("move_speed") or "")
+        if kind in ("title_bg", "credits_bg"):
+            return str(self.game_backgrounds.get(kind.removesuffix("_bg")) or "")
         if kind in ("bgm", "fade_in", "fade_out"):
             return str(self.game_sound.get(cell[1], {}).get(kind, ""))
         if kind == "loop":
@@ -996,6 +1008,10 @@ class Editor:
         elif kind in ("jump", "speed"):
             key = "jump_height" if kind == "jump" else "move_speed"
             self.game_numbers[key] = text
+        elif kind in ("title_bg", "credits_bg"):
+            key = kind.removesuffix("_bg")
+            if key in self.game_backgrounds:
+                self.game_backgrounds[key] = text
         elif kind in ("bgm", "fade_in", "fade_out"):
             if cell[1] in self.game_sound:
                 self.game_sound[cell[1]][kind] = text
@@ -1020,6 +1036,10 @@ class Editor:
             return
         if kind == "jump":
             if (char.isdigit() or char == ".") and len(text) < 4:
+                self.set_game_field_text(text + char)
+            return
+        if kind in ("title_bg", "credits_bg"):
+            if char.isprintable() and len(text) < BACKGROUND_MAX_LENGTH:
                 self.set_game_field_text(text + char)
             return
         if kind == "speed":
@@ -1344,6 +1364,18 @@ class Editor:
             bool(fields["loop"]),
             clamp_float(fields["fade_in"], 0.0, sound.MAX_FADE_SECONDS, sound.DEFAULT_FADE_IN),
         )
+
+    def pick_game_background(self, key: str) -> None:
+        """给标题或结算画面挑一张背景：只记路径，不复制文件。"""
+        if self.game_settings is None or key not in self.game_backgrounds:
+            return
+        path = ask_image_path("选择背景图片", self.media_base_dir)
+        if not path:
+            self.status = "已取消选择背景图片。"
+            return
+        self.game_backgrounds[key] = relative_level_path(path, self.media_base_dir)
+        self.game_field = self.game_cells().index((f"{key}_bg",))
+        self.status = "已选择背景图片：仅记录相对 game.json 的路径，不复制文件。"
 
     def _rebase_sound(self, fields: dict) -> dict:
         """曲子能解析到就改成相对 game.json 的正斜杠写法，和背景、贴图一样。"""

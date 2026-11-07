@@ -16,7 +16,13 @@ import user_settings
 from controller.input_source import InputState
 from cutscene.cutscene import Cutscene, cutscene_of
 from cutscene.player import CutscenePlayer
-from game_settings import credits_of, game_root, load_game_settings, title_of
+from game_settings import (
+    credits_of,
+    game_root,
+    load_game_settings,
+    screen_background,
+    title_of,
+)
 from levels import discover_levels, load_scene
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
@@ -61,6 +67,9 @@ class App:
         self.game_settings = load_game_settings()
         self.title = title_of(self.game_settings)
         self.credits = credits_of(self.game_settings)
+        # 标题画面 / 结算画面的背景图（game.json 的 backgrounds），没图就是纯色
+        self.title_background = screen_background(self.game_settings, "title", game_root())
+        self.credits_background = screen_background(self.game_settings, "credits", game_root())
         # 标题、制作名单的音乐在 game.json 里；每一关的音乐跟着关卡文件走（Scene.bgm）
         # 结算画面显示的就是制作名单，所以这一幕的音乐叫制作名单音乐
         self.title_bgm = game_bgm(self.game_settings, TITLE_KEY, game_root())

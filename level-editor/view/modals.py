@@ -448,7 +448,7 @@ def draw_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Fon
 GAME_PANEL_WIDTH = 620
 GAME_TAB_TOP = 30               # 标题下面这一行是页签
 GAME_CONTENT_TOP = 64           # 页签下面开始排内容
-GAME_GENERAL_HEIGHT = 250       # 常规页：标题、玩家参数、说明
+GAME_GENERAL_HEIGHT = 340       # 常规页：标题、玩家参数、两个画面背景、说明
 GAME_SOUND_HEIGHT = 380         # 声音页：标题与制作名单两块
 GAME_FOOTER_HEIGHT = 74         # 制作名单页：卡片区之后：说明、按钮
 CREDIT_CARD_PAD = 6
@@ -519,6 +519,7 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         "cutscene": None,
         "animation": None,
         "note_top": content_top,
+        "backgrounds": [],
         "apply": pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT),
         "cancel": pygame.Rect(panel.right - MARGIN - 68, button_y, 68, BUTTON_HEIGHT),
     }
@@ -535,7 +536,23 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         rows["speed"] = pygame.Rect(
             panel.left + MARGIN, content_top + 84, row_width, ROW_HEIGHT + 2
         )
-        geometry["note_top"] = content_top + 118
+        rows["bg_label"] = pygame.Rect(
+            panel.left + MARGIN, content_top + 112, row_width, ROW_HEIGHT
+        )
+        # 标题 / 结算画面的背景：一行一个，右边是「浏览…」
+        for index, (key, label) in enumerate((("title", "标题画面"), ("credits", "结算画面"))):
+            row = pygame.Rect(
+                panel.left + MARGIN,
+                content_top + 134 + index * 32,
+                row_width,
+                ROW_HEIGHT + 2,
+            )
+            browse = pygame.Rect(row.right - 76, row.top, 76, row.height)
+            text = pygame.Rect(row.left, row.top, browse.left - 6 - row.left, row.height)
+            geometry["backgrounds"].append(
+                {"key": key, "label": label, "text": text, "browse": browse}
+            )
+        geometry["note_top"] = content_top + 202
     elif tab == GAME_ANIMATION_TAB:
         geometry["animation"] = animation_geometry(surface, editor, panel, content_top)
     elif tab == 2:                      # 制作名单
@@ -730,6 +747,22 @@ def _draw_game_general(
         left, right = stepper_rects(rect)
         draw_stepper(surface, left, -1)
         draw_stepper(surface, right, 1)
+
+    # 标题 / 结算画面的背景：一行一个，右边「浏览…」
+    surface.blit(
+        font.render("标题 / 结算画面的背景（整屏铺满，等比放大后裁掉多余的边）", True, DIM_TEXT),
+        (rows["bg_label"].left, rows["bg_label"].top + 2),
+    )
+    for background in geometry["backgrounds"]:
+        path = editor.game_backgrounds.get(background["key"], "")
+        _draw_cell(
+            surface,
+            font,
+            background["text"],
+            f"{background['label']}：{path or '（无）'}",
+            _cell_selected(editor, (f"{background['key']}_bg",)),
+        )
+        draw_button(surface, font, background["browse"], "浏览…")
 
     note = font.render(
         f"{display_path(editor.game_path) if editor.game_path else 'game.json'}："

@@ -5,10 +5,28 @@ import pygame
 import debug_display
 import ui
 from levels import level_preview
+from renderer.texture import image_size, load_scaled
+
+
+def _draw_screen_background(surface: pygame.Surface, path: str | None) -> None:
+    """整屏背景：等比放大到盖住窗口、居中，超出窗口的部分裁掉；没图就只铺底色。"""
+    surface.fill(ui.BACKGROUND)
+    if path is None:
+        return
+    original = image_size(path)
+    if original is None or original[0] <= 0 or original[1] <= 0:
+        return
+    width, height = surface.get_size()
+    scale = max(width / original[0], height / original[1])
+    size = (max(1, round(original[0] * scale)), max(1, round(original[1] * scale)))
+    image = load_scaled(path, size, True)
+    if image is None:
+        return
+    surface.blit(image, image.get_rect(center=(width // 2, height // 2)))
 
 
 def draw_title(surface: pygame.Surface, app) -> None:
-    surface.fill(ui.BACKGROUND)
+    _draw_screen_background(surface, app.title_background)
     width, height = surface.get_size()
     # 标题来自 game.json
     ui.draw_text(surface, app.title, 64, center=(width // 2, int(height * 0.22)))
@@ -158,7 +176,7 @@ def _draw_credits_dots(surface: pygame.Surface, width: int, height: int, count: 
 
 
 def draw_ending(surface: pygame.Surface, app) -> None:
-    surface.fill(ui.BACKGROUND)
+    _draw_screen_background(surface, app.credits_background)
     width, height = surface.get_size()
     ui.draw_text(surface, "感谢您的游玩", 46, center=(width // 2, int(height * 0.16)))
     ui.draw_text(

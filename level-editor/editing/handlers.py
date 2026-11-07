@@ -408,6 +408,13 @@ def handle_game_settings_click(
 
     cells = editor.game_cells()
     if editor.game_tab == 0:
+        for background in geometry["backgrounds"]:
+            if background["browse"].collidepoint(position):
+                editor.pick_game_background(background["key"])
+                return
+            if background["text"].collidepoint(position):
+                editor.game_field = cells.index((f"{background['key']}_bg",))
+                return
         for cell, rect in (
             (("title",), geometry["rows"]["title"]),
             (("jump",), geometry["rows"]["jump"]),
