@@ -197,6 +197,12 @@ KIND_BEHAVIORS = {
     KIND_MOVABLE: (("移动", "move"),),
 }
 
+# 触发卡片的模式：(显示文字, json 里的值)。once = 触发一次就一直生效；hold = 按着才生效、
+# 松开就撤销；switch = 每触发一次在生效和撤销之间切换。新卡片的默认模式沿用以前的「不勾」。
+TRIGGER_MODES = (("一次", "once"), ("按住", "hold"), ("切换", "switch"))
+TRIGGER_MODE_VALUES = tuple(value for _, value in TRIGGER_MODES)
+TRIGGER_DEFAULT_MODE = "hold"
+
 # ---- 路径 ----
 # 打包成 exe 后，关卡放在 exe 旁边的 assets/ 里；直接跑源码时在仓库根目录
 if getattr(sys, "frozen", False):

@@ -300,7 +300,7 @@
         {
           "source": "b5",
           "behavior": "move",
-          "once": true
+          "mode": "once"
         }
       ]
     },
@@ -313,7 +313,7 @@
         {
           "source": "button_4",
           "behavior": "move",
-          "once": true
+          "mode": "once"
         }
       ]
     },
@@ -326,7 +326,7 @@
         {
           "source": "button_3",
           "behavior": "move",
-          "once": true
+          "mode": "once"
         }
       ]
     },
@@ -339,7 +339,7 @@
         {
           "source": "button_2",
           "behavior": "move",
-          "once": true
+          "mode": "once"
         }
       ]
     },
@@ -352,7 +352,7 @@
         {
           "source": "button1",
           "behavior": "move",
-          "once": true
+          "mode": "once"
         }
       ]
     }
@@ -502,7 +502,8 @@
       "size": [3.0, 8.79],
       "image": "textures/level1/1.5x4.5(会动机关).png",
       "smooth": false,
-      "follow": "gate_1"
+      "follow": "gate_1",
+      "triggers": []
     },
     {
       "pos": [142.03, 4.5],
@@ -547,6 +548,13 @@
       "image": "textures/level1/2x4(会动).png",
       "smooth": false,
       "follow": "gate_3"
+    },
+    {
+      "pos": [141.0, 6.0],
+      "size": [4.0, 8.0],
+      "image": "textures/level1/2x4(会动).png",
+      "smooth": false,
+      "follow": "gate_4"
     },
     {
       "pos": [138.5, 0.0],

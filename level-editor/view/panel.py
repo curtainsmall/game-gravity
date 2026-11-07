@@ -24,13 +24,13 @@ if TYPE_CHECKING:
     from editing.editor import Editor
 
 TRIGGER_LABEL_HEIGHT = 18
-TRIGGER_CARD_HEIGHT = ROW_HEIGHT * 2     # 一行来源 / 行为，一行「仅触发一次」
+TRIGGER_CARD_HEIGHT = ROW_HEIGHT * 2     # 一行来源 / 行为，一行模式
 TRIGGER_CARD_GAP = 2
 TRIGGER_ADD_WIDTH = 140
 
 
 def trigger_geometry(surface: pygame.Surface, editor: "Editor") -> dict | None:
-    """属性行下面的触发器区：标题、每张卡片（来源 / 行为 / − / 仅触发一次）和「添加」按钮。
+    """属性行下面的触发器区：标题、每张卡片（来源 / 行为 / − / 模式）和「添加」按钮。
 
     这个种类不接触发器时返回 None；卡片顺着属性行往下排，数量多了会顶到底部按钮。
     """
@@ -56,14 +56,14 @@ def trigger_geometry(surface: pygame.Surface, editor: "Editor") -> dict | None:
         source = pygame.Rect(
             line.left, line.top, behavior.left - 6 - line.left, line.height
         )
-        once = pygame.Rect(card.left, line.bottom + 2, card.width, ROW_HEIGHT - 2)
+        mode = pygame.Rect(card.left, line.bottom + 2, card.width, ROW_HEIGHT - 2)
         layouts.append(
             {
                 "index": index,
                 "rect": card,
                 "source": source,
                 "behavior": behavior,
-                "once": once,
+                "mode": mode,
                 "minus": minus,
             }
         )
@@ -147,6 +147,8 @@ def field_rect(surface: pygame.Surface, editor: Editor, field: int) -> pygame.Re
             return layout["source"]
         if field == editor.trigger_field(layout["index"], "behavior"):
             return layout["behavior"]
+        if field == editor.trigger_field(layout["index"], "mode"):
+            return layout["mode"]
     return None
 
 
@@ -292,7 +294,7 @@ def _draw_minus(surface: pygame.Surface, font: pygame.font.Font, rect: pygame.Re
 def draw_trigger_section(
     surface: pygame.Surface, font: pygame.font.Font, editor: Editor, geometry: dict
 ) -> None:
-    """触发器区：标题、每张卡片的来源 / 行为 / −，以及底下的添加按钮。"""
+    """触发器区：标题、每张卡片的来源 / 行为 / − / 模式，以及底下的添加按钮。"""
     label = geometry["label"]
     surface.blit(font.render("触发器", True, DIM_TEXT), (label.left, label.top))
     hint = font.render("来源 → 行为", True, DIM_TEXT)
@@ -303,7 +305,6 @@ def draw_trigger_section(
         card = cards[layout["index"]]
         source_field = editor.trigger_field(layout["index"], "source")
         behavior_field = editor.trigger_field(layout["index"], "behavior")
-        once_field = editor.trigger_field(layout["index"], "once")
         _draw_trigger_cell(
             surface,
             font,
@@ -319,17 +320,13 @@ def draw_trigger_section(
             editor.dialog_field == behavior_field,
         )
         _draw_minus(surface, font, layout["minus"])
-        selected = editor.dialog_field == once_field
-        pygame.draw.rect(surface, (62, 62, 72) if selected else (48, 48, 54), layout["once"])
-        pygame.draw.rect(surface, HIGHLIGHT if selected else (86, 86, 94), layout["once"], 1)
-        draw_checkbox(
+        mode_field = editor.trigger_field(layout["index"], "mode")
+        _draw_trigger_cell(
             surface,
             font,
-            layout["once"],
-            "仅触发一次",
-            bool(card.get("once", False)),
-            selected,
-            inset=6,
+            layout["mode"],
+            f"模式：{_option_label(editor, mode_field, card.get('mode'))}",
+            editor.dialog_field == mode_field,
         )
     draw_button(surface, font, geometry["add"], "＋ 添加触发器")
 

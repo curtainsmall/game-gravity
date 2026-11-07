@@ -27,6 +27,8 @@ from core.constants import (
     NOZZLE_DEFAULT_SIZE,
     PORTAL_SIZE,
     ROWS,
+    TRIGGER_DEFAULT_MODE,
+    TRIGGER_MODE_VALUES,
 )
 from core.helpers import clamp_float, clamp_int
 
@@ -59,10 +61,11 @@ def _format_block(value, depth: int) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def _migrate_trigger_sources(entry: dict) -> None:
+def _migrate_triggers(entry: dict) -> None:
     """老数据把来源写在 sources（只有 move）、「仅触发一次」写在方块自己身上。
 
-    读成 triggers 卡片，写盘只写新格式；卡片缺 once 的按老方块的值补上。
+    读成 triggers 卡片，写盘只写新格式：卡片上写 mode（once / hold / switch）。
+    老卡片的 once 换成 mode：真 = once，假 = hold；方块自己的 once 也一样。
     """
     block_once = bool(entry.pop("once", False))
     cards = entry.get("triggers")
@@ -77,8 +80,14 @@ def _migrate_trigger_sources(entry: dict) -> None:
             return
         entry["triggers"] = cards
     for card in cards:
-        if isinstance(card, dict):
-            card.setdefault("once", block_once)
+        if not isinstance(card, dict):
+            continue
+        if "mode" in card:
+            if card["mode"] not in TRIGGER_MODE_VALUES:
+                card["mode"] = TRIGGER_DEFAULT_MODE
+        else:
+            card["mode"] = "once" if bool(card.pop("once", block_once)) else "hold"
+        card.pop("once", None)
 
 
 def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
@@ -164,7 +173,7 @@ class Level:
         level.movable_blocks = copy.deepcopy(list(definition.get("movable_blocks", [])))
         for entry in level.movable_blocks:
             if isinstance(entry, dict):
-                _migrate_trigger_sources(entry)
+                _migrate_triggers(entry)
         level.buttons = copy.deepcopy(list(definition.get("buttons", [])))
         # 门本身就是触发区了：老数据里的 range 读进来就丢掉，省得存回去又冒出来
         level.portals = [
@@ -189,6 +198,9 @@ class Level:
             entry.setdefault("size", list(NOZZLE_DEFAULT_SIZE))
             level.nozzles.append(entry)
         level.textures = copy.deepcopy(list(definition.get("textures", [])))
+        for entry in level.textures:
+            if isinstance(entry, dict):
+                _migrate_triggers(entry)
 
         # 玩家：这里只放位置和大小，跳高/速度/动画属于整个游戏（game.json，编辑器不写）；
         # 老关卡里写过的这几项原样留着，游戏读的时候当成这一关的覆盖值

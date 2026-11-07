@@ -171,10 +171,7 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         if layout["minus"].collidepoint(position):
             editor.remove_trigger_card(layout["index"])
             return
-        if layout["once"].collidepoint(position):
-            editor.toggle_trigger_once(layout["index"])
-            return
-        for part in ("source", "behavior"):
+        for part in ("source", "behavior", "mode"):
             if not layout[part].collidepoint(position):
                 continue
             editor.blur_name()

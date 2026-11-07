@@ -1,8 +1,8 @@
 """ControllerSystem：推进有 controller 的对象。
 
 有 source 的按来源推进（玩家输入）；没有 source 的是可移动方块：系统内部记着原点和进度，
-看 events 里有没有 "move"，有就沿 offset 走，没有就回原点。只触发一次的卡片由 TriggerSystem
-一直把事件挂住，所以这里不用再管 once。
+看 events 里有没有 "move"，有就沿 offset 走，没有就回原点。事件什么时候挂着由 TriggerSystem
+按卡片的模式决定（once / switch 会一直挂着，hold 松开就撤），所以这里不用再管模式。
 """
 
 import math

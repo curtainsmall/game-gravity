@@ -10,8 +10,8 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
     flip_area_offsets        [向上翻带高度, 向下翻带高度]，见 controller.flip_rule
     blocks, planks           方块与木板
     movable_blocks           可移动方块：offset 是目标点相对支点的偏移，triggers 是触发行为卡片
-                             （来源是按钮名，行为名 move = 沿 offset 走，once = 只触发一次；
-                             老的 sources 只写按钮名，老的 once 写在方块上）
+                             （来源是按钮名，行为名 move = 沿 offset 走，mode 是 once / hold / switch：一次、按住、切换；
+                             老的 sources 只写按钮名，老的 once 写在卡片或方块上，真 = once，假 = hold）
     buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供触发器引用
     portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
     items                    道具：heavy 表示变重
@@ -22,6 +22,7 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              face 是朝向（up/right/down/left，顺时针转，缺省 up），
                              flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动；
                              hide 表示初始隐藏，triggers 的 hide / show 由按钮切换显示
+                             （卡片同样带 mode：一次 / 按住 / 切换）
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖。
                              animations 是玩家动画剪辑：名字固定（idle/run/jump/fall/flip），
                              {"frames": [相对路径…], "fps": 8, "loop": true}；
@@ -54,7 +55,13 @@ from physics.body import Body
 from portal.portal import Portal
 from renderer.palette import color_for_kind
 from renderer.render_spec import PlaceholderFace, PlaceholderShape, RenderSpec
-from trigger.trigger import TriggerBehavior, TriggerSheet
+from trigger.trigger import (
+    MODE_HOLD,
+    MODE_ONCE,
+    TriggerBehavior,
+    TriggerSheet,
+    normalize_mode,
+)
 from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
 
 LevelDefinition = dict[str, object]
@@ -356,7 +363,8 @@ def _trigger_sheet(entry: dict) -> TriggerSheet | None:
     """条目里的 triggers 卡片 → TriggerSheet；老数据写在 sources 里的当成 move 卡片。
 
     卡片没有来源的跳过；一张有效卡片都没有就返回 None（这个对象不接触发器）。
-    老数据把「仅触发一次」写在外面（once），读的时候当成每张卡片各自的 once。
+    模式读卡片的 mode；老数据把「仅触发一次」写成 once（卡片上的优先，否则用方块自己的），
+    真 = once，假 = hold。
     """
     block_once = bool(entry.get("once", False))
     behaviors = []
@@ -372,16 +380,23 @@ def _trigger_sheet(entry: dict) -> TriggerSheet | None:
                 TriggerBehavior(
                     source,
                     str(card.get("behavior") or "").strip(),
-                    bool(card.get("once", block_once)),
+                    _trigger_mode(card, block_once),
                 )
             )
     elif isinstance(entry.get("sources"), list):
         behaviors = [
-            TriggerBehavior(str(name), "move", block_once)
+            TriggerBehavior(str(name), "move", MODE_ONCE if block_once else MODE_HOLD)
             for name in entry["sources"]
             if name
         ]
     return TriggerSheet(behaviors) if behaviors else None
+
+
+def _trigger_mode(card: dict, block_once: bool) -> str:
+    """卡片的模式：新数据写 mode，老数据的 once 真就是一次、假就是按住。"""
+    if "mode" in card:
+        return normalize_mode(card.get("mode"))
+    return MODE_ONCE if bool(card.get("once", block_once)) else MODE_HOLD
 
 
 def _texture_face(entry: dict) -> str:
