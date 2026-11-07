@@ -21,10 +21,20 @@ class PhysicsSystem:
             self._move_along_x(body, solids, body.velocity_x * delta_seconds)
             self._move_along_y(body, solids, body.velocity_y * delta_seconds)
 
-            if body.is_grounded:
-                body.is_flipping = False            # 落过地，这次翻转的穿板许可就用完了
+            if body.is_grounded and not self._overlaps_passable(body, objects):
+                body.is_flipping = False            # 落过地、也离开木板了：穿板许可用完
 
         self._sample_sensors(objects, gravity, delta_seconds)
+
+    def _overlaps_passable(self, body: Body, objects: list[GameObject]) -> bool:
+        """还压在某块可穿木板上没有：人卡在木板里时不能立刻恢复碰撞，否则会被挤得弹起来。"""
+        return any(
+            other.body is not None
+            and other.body is not body
+            and other.body.is_passable_during_flip
+            and self._overlaps(body, other.body)
+            for other in objects
+        )
 
     def _sample_sensors(self, objects: list[GameObject], gravity: float, delta_seconds: float) -> None:
         """解算之后采样：传感器是否与运动物体重叠，风区给出飞向目标的初速度。"""

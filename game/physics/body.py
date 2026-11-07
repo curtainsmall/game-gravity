@@ -30,7 +30,7 @@ class Body:
         self.is_sensor: bool = is_sensor                            # 参与重叠检测，不参与解算
         self.is_static: bool = is_static                            # 参与碰撞，不被积分
         self.is_passable_during_flip: bool = is_passable_during_flip  # 翻转穿透期间不挡路
-        self.is_flipping: bool = is_flipping     # 刚翻过、还没落地：这一趟可以穿过木板
+        self.is_flipping: bool = is_flipping     # 刚翻过、还没落地离开木板：这一趟可以穿过木板
 
     @property
     def top(self) -> float:
