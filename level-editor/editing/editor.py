@@ -157,6 +157,9 @@ class Editor:
         self.cutscene_card_step = 0.0               # 过场卡片一行占多高（几何算出来）
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
         self.player_animations: dict = animation.new_state()  # game.json 的动画（只读快照，起点预览用）
+        self.start_preview_playing = True          # 起点上那段预览：默认播放
+        self.start_preview_frame = 0               # 预览放到第几帧
+        self.start_preview_elapsed = 0.0           # 这一帧已经停了多久
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
         self.game_backgrounds: dict = {}           # 浮层里的标题 / 结算背景：键 → 相对路径
@@ -217,14 +220,13 @@ class Editor:
         )
         return jump, speed, overridden
 
-    def start_preview(self) -> tuple[str, bool] | None:
-        """起点上要显示的那一帧：(图片绝对路径, 要不要水平镜像)。
+    def start_preview_clip(self) -> tuple:
+        """起点预览要播的帧、每帧时长、循环、镜像自哪一侧（或 None）。
 
-        显示哪一套动画记在起点的 preview_animation 里（默认站立）；这一侧空着时和游戏里
-        一样用另一侧镜像。选的动作没有帧、或者图片找不到，就返回 None —— 不显示。
+        按起点里选的动画和方向取；那一侧空着时和游戏里一样用另一侧镜像。
         """
         if not isinstance(self.level.player, dict):
-            return None
+            return [], [], True, None
         action = str(
             self.level.player.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW
         )
@@ -238,13 +240,58 @@ class Editor:
         sides = [name for name, _ in animation.PLAYER_SIDES]
         if side not in sides:
             side = animation.DEFAULT_PREVIEW_SIDE
-        frames, _, _, mirrored = animation.resolved(self.player_animations, action, side)
+        return animation.resolved(self.player_animations, action, side)
+
+    def start_preview(self) -> tuple[str, bool] | None:
+        """起点上这一刻要显示的那一帧：(图片绝对路径, 要不要水平镜像)。
+
+        选的动作没有帧、或者图片找不到，就返回 None —— 不显示。
+        """
+        frames, _, _, mirrored = self.start_preview_clip()
         if not frames:
             return None
-        path = resolve_level_path(frames[0], self.media_base_dir)
+        index = max(0, min(self.start_preview_frame, len(frames) - 1))
+        path = resolve_level_path(frames[index], self.media_base_dir)
         if path is None:
             return None
         return path, mirrored is not None
+
+    def advance_start_preview(self, seconds: float) -> None:
+        """起点预览按每帧的停留时长往前走；暂停时不动，一直循环（只是给眼睛看）。"""
+        if not self.start_preview_playing:
+            return
+        frames, holds, _, _ = self.start_preview_clip()
+        if not frames:
+            self.start_preview_frame = 0
+            self.start_preview_elapsed = 0.0
+            return
+        index = max(0, min(self.start_preview_frame, len(frames) - 1))
+        self.start_preview_elapsed += max(0.0, seconds)
+        for _ in range(1000):
+            hold = holds[index] if index < len(holds) else animation.DEFAULT_HOLD
+            # 加一点点余量：正好停在边界上时算进下一帧，又不被浮点误差卡住
+            if self.start_preview_elapsed < hold - 1e-9:
+                break
+            self.start_preview_elapsed = max(0.0, self.start_preview_elapsed - hold)
+            index = (index + 1) % len(frames)
+        self.start_preview_frame = index
+
+    def toggle_start_preview_play(self) -> None:
+        """属性面板里的「播放 / 暂停动画」：只管编辑器里起点上的预览。"""
+        self.start_preview_playing = not self.start_preview_playing
+        if self.start_preview_playing:
+            self.start_preview_elapsed = 0.0
+        self.status = (
+            "起点动画预览：播放中。" if self.start_preview_playing else "起点动画预览：已暂停。"
+        )
+
+    def start_preview_button_label(self) -> str:
+        return "暂停动画" if self.start_preview_playing else "播放动画"
+
+    def reset_start_preview(self) -> None:
+        """换了预览的动画或方向：从第一帧重新放。"""
+        self.start_preview_frame = 0
+        self.start_preview_elapsed = 0.0
 
     def show_textures(self) -> bool:
         """视图菜单里的「显示贴图」：关掉时贴图不画、也点不中（像被藏起来一样）。"""
@@ -2607,6 +2654,7 @@ class Editor:
                 current = str(entry.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
                 index = names.index(current) if current in names else 0
                 entry[animation.PREVIEW_KEY] = names[(index + delta) % len(names)]
+                self.reset_start_preview()
             elif field == 5:               # 显示哪一侧：右 / 左循环
                 sides = [name for name, _ in animation.PLAYER_SIDES]
                 current = str(
@@ -2614,6 +2662,7 @@ class Editor:
                 )
                 index = sides.index(current) if current in sides else 0
                 entry[animation.PREVIEW_SIDE_KEY] = sides[(index + delta) % len(sides)]
+                self.reset_start_preview()
         elif kind == KIND_TEXTURE:
             if field == 5:                 # 朝向：顺时针转一格（向上也照样写 up）
                 face = str(entry.get("face", FACE_ORDER[0]))
@@ -2761,6 +2810,8 @@ class Editor:
                 entry[animation.PREVIEW_SIDE_KEY] = value or animation.DEFAULT_PREVIEW_SIDE
             else:
                 entry["face"] = value
+        if self.dialog["kind"] == KIND_PLAYER:
+            self.reset_start_preview()
         self.dropdown_field = None
         self.number_buffer = None
         self.dirty = True

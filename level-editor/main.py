@@ -424,6 +424,8 @@ def run() -> None:
                 elif editor.dialog is not None and event.key == pygame.K_RIGHT:
                     editor.adjust_dialog(1)
 
+        # 起点上那段预览一直在走（暂停时它自己不动），和游戏配置里的播放预览互不影响
+        editor.advance_start_preview(dt)
         if editor.animation_preview is not None:
             editor.advance_animation_preview(dt)
 

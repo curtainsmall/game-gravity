@@ -140,6 +140,12 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
         editor.blur_number()
         editor.pick_texture_image()
         return
+    play_rect = detail_slot_rect(surface, editor, "play")
+    if play_rect is not None and play_rect.collidepoint(position):
+        editor.blur_name()
+        editor.blur_number()
+        editor.toggle_start_preview_play()
+        return
     name_rect = detail_slot_rect(surface, editor, "name")
     if name_rect is not None and name_rect.collidepoint(position):
         editor.focus_name()
