@@ -8,7 +8,6 @@ import pygame
 from core.constants import (
     ANIMATION_COLOR,
     BLOCK_COLOR,
-    BUTTON_COLOR,
     DESTINATION_COLOR,
     DIALOG_BORDER,
     DIM_TEXT,
@@ -20,8 +19,6 @@ from core.constants import (
     GROUND_COLOR,
     HANDLE_COLOR,
     HIGHLIGHT,
-    ITEM_COLOR,
-    KIND_BUTTON,
     KIND_PORTAL,
     KIND_SOUND,
     KIND_TEXTURE,
@@ -36,6 +33,7 @@ from core.constants import (
     PREVIEW,
     RULER_STEP,
     TOOL_COLORS,
+    TRIGGER_SOURCE_COLOR,
 )
 from core.helpers import (
     normalize_rect,
@@ -124,37 +122,19 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for entry in level.movable_blocks:
             pygame.draw.rect(surface, MOVABLE_COLOR, layout.entry_rect(entry))
 
-        # 按钮、道具、喷口的标记画在贴图下面：这几样的外观通常由美术图盖着
-        for entry in level.buttons:
-            pygame.draw.polygon(
-                surface,
-                BUTTON_COLOR,
-                frustum_points(
-                    layout.entry_rect(object_box(KIND_BUTTON, entry)), entry.get("face", "")
-                ),
-            )
-
-        for entry in level.items:
-            rect = layout.entry_rect(entry)
-            center = rect.center
-            radius = rect.width / 2.0
-            pygame.draw.polygon(
-                surface,
-                ITEM_COLOR,
-                [
-                    (
-                        center[0] + radius * math.cos(math.radians(-90 + 72 * i)),
-                        center[1] + radius * math.sin(math.radians(-90 + 72 * i)),
-                    )
-                    for i in range(5)
-                ],
-            )
-
         selected_ids = {id(entry) for _, entry in editor.selection}
         for entry in level.nozzles:
             draw_nozzle(surface, layout, entry, selected=id(entry) in selected_ids)
 
-    # 贴图压在方块、按钮、道具、喷口上面；动画对象再压在贴图上，传送门、起点、终点的标记最上面。
+    # 触发源：整块矩形就是触发区，红色实心（半透明）铺满，再描一圈边
+    for entry in level.trigger_sources:
+        rect = layout.entry_rect(entry)
+        layer = pygame.Surface(rect.size, pygame.SRCALPHA)
+        layer.fill((*TRIGGER_SOURCE_COLOR, 70))
+        surface.blit(layer, rect.topleft)
+        pygame.draw.rect(surface, TRIGGER_SOURCE_COLOR, rect, 1)
+
+    # 贴图压在方块和喷口上面；动画对象再压在贴图上，传送门、起点、终点的标记最上面。
     # 缺图时调试显示里铺黑紫棋盘格；「视图 → 显示贴图」关掉时贴图层不画，连描边也一起藏起来
     show_textures = editor.show_textures()
     if show_textures:

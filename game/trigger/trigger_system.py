@@ -56,7 +56,8 @@ class TriggerSystem:
 
     @staticmethod
     def _pressed(source) -> bool:
-        """来源算不算按下：道具看自己的触发状态，其他（按钮）看重叠。"""
-        if source.item is not None:
-            return bool(source.item.triggered)
+        """来源算不算按下：触发源看自己的按下状态，其余（老数据）看重叠。"""
+        component = getattr(source, "trigger_source", None)
+        if component is not None:
+            return bool(component.pressed)
         return source.interaction_state != 0

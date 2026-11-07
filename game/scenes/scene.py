@@ -12,7 +12,6 @@ from controller.input_source import InputSource
 from core.game_object import GameObjectKind
 from cutscene.cutscene import Cutscene, cutscene_of
 from game_settings import game_root, load_game_settings, player_of
-from item.item_system import ItemSystem
 from physics.physics_system import PhysicsSystem
 from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
@@ -21,21 +20,21 @@ from sound.bgm import Bgm, level_bgm
 from sound.library import library_sounds
 from sound.objects import SoundObjects
 from trigger.trigger_system import TriggerSystem
+from trigger_source.trigger_source_system import TriggerSourceSystem
 from world.follower import FollowSystem
 from world.level import (
     LevelDefinition,
     build_animation_objects,
     build_blocks,
     build_boundaries,
-    build_buttons,
     build_destination,
     build_nozzles,
-    build_items,
     build_movable_blocks,
     build_player,
     build_portals,
     build_sound_objects,
     build_textures,
+    build_trigger_sources,
     build_world,
     flip_area_offsets_of,
     jump_height_of,
@@ -61,7 +60,7 @@ class Scene:
 
         self.controller_system: ControllerSystem = ControllerSystem()
         self.physics_system: PhysicsSystem = PhysicsSystem()
-        self.item_system: ItemSystem = ItemSystem()
+        self.trigger_source_system: TriggerSourceSystem = TriggerSourceSystem()
         self.portal_system: PortalSystem = PortalSystem()
         self.trigger_system: TriggerSystem = TriggerSystem()
         self.follow_system: FollowSystem = FollowSystem()
@@ -100,7 +99,6 @@ class Scene:
             flip_area_offsets_of(level_definition), world.height_in_blocks
         )
         players = build_player(level_definition)
-        buttons = build_buttons(level_definition)
         # 声音库里键 → 路径：这一关的音乐、过场和声音对象都从这里取
         sounds = library_sounds(game_settings, base_dir)
         objects = (
@@ -110,8 +108,7 @@ class Scene:
             # 贴图由渲染先铺一层，调试显示再整层压上来；列表顺序只影响占位之间的先后
             + build_textures(level_definition, base_dir)
             + build_animation_objects(level_definition)
-            + build_items(level_definition)
-            + buttons
+            + build_trigger_sources(level_definition)
             + build_portals(level_definition)
             + build_nozzles(level_definition)
             + build_destination(level_definition)
@@ -174,7 +171,7 @@ class Scene:
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.follow_system.update()
         self.physics_system.update(self.objects, self.world, delta_seconds)
-        self.item_system.update(self.objects)
+        self.trigger_source_system.update(self.objects)
         self.portal_system.update(self.objects, self.player)
         # 跟玩家的动画对象要在物理和传送之后才摆位
         self.animation_system.update(delta_seconds)

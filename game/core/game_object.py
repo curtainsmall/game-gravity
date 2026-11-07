@@ -4,11 +4,11 @@ from enum import StrEnum
 
 from controller.controller import Controller
 from nozzle.nozzle import Nozzle
-from item.item import Item
 from physics.body import Body
 from portal.portal import Portal
 from renderer.render_spec import RenderSpec
 from trigger.trigger import TriggerSheet
+from trigger_source.trigger_source import TriggerSource
 
 
 class GameObjectKind(StrEnum):
@@ -22,9 +22,8 @@ class GameObjectKind(StrEnum):
     WALL = "wall"
     PLAYER = "player"
     NOZZLE = "nozzle"
-    ITEM = "item"
     MOVABLE_BLOCK = "movable_block"
-    BUTTON = "button"
+    TRIGGER_SOURCE = "trigger_source"  # 按钮和道具合并后的触发源（静态传感器）
     PORTAL = "portal"
     DESTINATION = "destination"
     TEXTURE = "texture"    # 只显示美术图，不参与碰撞
@@ -40,7 +39,7 @@ class GameObject:
         controller: Controller | None = None,
         render: RenderSpec | None = None,
         nozzle: Nozzle | None = None,
-        item: Item | None = None,
+        trigger_source: TriggerSource | None = None,
         portal: Portal | None = None,
         triggers: TriggerSheet | None = None,
         interaction_state: int = 0,
@@ -54,7 +53,7 @@ class GameObject:
         self.controller: Controller | None = controller   # 运动部件
         self.render: RenderSpec | None = render           # 显示部件
         self.nozzle: Nozzle | None = nozzle                        # 风区参数
-        self.item: Item | None = item                     # 道具参数
+        self.trigger_source: TriggerSource | None = trigger_source  # 触发源参数
         self.portal: Portal | None = portal               # 传送门参数
         self.triggers: TriggerSheet | None = triggers     # 触发行为卡片，空表示不接触发器
         self.sprite = None                                # 动画对象的预设与链接（animation.sprite）
@@ -65,7 +64,7 @@ class GameObject:
     def describe(self) -> str:
         parts = [
             name
-            for name in ("body", "controller", "render", "nozzle", "item", "portal", "triggers")
+            for name in ("body", "controller", "render", "nozzle", "trigger_source", "portal", "triggers")
             if getattr(self, name) is not None
         ]
         label = self.name or str(self.kind)

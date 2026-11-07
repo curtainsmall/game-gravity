@@ -14,13 +14,11 @@ import json
 
 from core import animation, sound
 from core.constants import (
-    BUTTON_SIZE,
     COLS,
     FLIP_AREA_OFFSETS_DEFAULT,
-    ITEM_MODE_DEFAULT,
-    ITEM_MODE_VALUES,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MIN,
+    LEGACY_BUTTON_SIZE,
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
     LEVEL_WIDTH_MAX,
@@ -33,8 +31,10 @@ from core.constants import (
     ROWS,
     TRIGGER_DEFAULT_MODE,
     TRIGGER_MODE_VALUES,
+    TRIGGER_SOURCE_MODE_DEFAULT,
+    TRIGGER_SOURCE_MODE_VALUES,
 )
-from core.helpers import clamp_float, clamp_int
+from core.helpers import clamp_float, clamp_int, facing_rect
 from core.cutscene import new_state as new_cutscene_state, to_object as cutscene_to_object
 from core.sound import fields_of as sound_fields_of, to_object as sound_to_object
 
@@ -50,9 +50,11 @@ LEVEL_KEYS = {
     "blocks",
     "planks",
     "movable_blocks",
+    "trigger_sources",
+    # 老数据的两张表：读进来并进 trigger_sources，保存时不再写它们
     "buttons",
-    "portals",
     "items",
+    "portals",
     "nozzles",
     "textures",
     "animation_objects",
@@ -117,20 +119,64 @@ def _migrate_triggers(entry: dict) -> None:
             card["mode"] = "once" if bool(card.get("once", block_once)) else "hold"
 
 
-def _migrate_item_jump_offset(entry: dict) -> None:
-    """道具：老数据用 heavy 表示变重（跳高降 1 格），读出来补一个 jump_offset。
+def _trigger_source_entry(
+    entry: dict, mode: str | None = None, jump_offset: float | None = None
+) -> dict:
+    """一条触发源：补上名字、位置尺寸、模式和跳高变化；老字段顺手清掉。"""
+    entry.setdefault("name", "")
+    entry.setdefault("pos", [0.0, 0.0])
+    entry.setdefault("size", [1.0, 1.0])
+    entry.pop("face", None)          # 触发源没有朝向：整块矩形就是触发区
+    entry.pop("heavy", None)
+    mode = mode or str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
+    entry["mode"] = mode if mode in TRIGGER_SOURCE_MODE_VALUES else TRIGGER_SOURCE_MODE_DEFAULT
+    offset = jump_offset if jump_offset is not None else _jump_offset(entry)
+    entry["jump_offset"] = float(offset)
+    return entry
 
-    heavy 键原样留着，不删。
-    """
-    heavy = bool(entry.get("heavy", False))
-    if "jump_offset" not in entry:
-        entry["jump_offset"] = -1.0 if heavy else 0.0
+
+def _jump_offset(entry: dict) -> float:
+    """跳高变化量：新数据写 jump_offset；老道具的 heavy=true 当成 -1 格。"""
+    if "jump_offset" in entry:
+        try:
+            return float(entry.get("jump_offset"))
+        except (TypeError, ValueError):
+            return 0.0
+    return -1.0 if bool(entry.get("heavy", False)) else 0.0
 
 
-def _migrate_item_mode(entry: dict) -> None:
-    """道具的触发模式：这是编辑器认识的字段，缺了补默认值，写坏了也按默认值。"""
-    if entry.get("mode") not in ITEM_MODE_VALUES:
-        entry["mode"] = ITEM_MODE_DEFAULT
+def _read_trigger_sources(definition: dict) -> list:
+    """触发源：新表直接读，老数据的 buttons / items 并进来（按钮按实际矩形换算）。"""
+    sources = []
+    for entry in copy.deepcopy(list(definition.get("trigger_sources", []))):
+        if isinstance(entry, dict):
+            sources.append(_trigger_source_entry(entry))
+    for entry in copy.deepcopy(list(definition.get("buttons", []))):
+        if not isinstance(entry, dict):
+            continue
+        left, bottom, width, height = facing_rect(entry, LEGACY_BUTTON_SIZE)
+        sources.append(
+            _trigger_source_entry(
+                {
+                    "name": str(entry.get("name") or ""),
+                    "pos": [left, bottom],
+                    "size": [width, height],
+                },
+                mode="hold",
+                jump_offset=0.0,
+            )
+        )
+    for entry in copy.deepcopy(list(definition.get("items", []))):
+        if not isinstance(entry, dict):
+            continue
+        legacy = str(entry.get("mode") or "once")
+        sources.append(
+            _trigger_source_entry(
+                entry,
+                mode="once" if legacy == "once" else "hold",
+            )
+        )
+    return sources
 
 
 def _read_flip_area_offsets(definition: dict, level_height: int) -> list[float]:
@@ -160,9 +206,8 @@ class Level:
         self.blocks: list = []
         self.planks: list = []
         self.movable_blocks: list = []
-        self.buttons: list = []
+        self.trigger_sources: list = []   # 触发源：整块矩形是触发区，模式 + 跳高变化
         self.portals: list = []
-        self.items: list = []
         self.nozzles: list = []
         self.textures: list = []   # 贴图：浮点世界矩形 + 图片名，不吸格子
         self.animation_objects: list = []  # 动画对象：pos/size + follow + 预设 + 链接
@@ -181,9 +226,8 @@ class Level:
                 "blocks": copy.deepcopy(self.blocks),
                 "planks": copy.deepcopy(self.planks),
                 "movable_blocks": copy.deepcopy(self.movable_blocks),
-                "buttons": copy.deepcopy(self.buttons),
+                "trigger_sources": copy.deepcopy(self.trigger_sources),
                 "portals": copy.deepcopy(self.portals),
-                "items": copy.deepcopy(self.items),
                 "nozzles": copy.deepcopy(self.nozzles),
                 "textures": copy.deepcopy(self.textures),
                 "animation_objects": copy.deepcopy(self.animation_objects),
@@ -247,19 +291,13 @@ class Level:
         for entry in level.movable_blocks:
             if isinstance(entry, dict):
                 _migrate_triggers(entry)
-        level.buttons = copy.deepcopy(list(definition.get("buttons", [])))
+        # 触发源：新表 + 老数据的 buttons / items 合并进来，整块矩形就是触发区
+        level.trigger_sources = _read_trigger_sources(definition)
         # 门本身就是触发区；老数据里的 range 原样留着，不删
         level.portals = copy.deepcopy(list(definition.get("portals", [])))
-        # 按钮和门的「画出来的矩形」就是触发区，缺 size 时按默认补上，别和游戏里不一致
-        for entries, default in ((level.buttons, BUTTON_SIZE), (level.portals, PORTAL_SIZE)):
-            for entry in entries:
-                if isinstance(entry, dict):
-                    entry.setdefault("size", list(default))
-        level.items = copy.deepcopy(list(definition.get("items", [])))
-        for entry in level.items:
+        for entry in level.portals:
             if isinstance(entry, dict):
-                _migrate_item_jump_offset(entry)
-                _migrate_item_mode(entry)
+                entry.setdefault("size", list(PORTAL_SIZE))
         # 喷口的风区现在是 size；老数据写的 range 补出 size 之外原样留着
         level.nozzles = []
         for entry in copy.deepcopy(list(definition.get("nozzles", []))):

@@ -10,21 +10,25 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
     flip_area_offsets        [向上翻带高度, 向下翻带高度]，见 controller.flip_rule
     blocks, planks           方块与木板
     movable_blocks           可移动方块：offset 是目标点相对支点的偏移，triggers 是触发行为卡片
-                             （来源是按钮名，行为名 move = 沿 offset 走，mode 是 once / hold / switch：一次、按住、切换；
-                             老的 sources 只写按钮名，老的 once 写在卡片或方块上，真 = once，假 = hold）
-    buttons                  按钮：pos/size 是按钮本身（底边中点），face 是朝向，name 供触发器引用
+                             （来源是触发源的名字，行为名 move = 沿 offset 走，mode 是 once / hold / switch：一次、按住、切换；
+                             老的 sources 只写来源名，老的 once 写在卡片或方块上，真 = once，假 = hold）
+    trigger_sources          触发源：整块 pos/size 矩形就是触发区，name 供触发卡片引用；
+                             mode 是 hold / once（压着才算 / 第一次压到后一直算），
+                             jump_offset 是按下期间跳高的变化量（格，正数跳更高、负数跳更低、
+                             0 只是开关）；老数据的 buttons / items 会并进这里：
+                             按钮按实际矩形换算成 hold + 0，道具的 persist 变成 hold
     portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
-    items                    道具：mode 是 once / persist（一次触发就禁用 / 可重复触发，
-                             缺省 once），jump_offset 是触发期间跳高的变化量（格，正数跳更高、
-                             负数跳更低、0 不变；老数据 heavy=true 当成 -1）；道具自己也是
-                             触发来源，名字可以被触发卡片引用
+    items                    老数据：道具，读进来并进 trigger_sources（persist 变成 hold，
+                             缺省 once 照旧），jump_offset 是按下期间跳高的变化量（格，
+                             正数跳更高、负数跳更低、0 不变；heavy=true 当成 -1）；
+                             名字照样能当触发卡片的来源
     nozzles                  喷口：face 是风区伸出的方向，power 是目标沿朝向离底面多远（不给负的；
                              编辑器保证它至少比风区沿朝向的长度多 0.5 格，目标点落在风区外），
                              size 是风区宽高（老数据写的 range 只给长度，宽度按 1 算）
     textures                 贴图：浮点矩形 + image（相对 game.json 的路径）；
                              face 是朝向（up/right/down/left，顺时针转，缺省 up），
                              flip 水平镜像；follow 写可移动方块的名字，这张图就跟着它一起动；
-                             hide 表示初始隐藏，triggers 的 hide / show 由按钮或道具切换显示
+                             hide 表示初始隐藏，triggers 的 hide / show 由触发源切换显示
                              （卡片同样带 mode：一次 / 按住 / 切换）
     animation_objects        动画对象：和贴图一样只显示、不碰撞，pos/size 是自己的；
                              follow 写对象名字（或 "@player"）就跟着它平移；
@@ -39,7 +43,7 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
     sound                    这一关的音乐：bgm（相对 game.json 的路径）、loop、fade_in、fade_out
 
 有矩形的对象都写成 {"pos": [x, y], "size": [w, h]}：pos 是左下角，size 缺省 1×1
-（传送门缺省 1×0.3），单位格，都是浮点。按钮、传送门和喷口另有一套写法：pos 是
+（传送门缺省 1×0.3），单位格，都是浮点。传送门和喷口另有一套写法：pos 是
 「底面」的中点、size 是没转过的宽高，face（up/right/down/left）决定从底面往哪边
 长出去，左右朝向时屏幕上的宽高是对调的。
 玩家参数一般写在 game.json 的 player 里（jump_height 格、可以是小数，move_speed 格/秒）；
@@ -56,7 +60,6 @@ from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
 from core.game_object import GameObject, GameObjectKind
 from nozzle.nozzle import Nozzle
-from item.item import MODE_ONCE, Item
 from physics.body import Body
 from portal.portal import Portal
 from renderer.palette import color_for_kind
@@ -69,14 +72,19 @@ from trigger.trigger import (
     TriggerSheet,
     normalize_mode,
 )
+from trigger_source.trigger_source import (
+    MODE_HOLD as SOURCE_HOLD,
+    MODE_ONCE as SOURCE_ONCE,
+    TriggerSource,
+)
 from world.world import HEIGHT_IN_BLOCKS, WIDTH_IN_BLOCKS, World
 
 LevelDefinition = dict[str, object]
 
 DEFAULT_SIZE = (1.0, 1.0)
 PORTAL_SIZE = (1.0, 0.3)   # 传送门画出来的那块门：1 格宽、0.3 格高
-# 按钮画出来就是它的触发区（和传送门一样）：缺省 1 格宽、0.3 格高
-BUTTON_SIZE = (1.0, 0.3)
+# 老数据里的按钮是 1 格宽、0.3 格的棱台：读进来按它的实际矩形并进触发源
+LEGACY_BUTTON_SIZE = (1.0, 0.3)
 PLAYER_SIZE = (0.8, 1.0)   # 玩家比一格窄，过缝与贴墙时更宽容
 NOZZLE_DEFAULT_RANGE = 5   # 老数据没写 range 时的风区长度（新数据写 size）
 NOZZLE_DEFAULT_POWER = 7   # 喷口没写 power 时的目标偏移
@@ -231,7 +239,7 @@ def _read_size(entry: dict, default: tuple[float, float] = DEFAULT_SIZE) -> tupl
 
 
 def facing_rect(entry: dict, default_size) -> tuple[float, float, float, float]:
-    """按钮、传送门和喷口风区的矩形：pos 是「底面」的中点，矩形从底面朝 face 指的方向长出去。
+    """传送门和喷口风区的矩形：pos 是「底面」的中点，矩形从底面朝 face 指的方向长出去。
 
     up：底面是下边、往上长；down：底面是上边、往下长；
     right：底面是左边、往右长；left：底面是右边、往左长。
@@ -250,7 +258,7 @@ def facing_rect(entry: dict, default_size) -> tuple[float, float, float, float]:
 
 
 def _read_face(entry: dict) -> PlaceholderFace:
-    """按钮朝向，缺省或非法时按向上处理。"""
+    """朝向（老按钮、传送门和喷口用），缺省或非法时按向上处理。"""
     try:
         return PlaceholderFace(str(entry.get("face", PlaceholderFace.UP)))
     except ValueError:
@@ -269,7 +277,7 @@ def _make(
     facing: bool = False,
 ) -> GameObject:
     if facing:
-        # 按钮和传送门：pos 是底边中点，宽高按朝向摆正
+        # 传送门（和老的按钮）：pos 是底边中点，宽高按朝向摆正
         left, bottom, width, height = facing_rect(entry, default_size)
     else:
         left, bottom = _read_position(entry)
@@ -315,7 +323,7 @@ def build_textures(
 
     face 是图自己的朝向（顺时针转 90° 一档，缺省 up），flip 是转完再水平镜像；
     follow 写了可移动方块的名字，加载后这张图就跟着那个方块走（见 world.follower）；
-    hide 是初始隐藏，triggers 卡片里的 hide / show 由按钮切换显示。
+    hide 是初始隐藏，triggers 卡片里的 hide / show 由触发源切换显示。
     只认 schema 里列出来的条目，不自动扫描 textures/ 目录。
     """
     textures = []
@@ -475,45 +483,70 @@ def build_nozzles(level_definition: LevelDefinition) -> list[GameObject]:
     return nozzles
 
 
-def build_items(level_definition: LevelDefinition) -> list[GameObject]:
-    items = []
-    for entry in level_definition.get("items", []):
-        game_object = _make(entry, GameObjectKind.ITEM, is_static=True, is_sensor=True)
-        game_object.render.placeholder_shape = PlaceholderShape.PENTAGON
-        game_object.item = Item(
-            mode=str(entry.get("mode") or MODE_ONCE),
-            jump_offset=_item_jump_offset(entry),
+def build_trigger_sources(level_definition: LevelDefinition) -> list[GameObject]:
+    """触发源：矩形就是触发区，玩家压上去算按下。
+
+    新数据写在 trigger_sources 里：{name, pos, size, mode, jump_offset}。
+    老数据里的 buttons（棱台，pos 是底面中点）和 items（道具）在这里并进来：
+    按钮按它的实际矩形换算成 hold + jump_offset 0，道具的 persist 换成 hold。
+    """
+    sources = []
+    for entry in level_definition.get("trigger_sources", []):
+        if isinstance(entry, dict):
+            sources.append(
+                _make_trigger_source(
+                    entry,
+                    str(entry.get("mode") or SOURCE_HOLD),
+                    _jump_offset(entry),
+                )
+            )
+    for entry in level_definition.get("buttons", []):
+        if not isinstance(entry, dict):
+            continue
+        left, bottom, width, height = facing_rect(entry, LEGACY_BUTTON_SIZE)
+        sources.append(
+            _make_trigger_source(
+                {
+                    "name": str(entry.get("name") or ""),
+                    "pos": [left, bottom],
+                    "size": [width, height],
+                },
+                SOURCE_HOLD,
+                0.0,
+            )
         )
-        items.append(game_object)
-    return items
+    for entry in level_definition.get("items", []):
+        if not isinstance(entry, dict):
+            continue
+        legacy_mode = str(entry.get("mode") or "once")
+        sources.append(
+            _make_trigger_source(
+                entry,
+                SOURCE_ONCE if legacy_mode == "once" else SOURCE_HOLD,
+                _jump_offset(entry),
+            )
+        )
+    return sources
 
 
-def _item_jump_offset(entry: dict) -> float:
-    """道具的跳高变化量：新数据写 jump_offset；老数据 heavy=true 当成 -1 格。"""
+def _make_trigger_source(
+    entry: dict, mode: str, jump_offset: float
+) -> GameObject:
+    game_object = _make(
+        entry, GameObjectKind.TRIGGER_SOURCE, is_static=True, is_sensor=True
+    )
+    game_object.trigger_source = TriggerSource(mode=mode, jump_offset=jump_offset)
+    return game_object
+
+
+def _jump_offset(entry: dict) -> float:
+    """跳高变化量：新数据写 jump_offset；老道具的 heavy=true 当成 -1 格。"""
     if "jump_offset" in entry:
         try:
             return float(entry.get("jump_offset"))
         except (TypeError, ValueError):
             return 0.0
     return -1.0 if bool(entry.get("heavy", False)) else 0.0
-
-
-def build_buttons(level_definition: LevelDefinition) -> list[GameObject]:
-    """按钮画出来的那块矩形就是它的触发区（和传送门一样），缺省 1×0.3 格。"""
-    buttons = []
-    for entry in level_definition.get("buttons", []):
-        game_object = _make(
-            entry,
-            GameObjectKind.BUTTON,
-            is_static=True,
-            is_sensor=True,
-            default_size=BUTTON_SIZE,
-            facing=True,
-        )
-        game_object.render.placeholder_shape = PlaceholderShape.FRUSTUM
-        game_object.render.placeholder_face = _read_face(entry)
-        buttons.append(game_object)
-    return buttons
 
 
 def build_portals(level_definition: LevelDefinition) -> list[GameObject]:

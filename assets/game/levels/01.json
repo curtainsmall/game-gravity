@@ -49,15 +49,15 @@
     },
     {
       "pos": [70.0, 6.0],
-      "size": [2.0, 2.0]
+      "size": [1.5, 2.0]
     },
     {
       "pos": [72.0, 6.0],
       "size": [0.05, 0.05]
     },
     {
-      "pos": [74.0, 6.0],
-      "size": [3.95, 2.0]
+      "pos": [74.5, 6.0],
+      "size": [3.5, 2.0]
     },
     {
       "pos": [78.0, 6.0],
@@ -228,10 +228,6 @@
       "size": [4.0, 1.5]
     },
     {
-      "pos": [54.35, 2.31],
-      "size": [0.05, 0.05]
-    },
-    {
       "pos": [90.0, 6.0],
       "size": [2.0, 1.0]
     },
@@ -274,8 +270,8 @@
   ],
   "planks": [
     {
-      "pos": [72.0, 6.5],
-      "size": [2.0, 1.0]
+      "pos": [71.75, 6.5],
+      "size": [2.75, 1.0]
     },
     {
       "pos": [140.0, 12.5],
@@ -353,40 +349,42 @@
       ]
     }
   ],
-  "buttons": [
+  "trigger_sources": [
     {
       "name": "button_5",
-      "pos": [215.5, 6.0],
+      "pos": [215.0, 6.0],
       "size": [1.0, 0.3],
-      "face": "up"
+      "mode": "hold",
+      "jump_offset": 0.0
     },
     {
       "name": "button_4",
-      "pos": [139.0, 14.0],
+      "pos": [138.5, 14.0],
       "size": [1.0, 0.3],
-      "face": "up"
+      "mode": "once",
+      "jump_offset": 0.0
     },
     {
       "name": "button_3",
-      "pos": [116.0, 8.5],
-      "size": [1.0, 0.3],
-      "face": "right"
+      "pos": [116.0, 8.0],
+      "size": [0.3, 1.0],
+      "mode": "once",
+      "jump_offset": 0.0
     },
     {
       "name": "button_2",
-      "pos": [119.0, 0.0],
+      "pos": [118.5, 0.0],
       "size": [1.0, 0.3],
-      "face": "up"
+      "mode": "once",
+      "jump_offset": 0.0
     },
     {
       "name": "button_1",
-      "pos": [108.0, 0.5],
-      "size": [1.0, 0.5],
-      "face": "left"
-    }
-  ],
-  "portals": [],
-  "items": [
+      "pos": [107.5, 0.0],
+      "size": [0.5, 1.0],
+      "mode": "once",
+      "jump_offset": 0.0
+    },
     {
       "name": "prop1",
       "pos": [53.0, 13.0],
@@ -402,6 +400,7 @@
       "mode": "once"
     }
   ],
+  "portals": [],
   "nozzles": [
     {
       "pos": [199.0, 0.0],
@@ -711,26 +710,111 @@
       "pos": [215.0, 6.0],
       "size": [1.0, 1.0],
       "image": "textures/level1/按钮.png",
-      "smooth": false
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "button_5",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "pos": [215.0, 6.0],
+      "size": [1.0, 0.5],
+      "image": "textures/level1/按钮.png",
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "button_5",
+          "behavior": "show",
+          "mode": "once"
+        }
+      ],
+      "hide": true
     },
     {
       "pos": [138.5, 14.0],
       "size": [1.0, 1.0],
       "image": "textures/level1/按钮.png",
-      "smooth": false
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "button_4",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "pos": [138.5, 14.0],
+      "size": [1.0, 0.5],
+      "image": "textures/level1/按钮.png",
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "button_4",
+          "behavior": "show",
+          "mode": "once"
+        }
+      ],
+      "hide": true
     },
     {
       "pos": [118.5, 0.0],
       "size": [1.0, 1.0],
       "image": "textures/level1/按钮.png",
-      "smooth": false
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "button_2",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "pos": [118.5, 0.0],
+      "size": [1.0, 0.5],
+      "image": "textures/level1/按钮.png",
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "button_2",
+          "behavior": "show",
+          "mode": "once"
+        }
+      ],
+      "hide": true
     },
     {
       "pos": [116.0, 8.0],
       "size": [1.0, 1.0],
       "image": "textures/level1/按钮.png",
       "smooth": false,
-      "face": "right"
+      "face": "right",
+      "triggers": [
+        {
+          "source": "button_3",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "pos": [116.0, 8.0],
+      "size": [0.5, 1.0],
+      "image": "textures/level1/按钮.png",
+      "smooth": false,
+      "face": "right",
+      "triggers": [
+        {
+          "source": "button_3",
+          "behavior": "show",
+          "mode": "once"
+        }
+      ],
+      "hide": true
     },
     {
       "pos": [223.5, -0.5],
@@ -785,42 +869,64 @@
   ],
   "animation_objects": [
     {
-      "pos": [1.0, -0.25],
+      "pos": [0.37, -0.2],
       "size": [3.0, 4.0],
       "follow": "@player",
       "preset": "player",
       "links": {
         "general": {
-          "clip": ""
+          "clip": "",
+          "loop": true
         },
         "player": {
           "idle": {
-            "left": "idle_left",
-            "right": "idle_right"
+            "left": {
+              "clip": "idle_left",
+              "loop": true
+            },
+            "right": {
+              "clip": "idle_right",
+              "loop": true
+            }
           },
           "run": {
-            "left": "run_left",
-            "right": "run_right"
+            "left": {
+              "clip": "run_left",
+              "loop": true
+            },
+            "right": {
+              "clip": "run_right",
+              "loop": true
+            }
           },
           "jump": {
-            "left": "",
-            "right": ""
+            "left": {
+              "clip": "",
+              "loop": true
+            },
+            "right": {
+              "clip": "",
+              "loop": true
+            }
           },
           "fall": {
-            "left": "",
-            "right": ""
-          },
-          "flip": {
-            "left": "",
-            "right": ""
+            "left": {
+              "clip": "",
+              "loop": true
+            },
+            "right": {
+              "clip": "",
+              "loop": true
+            }
           }
         }
       }
     }
   ],
+  "sound_objects": [],
   "player": {
-    "pos": [1.41, 0.0],
-    "size": [2.31, 3.58]
+    "pos": [1.0, 0.0],
+    "size": [2.0, 3.0]
   },
   "destination": {
     "pos": [235.0, 6.0],
@@ -828,7 +934,7 @@
   },
   "background": "textures/level1/background.png",
   "sound": {
-    "bgm": "sounds/开场曲beta.mp3",
+    "sound": "开场曲beta",
     "loop": true,
     "fade_in": 0.5,
     "fade_out": 1.0

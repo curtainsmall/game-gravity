@@ -4,9 +4,7 @@ import os
 import re
 
 from core.constants import (
-    BUTTON_SIZE,
     FACE_DIRECTIONS,
-    KIND_BUTTON,
     KIND_NOZZLE,
     KIND_PORTAL,
     LEVEL_BACKGROUND_NAME,
@@ -56,13 +54,11 @@ def facing_rect(entry: dict, default_size) -> tuple[float, float, float, float]:
 def object_box(kind: str, entry: dict) -> dict:
     """画布和命中用的矩形（pos=左下角 + size）。
 
-    喷口是风区矩形，按钮和传送门是有朝向的矩形，其余对象直接用自己的 pos/size。
+    喷口是风区矩形，传送门是有朝向的矩形，其余对象（含触发源）直接用自己的 pos/size。
     """
     if kind == KIND_NOZZLE:
         return nozzle_box(entry)
-    if kind == KIND_BUTTON:
-        left, bottom, width, height = facing_rect(entry, BUTTON_SIZE)
-    elif kind == KIND_PORTAL:
+    if kind == KIND_PORTAL:
         left, bottom, width, height = facing_rect(entry, PORTAL_SIZE)
     else:
         return entry

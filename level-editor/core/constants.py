@@ -36,8 +36,7 @@ STATUS_TEXT = (160, 200, 160)
 BLOCK_COLOR = (10, 10, 10)
 PLANK_COLOR = (139, 69, 19)
 MOVABLE_COLOR = (255, 105, 180)
-BUTTON_COLOR = (220, 20, 60)
-ITEM_COLOR = (220, 20, 60)
+TRIGGER_SOURCE_COLOR = (220, 20, 60)   # 触发源：整块矩形就是触发区，红色
 NOZZLE_COLOR = (220, 20, 60)
 PORTAL_COLOR = (130, 80, 200)
 PLAYER_COLOR = (255, 140, 0)
@@ -64,8 +63,7 @@ LEVEL_SELECT_WIDTH = 420       # 关卡列表浮层宽度
     TOOL_BLOCK,
     TOOL_PLANK,
     TOOL_MOVABLE,
-    TOOL_BUTTON,
-    TOOL_ITEM,
+    TOOL_TRIGGER_SOURCE,
     TOOL_NOZZLE,
     TOOL_PLAYER,
     TOOL_DEST,
@@ -73,19 +71,18 @@ LEVEL_SELECT_WIDTH = 420       # 关卡列表浮层宽度
     TOOL_PORTAL,
     TOOL_ANIMATION,
     TOOL_SOUND,
-) = range(12)
+) = range(11)
 
 TOOL_SPECS = {
     TOOL_BLOCK: ("方块", "rect"),
     TOOL_PLANK: ("木板", "rect"),
     TOOL_MOVABLE: ("可移动方块", "rect"),
-    TOOL_BUTTON: ("按钮", "single"),
-    TOOL_PORTAL: ("传送门", "single"),
-    TOOL_ITEM: ("道具", "single"),
+    TOOL_TRIGGER_SOURCE: ("触发源", "rect"),
     TOOL_NOZZLE: ("喷口", "single"),
     TOOL_PLAYER: ("起点", "single"),
     TOOL_DEST: ("终点", "single"),
     TOOL_TEXTURE: ("贴图", "import"),   # import：选图直接导入，不进创建模式
+    TOOL_PORTAL: ("传送门", "single"),
     TOOL_ANIMATION: ("动画", "single"),
     TOOL_SOUND: ("声音", "single"),
 }
@@ -94,9 +91,8 @@ TOOL_ORDER = [
     TOOL_BLOCK,
     TOOL_PLANK,
     TOOL_MOVABLE,
-    TOOL_BUTTON,
+    TOOL_TRIGGER_SOURCE,
     TOOL_PORTAL,
-    TOOL_ITEM,
     TOOL_NOZZLE,
     TOOL_PLAYER,
     TOOL_DEST,
@@ -110,9 +106,8 @@ TOOL_COLORS = {
     TOOL_BLOCK: BLOCK_COLOR,
     TOOL_PLANK: PLANK_COLOR,
     TOOL_MOVABLE: MOVABLE_COLOR,
-    TOOL_BUTTON: BUTTON_COLOR,
+    TOOL_TRIGGER_SOURCE: TRIGGER_SOURCE_COLOR,
     TOOL_PORTAL: PORTAL_COLOR,
-    TOOL_ITEM: ITEM_COLOR,
     TOOL_NOZZLE: NOZZLE_COLOR,
     TOOL_PLAYER: PLAYER_COLOR,
     TOOL_DEST: DESTINATION_COLOR,
@@ -129,9 +124,9 @@ NOZZLE_DEFAULT_SIZE = (1.0, 5.0)   # 风区尺寸：宽 1 格、长 5 格（老�
 NOZZLE_POWER_MARGIN = 0.5
 # 传送门画出来的那块门：1 格宽、0.3 格高。门本身既是外观也是触发区，没有额外范围
 PORTAL_SIZE = (1.0, 0.3)
-# 按钮同理：画出来的矩形就是触发区，缺省 1 格宽、0.3 格高
-BUTTON_SIZE = (1.0, 0.3)
-FACE_ORDER = ("up", "right", "down", "left")   # 按钮、传送门和喷口的朝向循环顺序
+# 老数据里的按钮：棱台，pos 是底面中点，缺省 1 格宽、0.3 格高；读进来按实际矩形换算
+LEGACY_BUTTON_SIZE = (1.0, 0.3)
+FACE_ORDER = ("up", "right", "down", "left")   # 传送门和喷口的朝向循环顺序
 FACE_LABELS = {"up": "上", "right": "右", "down": "下", "left": "左"}  # 界面上显示的中文
 FACE_DIRECTIONS = {
     "up": (0.0, 1.0),
@@ -144,14 +139,14 @@ JUMP_HEIGHT_DEFAULT = 2.0
 JUMP_HEIGHT_MIN, JUMP_HEIGHT_MAX = 0.0, 99.0
 JUMP_HEIGHT_STEP = 0.5
 
-# 道具拾取后对跳高的变化量（格）：正数跳更高、负数跳更低、0 不变
-ITEM_JUMP_OFFSET_MIN, ITEM_JUMP_OFFSET_MAX = -99.0, 99.0
+# 触发源对跳高的变化量（格）：正数跳更高、负数跳更低、0 只是开关
+TRIGGER_JUMP_OFFSET_MIN, TRIGGER_JUMP_OFFSET_MAX = -99.0, 99.0
 
-# 道具的触发模式：(显示文字, json 里的值)。once = 触发一次就禁用，persist = 可重复触发
-ITEM_MODES = (("一次", "once"), ("可重复", "persist"))
-ITEM_MODE_VALUES = tuple(value for _, value in ITEM_MODES)
-ITEM_MODE_LABELS = {value: label for label, value in ITEM_MODES}
-ITEM_MODE_DEFAULT = "once"
+# 触发源的模式：(显示文字, json 里的值)。hold = 压着才算，once = 第一次压到后一直算
+TRIGGER_SOURCE_MODES = (("按住", "hold"), ("一次", "once"))
+TRIGGER_SOURCE_MODE_VALUES = tuple(value for _, value in TRIGGER_SOURCE_MODES)
+TRIGGER_SOURCE_MODE_LABELS = {value: label for label, value in TRIGGER_SOURCE_MODES}
+TRIGGER_SOURCE_MODE_DEFAULT = "hold"
 
 # 水平移动速度（方块/秒）
 MOVE_SPEED_DEFAULT = 8.0
@@ -184,9 +179,8 @@ SCROLL_STEP = 48
 KIND_BLOCK = "block"
 KIND_PLANK = "plank"
 KIND_MOVABLE = "movable_block"
-KIND_BUTTON = "button"
+KIND_TRIGGER_SOURCE = "trigger_source"
 KIND_PORTAL = "portal"
-KIND_ITEM = "item"
 KIND_NOZZLE = "nozzle"
 KIND_PLAYER = "player"
 KIND_DESTINATION = "destination"
@@ -198,16 +192,15 @@ HANDLE_PIXELS = 7  # 缩放手柄的热区半径（像素）：比画出来的�
 NUMBER_TEXT_MAX_LENGTH = 8  # 属性面板里数字字段最多敲几个字符（含负号和小数点）
 
 # 关卡数据里带 name 字段、会被别的对象引用的种类
-KIND_HAS_NAME = (KIND_MOVABLE, KIND_BUTTON, KIND_PORTAL, KIND_ITEM)
+KIND_HAS_NAME = (KIND_MOVABLE, KIND_TRIGGER_SOURCE, KIND_PORTAL)
 NAME_MAX_LENGTH = 24
 
 KIND_TITLES = {
     KIND_BLOCK: "方块",
     KIND_PLANK: "木板",
     KIND_MOVABLE: "可移动方块",
-    KIND_BUTTON: "按钮",
+    KIND_TRIGGER_SOURCE: "触发源",
     KIND_PORTAL: "传送门",
-    KIND_ITEM: "道具",
     KIND_NOZZLE: "喷口",
     KIND_PLAYER: "起点",
     KIND_DESTINATION: "终点",
@@ -221,9 +214,8 @@ KIND_ORDER = (
     KIND_BLOCK,
     KIND_PLANK,
     KIND_MOVABLE,
-    KIND_BUTTON,
+    KIND_TRIGGER_SOURCE,
     KIND_PORTAL,
-    KIND_ITEM,
     KIND_NOZZLE,
     KIND_PLAYER,
     KIND_DESTINATION,

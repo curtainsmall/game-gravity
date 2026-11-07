@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from core import animation, cutscene, game, sound
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
-    BUTTON_SIZE,
     COLS,
     FACE_LABELS,
     FACE_ORDER,
@@ -18,11 +17,6 @@ from core.constants import (
     GAME_SOUND_LIBRARY_TAB,
     HANDLE_PIXELS,
     HEADER,
-    ITEM_JUMP_OFFSET_MAX,
-    ITEM_JUMP_OFFSET_MIN,
-    ITEM_MODE_DEFAULT,
-    ITEM_MODE_LABELS,
-    ITEM_MODES,
     JUMP_HEIGHT_DEFAULT,
     JUMP_HEIGHT_MAX,
     JUMP_HEIGHT_MIN,
@@ -30,10 +24,8 @@ from core.constants import (
     KIND_BEHAVIORS,
     KIND_ANIMATION,
     KIND_BLOCK,
-    KIND_BUTTON,
     KIND_DESTINATION,
     KIND_HAS_NAME,
-    KIND_ITEM,
     KIND_MOVABLE,
     KIND_NOZZLE,
     KIND_ORDER,
@@ -43,6 +35,7 @@ from core.constants import (
     KIND_SOUND,
     KIND_TEXTURE,
     KIND_TITLES,
+    KIND_TRIGGER_SOURCE,
     LEVEL_HEIGHT_MAX,
     LEVEL_HEIGHT_MIN,
     LEVEL_WIDTH_MAX,
@@ -62,9 +55,7 @@ from core.constants import (
     SETTINGS_CUTSCENE_TAB,
     SETTINGS_TABS,
     TOOL_BLOCK,
-    TOOL_BUTTON,
     TOOL_DEST,
-    TOOL_ITEM,
     TOOL_NOZZLE,
     TOOL_PLANK,
     TOOL_PLAYER,
@@ -73,8 +64,15 @@ from core.constants import (
     TOOL_ANIMATION,
     TOOL_SOUND,
     TOOL_TEXTURE,
+    TOOL_TRIGGER_SOURCE,
     TRIGGER_DEFAULT_MODE,
     TRIGGER_MODES,
+    TRIGGER_SOURCE_MODE_DEFAULT,
+    TRIGGER_SOURCE_MODE_LABELS,
+    TRIGGER_SOURCE_MODE_VALUES,
+    TRIGGER_SOURCE_MODES,
+    TRIGGER_JUMP_OFFSET_MAX,
+    TRIGGER_JUMP_OFFSET_MIN,
 )
 from core.helpers import (
     SNAP_STEP,
@@ -265,8 +263,7 @@ class Editor:
             (self.level.blocks, KIND_BLOCK),
             (self.level.planks, KIND_PLANK),
             (self.level.movable_blocks, KIND_MOVABLE),
-            (self.level.buttons, KIND_BUTTON),
-            (self.level.items, KIND_ITEM),
+            (self.level.trigger_sources, KIND_TRIGGER_SOURCE),
             (self.level.nozzles, KIND_NOZZLE),
             (self.level.textures, KIND_TEXTURE),
             (self.level.animation_objects, KIND_ANIMATION),
@@ -441,6 +438,17 @@ class Editor:
             self.level.blocks.append({"pos": [x, y], "size": [w, h]})
         elif self.tool == TOOL_PLANK:
             self.level.planks.append({"pos": [x, y], "size": [w, h]})
+        elif self.tool == TOOL_TRIGGER_SOURCE:
+            # 触发源：整块矩形就是触发区，拖多大就多大
+            self.level.trigger_sources.append(
+                {
+                    "name": "",
+                    "pos": [x, y],
+                    "size": [w, h],
+                    "mode": TRIGGER_SOURCE_MODE_DEFAULT,
+                    "jump_offset": 0.0,
+                }
+            )
         else:
             self.level.movable_blocks.append(
                 {
@@ -455,19 +463,14 @@ class Editor:
         self.status = f"已添加{TOOL_SPECS[self.tool][0]}（{x}, {y}）{w}×{h}。"
 
     def place_single(self, point: tuple) -> None:
-        """按钮/道具/喷口/起点/终点/动画：就地放下一个 1×1 的对象。"""
+        """喷口/起点/终点/传送门/动画：就地放下一个对象。"""
         x, y = point
         size = [1.0, 1.0]
         level = self.level
         self.push_undo()
         self.dirty = True
         # 新对象的数值/布尔/字符串一律给中性默认值，具体参数再在面板里调
-        if self.tool == TOOL_BUTTON:
-            # 按钮画出来的矩形就是触发区，所以缺省就是 1×0.3
-            level.buttons.append(
-                {"name": "", "pos": [x, y], "size": list(BUTTON_SIZE), "face": ""}
-            )
-        elif self.tool == TOOL_PORTAL:
+        if self.tool == TOOL_PORTAL:
             # 门本身固定 1×0.3，它就是触发区；目标和朝向在面板里调
             level.portals.append(
                 {
@@ -476,16 +479,6 @@ class Editor:
                     "size": list(PORTAL_SIZE),
                     "face": FACE_ORDER[0],
                     "target": "",
-                }
-            )
-        elif self.tool == TOOL_ITEM:
-            level.items.append(
-                {
-                    "name": "",
-                    "pos": [x, y],
-                    "size": list(size),
-                    "jump_offset": 0.0,
-                    "mode": ITEM_MODE_DEFAULT,
                 }
             )
         elif self.tool == TOOL_NOZZLE:
@@ -1893,9 +1886,8 @@ class Editor:
         seen = set()
         for entries in (
             self.level.movable_blocks,
-            self.level.buttons,
+            self.level.trigger_sources,
             self.level.portals,
-            self.level.items,
         ):
             for entry in entries:
                 name = str(entry.get("name") or "").strip()
@@ -2581,10 +2573,10 @@ class Editor:
     def _set_box(kind: str, entry: dict, left: float, bottom: float, width: float, height: float) -> None:
         """把算好的屏幕矩形写回条目。
 
-        按钮、传送门和喷口的 pos 都是「底面」的中心、size 是没转过的宽高（左右朝向时
+        传送门和喷口的 pos 都是「底面」的中心、size 是没转过的宽高（左右朝向时
         屏幕上的宽高是反的），所以缩放后都要换算回这种写法。
         """
-        if kind in (KIND_BUTTON, KIND_PORTAL, KIND_NOZZLE):
+        if kind in (KIND_PORTAL, KIND_NOZZLE):
             face = str(entry.get("face", FACE_ORDER[0]))
             if face in ("left", "right"):
                 entry["size"] = [round(height, 2), round(width, 2)]
@@ -2846,12 +2838,12 @@ class Editor:
             self.level.planks = [e for e in self.level.planks if e is not entry]
         elif kind == KIND_MOVABLE:
             self.level.movable_blocks = [e for e in self.level.movable_blocks if e is not entry]
-        elif kind == KIND_BUTTON:
-            self.level.buttons = [e for e in self.level.buttons if e is not entry]
+        elif kind == KIND_TRIGGER_SOURCE:
+            self.level.trigger_sources = [
+                e for e in self.level.trigger_sources if e is not entry
+            ]
         elif kind == KIND_PORTAL:
             self.level.portals = [e for e in self.level.portals if e is not entry]
-        elif kind == KIND_ITEM:
-            self.level.items = [e for e in self.level.items if e is not entry]
         elif kind == KIND_NOZZLE:
             self.level.nozzles = [e for e in self.level.nozzles if e is not entry]
         elif kind == KIND_TEXTURE:
@@ -3038,17 +3030,15 @@ class Editor:
                 ("横向偏移", number_text(offset[0])),
                 ("纵向偏移", number_text(offset[1])),
             ]
-        elif kind == KIND_BUTTON:
-            rows.append(("朝向", FACE_LABELS.get(entry.get("face", ""), "（空）")))
+        elif kind == KIND_TRIGGER_SOURCE:
+            mode = str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
+            rows.append(("模式", TRIGGER_SOURCE_MODE_LABELS.get(mode, mode)))
+            rows.append(("跳高变化", number_text(entry.get("jump_offset", 0.0))))
         elif kind == KIND_PORTAL:
             rows += [
                 ("朝向", FACE_LABELS.get(entry.get("face", ""), FACE_LABELS[FACE_ORDER[0]])),
                 ("目标", entry.get("target") or "无"),
             ]
-        elif kind == KIND_ITEM:
-            rows.append(("跳高变化", number_text(entry.get("jump_offset", 0.0))))
-            mode = str(entry.get("mode") or ITEM_MODE_DEFAULT)
-            rows.append(("模式", ITEM_MODE_LABELS.get(mode, mode)))
         elif kind == KIND_NOZZLE:
             rows += [
                 ("朝向", FACE_LABELS.get(entry.get("face", "up"), FACE_LABELS[FACE_ORDER[0]])),
@@ -3065,6 +3055,7 @@ class Editor:
         elif kind == KIND_ANIMATION:
             rows.append(("跟随", self.animation_follow_label(entry.get("follow"))))
         return rows
+
     def dialog_checkbox(self, index: int) -> bool | None:
         """这一行是不是复选框：是的话返回当前勾没勾，不是返回 None。
 
@@ -3111,12 +3102,11 @@ class Editor:
         return cards
 
     def trigger_sources(self) -> list:
-        """可以当触发来源的名字：按钮和道具（同名的只列一次）。"""
+        """可以当触发来源的名字：关卡里所有触发源（同名的只列一次）。"""
         names = [
-            button.get("name", "") for button in self.level.buttons if button.get("name")
-        ]
-        names += [
-            item.get("name", "") for item in self.level.items if item.get("name")
+            str(entry.get("name") or "")
+            for entry in self.level.trigger_sources
+            if entry.get("name")
         ]
         return list(dict.fromkeys(names))
 
@@ -3229,13 +3219,12 @@ class Editor:
             self.adjust_trigger_field(field, delta)
             return
 
-        if kind == KIND_BUTTON:
-            current_face = entry.get("face", FACE_ORDER[0])
-            entry["face"] = (
-                FACE_ORDER[(FACE_ORDER.index(current_face) + delta) % len(FACE_ORDER)]
-                if current_face in FACE_ORDER
-                else FACE_ORDER[0]
-            )
+        if kind == KIND_TRIGGER_SOURCE:
+            if field == 4:                 # 模式：按住 / 一次 循环
+                current = str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
+                values = [value for _, value in TRIGGER_SOURCE_MODES]
+                index = values.index(current) if current in values else 0
+                entry["mode"] = values[(index + delta) % len(values)]
         elif kind == KIND_PORTAL:
             if field == 4:                 # 朝向：按 up/right/down/left 循环
                 current_face = entry.get("face", FACE_ORDER[0])
@@ -3260,12 +3249,6 @@ class Editor:
                     else None
                 )
                 entry["target"] = chosen or ""
-        elif kind == KIND_ITEM:
-            if field == 5:                 # 模式：一次 / 可重复 循环
-                current = str(entry.get("mode") or ITEM_MODE_DEFAULT)
-                values = [value for _, value in ITEM_MODES]
-                index = values.index(current) if current in values else 0
-                entry["mode"] = values[(index + delta) % len(values)]
         elif kind == KIND_NOZZLE:
             if field == 4:                 # 朝向：按 up/right/down/left 循环
                 current_face = entry.get("face", FACE_ORDER[0])
@@ -3340,10 +3323,10 @@ class Editor:
             if parts[1] == "mode":
                 return list(TRIGGER_MODES)
             return list(KIND_BEHAVIORS[kind])
-        if kind in (KIND_BUTTON, KIND_PORTAL, KIND_NOZZLE) and field == 4:
+        if kind in (KIND_PORTAL, KIND_NOZZLE) and field == 4:
             return [(FACE_LABELS[face], face) for face in FACE_ORDER]
-        if kind == KIND_ITEM and field == 5:
-            return list(ITEM_MODES)
+        if kind == KIND_TRIGGER_SOURCE and field == 4:
+            return list(TRIGGER_SOURCE_MODES)
         if kind == KIND_PORTAL and field == 5:
             names = [
                 portal.get("name", "")
@@ -3385,8 +3368,8 @@ class Editor:
             return str(card.get(parts[1]) or "")
         if kind == KIND_PORTAL and field == 5:
             return entry.get("target") or ""
-        if kind == KIND_ITEM and field == 5:
-            return str(entry.get("mode") or ITEM_MODE_DEFAULT)
+        if kind == KIND_TRIGGER_SOURCE and field == 4:
+            return str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
         if kind == KIND_TEXTURE and field == 7:
             return entry.get("follow") or ""
         if kind == KIND_ANIMATION and field == 4:
@@ -3430,8 +3413,11 @@ class Editor:
             entry = self.dialog["entry"]
             if kind == KIND_PORTAL and field == 5:
                 entry["target"] = value or ""
-            elif kind == KIND_ITEM and field == 5:
-                entry["mode"] = value or ITEM_MODE_DEFAULT
+            elif kind == KIND_TRIGGER_SOURCE and field == 4:
+                entry["mode"] = (
+                    value if value in TRIGGER_SOURCE_MODE_VALUES
+                    else TRIGGER_SOURCE_MODE_DEFAULT
+                )
             elif kind == KIND_TEXTURE and field == 5:
                 entry["face"] = value or FACE_ORDER[0]
             elif kind == KIND_TEXTURE and field == 7:
@@ -3470,7 +3456,7 @@ class Editor:
             return entry.get("offset", [0, -3])[field - 4]
         if kind == KIND_NOZZLE and field == 5:
             return entry.get("power", NOZZLE_DEFAULT_POWER)
-        if kind == KIND_ITEM and field == 4:
+        if kind == KIND_TRIGGER_SOURCE and field == 5:
             return entry.get("jump_offset", 0.0)
         return None
 
@@ -3497,10 +3483,11 @@ class Editor:
             # 力度是沿着朝向走出去多远：下限是风区长度 + 0.5 格
             entry["power"] = round(value, 2)
             clamp_nozzle_power(entry)
-        elif kind == KIND_ITEM and field == 4:
-            # 跳高变化量：正数跳更高、负数跳更低，拾取时游戏还会按关卡高度夹一次
+        elif kind == KIND_TRIGGER_SOURCE and field == 5:
+            # 跳高变化量：正数跳更高、负数跳更低，按下期间生效
             entry["jump_offset"] = round(
-                clamp_float(value, ITEM_JUMP_OFFSET_MIN, ITEM_JUMP_OFFSET_MAX, 0.0), 2
+                clamp_float(value, TRIGGER_JUMP_OFFSET_MIN, TRIGGER_JUMP_OFFSET_MAX, 0.0),
+                2,
             )
 
     def type_dialog_number(self, char: str) -> bool:
