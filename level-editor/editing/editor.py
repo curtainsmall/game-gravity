@@ -1839,7 +1839,7 @@ class Editor:
     # ---- 画布上的动画对象 -------------------------------------------
     def animation_object_frame(self, entry: dict) -> tuple[str, bool] | None:
         """动画对象这一刻该画的图：(绝对路径, 要不要镜像)；没有就不画。"""
-        frames, _, mirror, _, _ = animation.resolve_for_editor(self.animation_library, entry)
+        frames, _, mirror, _ = animation.resolve_for_editor(self.animation_library, entry)
         if not frames:
             return None
         state = self.animation_object_states.get(id(entry)) or {}
@@ -1850,11 +1850,12 @@ class Editor:
         return path, mirror
 
     def advance_animation_objects(self, seconds: float) -> None:
-        """画布上的动画对象按自己的帧、时长和链接的 loop 播放。"""
+        """画布上的动画对象按自己的帧、时长和动作的循环规则播放。"""
         for entry in self.level.animation_objects:
-            frames, holds, _, action, loop = animation.resolve_for_editor(
+            frames, holds, _, action = animation.resolve_for_editor(
                 self.animation_library, entry
             )
+            loop = animation.loops(action)
             signature = (action, tuple(frames), bool(loop))
             state = self.animation_object_states.get(id(entry))
             if state is None or state.get("signature") != signature:
@@ -1950,25 +1951,6 @@ class Editor:
         preset, action, side = field
         return animation.link_key(link["links"], preset, action, side)
 
-    def animation_link_loop(self, field: tuple) -> bool:
-        link = self.animation_link
-        if link is None:
-            return True
-        preset, action, side = field
-        return animation.link_loop(link["links"], preset, action, side)
-
-    def toggle_animation_link_loop(self, field: tuple) -> None:
-        link = self.animation_link
-        if link is None:
-            return
-        preset, action, side = field
-        animation.set_link_loop(
-            link["links"], preset, action, side, not animation.link_loop(
-                link["links"], preset, action, side
-            )
-        )
-        self.status = "链接循环：" + ("开" if self.animation_link_loop(field) else "关")
-
     def animation_link_options(self) -> list:
         return [("（未选择）", "")] + [
             (key, key) for key in sorted(self.animation_library)
@@ -2052,22 +2034,6 @@ class Editor:
             return ""
         preset, action = self.sound_link_field(field)
         return str(sound.object_link(link["links"], preset, action).get("sound") or "")
-
-    def sound_link_loop(self, field: tuple) -> bool:
-        link = self.sound_link
-        if link is None:
-            return False
-        preset, action = self.sound_link_field(field)
-        return bool(sound.object_link(link["links"], preset, action).get("loop", False))
-
-    def toggle_sound_link_loop(self, field: tuple) -> None:
-        link = self.sound_link
-        if link is None:
-            return
-        preset, action = self.sound_link_field(field)
-        loop = sound.object_link(link["links"], preset, action).get("loop", False)
-        sound.set_object_loop(link["links"], preset, action, not loop)
-        self.status = "链接循环：" + ("开" if not loop else "关")
 
     def sound_link_options(self) -> list:
         return [("（未选择）", "")] + [

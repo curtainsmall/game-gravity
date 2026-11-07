@@ -176,7 +176,7 @@ class Scene:
         # 跟玩家的动画对象要在物理和传送之后才摆位
         self.animation_system.update(delta_seconds)
         # 玩家状态变了就换 player 预设的声音
-        self.sound_objects.update()
+        self.sound_objects.update(delta_seconds)
 
     @property
     def destination_reached(self) -> bool:

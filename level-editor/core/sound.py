@@ -193,10 +193,14 @@ PRESETS = ((PRESET_GENERAL, "通用"), (PRESET_PLAYER, "玩家"))
 PLAYER_ACTIONS = (
     ("idle", "站立"),
     ("run", "移动"),
-    ("jump", "上升"),
+    ("takeoff", "起跳"),
+    ("raise", "上升"),
     ("fall", "下落"),
+    ("landing", "落地"),
 )
 PLAYER_ACTION_NAMES = {name for name, _ in PLAYER_ACTIONS}
+# 老数据里的动作名：迁移时还认 jump
+LEGACY_ACTION_NAMES = {"idle", "run", "jump", "fall"}
 
 
 def preset_of(entry: dict) -> str:
@@ -213,11 +217,11 @@ def action_label(action: str) -> str:
 
 
 def new_object_link() -> dict:
-    return {"sound": "", "loop": False}
+    return {"sound": ""}
 
 
 def new_object_links() -> dict:
-    """声音对象的链接：通用一条，玩家按四个动作各一条（没有左右）。"""
+    """声音对象的链接：通用一条，玩家按六个动作各一条（没有左右）。"""
     return {
         PRESET_GENERAL: new_object_link(),
         PRESET_PLAYER: {action: new_object_link() for action, _ in PLAYER_ACTIONS},
@@ -225,7 +229,10 @@ def new_object_links() -> dict:
 
 
 def object_links_of(entry: dict) -> dict:
-    """条目里的 links 补成完整形状：缺的预设/动作补空链接。"""
+    """条目里的 links 补成完整形状：缺的预设/动作补空链接。
+
+    老数据把上升写在 jump 里，raise 空着时去那里借。
+    """
     links = new_object_links()
     value = entry.get("links") if isinstance(entry, dict) else None
     if not isinstance(value, dict):
@@ -234,14 +241,17 @@ def object_links_of(entry: dict) -> dict:
     player = value.get(PRESET_PLAYER)
     if isinstance(player, dict):
         for action, _ in PLAYER_ACTIONS:
-            links[PRESET_PLAYER][action] = _object_link(player.get(action))
+            source = player.get(action)
+            if source is None and action == "raise":
+                source = player.get("jump")
+            links[PRESET_PLAYER][action] = _object_link(source)
     return links
 
 
 def _object_link(value) -> dict:
     if isinstance(value, dict):
-        return {"sound": str(value.get("sound") or ""), "loop": bool(value.get("loop", False))}
-    return {"sound": str(value or ""), "loop": False}
+        return {"sound": str(value.get("sound") or "")}
+    return {"sound": str(value or "")}
 
 
 def object_link(links: dict, preset: str, action: str = "") -> dict:
@@ -254,24 +264,8 @@ def object_link(links: dict, preset: str, action: str = "") -> dict:
 
 
 def set_object_link(links: dict, preset: str, action: str, sound_key: str) -> None:
-    """只改链接指向的声音，循环开关保留。"""
-    value = object_link(links, preset, action)
-    _store_object_link(
-        links,
-        preset,
-        action,
-        {"sound": str(sound_key or ""), "loop": bool(value.get("loop", False))},
-    )
-
-
-def set_object_loop(links: dict, preset: str, action: str, loop: bool) -> None:
-    value = object_link(links, preset, action)
-    _store_object_link(
-        links,
-        preset,
-        action,
-        {"sound": str(value.get("sound") or ""), "loop": bool(loop)},
-    )
+    """改链接指向的声音。"""
+    _store_object_link(links, preset, action, {"sound": str(sound_key or "")})
 
 
 def _store_object_link(

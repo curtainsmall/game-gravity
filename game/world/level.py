@@ -32,9 +32,11 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              （卡片同样带 mode：一次 / 按住 / 切换）
     animation_objects        动画对象：和贴图一样只显示、不碰撞，pos/size 是自己的；
                              follow 写对象名字（或 "@player"）就跟着它平移；
-                             preset 是 general（links.general.clip 一条剪辑）或 player
-                             （links.player.<动作>.<left/right> 指向动画库的键），
-                             动作来自玩家的物理状态，空着的一侧用另一侧镜像；
+                             preset 是 general（links.general.clip 一条剪辑，播一遍）或
+                             player（links.player.<动作>.<left/right> 指向动画库的键），
+                             动作是 idle/run/takeoff/raise/fall/landing，来自玩家的
+                             物理状态，空着的一侧用另一侧镜像；循环由动作决定
+                             （idle/run/raise/fall 循环，takeoff/landing 一次）；
                              帧来自 game.json 的 animation_library
     player                   起点；跳高和速度默认来自 game.json，这里写了就覆盖。
                              玩家自己不再有动画，显示用动画对象（跟随玩家、预设 player）

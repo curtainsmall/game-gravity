@@ -330,8 +330,8 @@ def _draw_general_settings(
     # 翻转带：玩家整块和带子重叠才翻得动。向上翻贴着关卡顶、向下翻贴着关卡底，
     # 数字是带子的高度，0 表示这一侧翻不了
     for field, label, key in (
-        (3, "向上翻带（贴顶）", "flip_up"),
-        (4, "向下翻带（贴底）", "flip_down"),
+        (3, "向上翻转判断范围（距离顶部）", "flip_up"),
+        (4, "向下翻转判断范围（距离底部）", "flip_down"),
     ):
         selected = editor.settings_field == field
         _draw_settings_row(surface, font, rows[field], label, editor.settings[key], selected)

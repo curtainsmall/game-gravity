@@ -25,7 +25,6 @@ from core.constants import (
 from core.sound import key_label
 from view.widgets import (
     draw_button,
-    draw_checkbox,
     draw_panel,
     draw_scrollbar,
     place_panel,
@@ -145,15 +144,15 @@ def draw_sound_library(
 
 # ---- 声音对象的链接弹窗 ---------------------------------------------
 LINK_PANEL_WIDTH = 560
-LINK_GENERAL_HEIGHT = 236
-LINK_PLAYER_HEIGHT = 320
+LINK_GENERAL_HEIGHT = 200
+LINK_PLAYER_HEIGHT = 310
 LINK_ROW = ROW_HEIGHT
 LINK_POPUP_ROWS = 8
 LINK_POPUP_ROW = ROW_HEIGHT
 
 
 def sound_link_geometry(surface: pygame.Surface, editor: "Editor") -> dict:
-    """声音对象的「声音…」弹窗：通用一条链接，玩家四个动作各一条。"""
+    """声音对象的「声音…」弹窗：通用一条链接，玩家六个动作各一条。"""
     link = editor.sound_link
     general = link is not None and link["preset"] == sound_data.PRESET_GENERAL
     height = LINK_GENERAL_HEIGHT if general else LINK_PLAYER_HEIGHT
@@ -169,22 +168,19 @@ def sound_link_geometry(surface: pygame.Surface, editor: "Editor") -> dict:
         if general:
             y = rows_top
             label = pygame.Rect(left, y, 70, 24)
-            loop = pygame.Rect(panel.right - 16 - 64, y, 64, 24)
-            field = pygame.Rect(left + 78, y, loop.left - 8 - (left + 78), 24)
-            rows.append({"kind": "general", "label": label, "field": field, "loop": loop})
+            field = pygame.Rect(left + 78, y, width - 78, 24)
+            rows.append({"kind": "general", "label": label, "field": field})
         else:
             for action, action_text in sound_data.PLAYER_ACTIONS:
                 y = rows_top + len(rows) * LINK_ROW
                 label = pygame.Rect(left, y, 64, 24)
-                loop = pygame.Rect(panel.right - 16 - 64, y, 64, 24)
-                field = pygame.Rect(left + 72, y, loop.left - 8 - (left + 72), 24)
+                field = pygame.Rect(left + 72, y, width - 72, 24)
                 rows.append(
                     {
                         "kind": "player",
                         "action": action,
                         "label": label,
                         "field": field,
-                        "loop": loop,
                     }
                 )
     hint = pygame.Rect(
@@ -309,20 +305,9 @@ def draw_sound_link(
                 (triangle_x, row["field"].centery + 4),
             ],
         )
-        action = "" if row["kind"] == "general" else row["action"]
-        preset_key = (
-            sound_data.PRESET_GENERAL if row["kind"] == "general" else sound_data.PRESET_PLAYER
-        )
-        draw_checkbox(
-            surface,
-            font,
-            row["loop"],
-            "循环",
-            editor.sound_link_loop((preset_key, action)),
-        )
 
     hint = font.render(
-        "通用：关卡加载时放一次；玩家：按状态切换。勾「循环」就一直放。",
+        "通用：关卡加载时放一次；玩家：按动作切换，起跳/落地播一遍，其余循环。",
         True,
         DIM_TEXT,
     )

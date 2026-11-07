@@ -488,9 +488,6 @@ def handle_sound_link_click(
             field = (SOUND_GENERAL, "")
         else:
             field = (SOUND_PLAYER, row["action"])
-        if row["loop"].collidepoint(position):
-            editor.toggle_sound_link_loop(field)
-            return
         if row["field"].collidepoint(position):
             editor.toggle_sound_link_dropdown(field)
             return
@@ -526,23 +523,10 @@ def handle_animation_link_click(
         return
     for row in geometry["rows"]:
         if row["kind"] == "general":
-            if row["loop"].collidepoint(position):
-                editor.toggle_animation_link_loop((PRESET_GENERAL, "", ""))
-                return
             if row["field"].collidepoint(position):
                 editor.toggle_animation_link_dropdown((PRESET_GENERAL, "", ""))
                 return
         else:
-            if row["left_loop"].collidepoint(position):
-                editor.toggle_animation_link_loop(
-                    (PRESET_PLAYER, row["action"], "left")
-                )
-                return
-            if row["right_loop"].collidepoint(position):
-                editor.toggle_animation_link_loop(
-                    (PRESET_PLAYER, row["action"], "right")
-                )
-                return
             if row["left"].collidepoint(position):
                 editor.toggle_animation_link_dropdown(
                     (PRESET_PLAYER, row["action"], "left")

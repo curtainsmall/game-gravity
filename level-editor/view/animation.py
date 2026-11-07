@@ -28,7 +28,6 @@ from core.helpers import resolve_level_path
 from view.texture import draw_missing_texture, image_size, load_scaled
 from view.widgets import (
     draw_button,
-    draw_checkbox,
     draw_panel,
     draw_scrollbar,
     place_panel,
@@ -49,7 +48,7 @@ EDIT_DELAY_HEIGHT = 20
 
 LINK_PANEL_WIDTH = 560
 LINK_GENERAL_HEIGHT = 196
-LINK_PLAYER_HEIGHT = 284
+LINK_PLAYER_HEIGHT = 340
 LINK_ROW_HEIGHT = 28
 LINK_POPUP_ROW = 22
 LINK_POPUP_ROWS = 8
@@ -358,28 +357,21 @@ def animation_link_geometry(surface: pygame.Surface, editor) -> dict:
         if link["preset"] == PRESET_GENERAL:
             y = rows_top
             label = pygame.Rect(left, y, 70, 24)
-            loop = pygame.Rect(left + width - 64, y, 64, 24)
-            field = pygame.Rect(left + 78, y, loop.left - 8 - (left + 78), 24)
-            rows.append(
-                {"kind": "general", "label": label, "field": field, "loop": loop}
-            )
+            field = pygame.Rect(left + 78, y, width - 78, 24)
+            rows.append({"kind": "general", "label": label, "field": field})
         else:
             for action, action_text in PLAYER_ACTIONS:
                 y = rows_top + len(rows) * LINK_ROW_HEIGHT
                 label = pygame.Rect(left, y, 64, 24)
-                left_field = pygame.Rect(left + 72, y, 150, 24)
-                left_loop = pygame.Rect(left_field.right + 4, y, 58, 24)
-                right_field = pygame.Rect(left_loop.right + 8, y, 150, 24)
-                right_loop = pygame.Rect(right_field.right + 4, y, 58, 24)
+                left_field = pygame.Rect(left + 72, y, 200, 24)
+                right_field = pygame.Rect(left_field.right + 8, y, 200, 24)
                 rows.append(
                     {
                         "kind": "player",
                         "action": action,
                         "label": label,
                         "left": left_field,
-                        "left_loop": left_loop,
                         "right": right_field,
-                        "right_loop": right_loop,
                     }
                 )
     hint = pygame.Rect(left, rows_top + (1 if link is not None and link["preset"] == PRESET_GENERAL else len(rows)) * LINK_ROW_HEIGHT + 8, width, 20)
@@ -471,9 +463,6 @@ def draw_animation_link(
             value = link["links"].get(PRESET_GENERAL, {})
             key = value.get("clip", "")
             _draw_key_field(surface, font, row["field"], key or "（未选择）", bool(key))
-            draw_checkbox(
-                surface, font, row["loop"], "循环", bool(value.get("loop", True))
-            )
         else:
             pair = link["links"].get(PRESET_PLAYER, {}).get(row["action"], {})
             left_value = pair.get("left", {})
@@ -483,28 +472,14 @@ def draw_animation_link(
             _draw_key_field(
                 surface, font, row["left"], f"左：{left_key or '（未选择）'}", bool(left_key)
             )
-            draw_checkbox(
-                surface,
-                font,
-                row["left_loop"],
-                "循环",
-                bool(left_value.get("loop", True)),
-            )
             _draw_key_field(
                 surface, font, row["right"], f"右：{right_key or '（未选择）'}", bool(right_key)
             )
-            draw_checkbox(
-                surface,
-                font,
-                row["right_loop"],
-                "循环",
-                bool(right_value.get("loop", True)),
-            )
 
     hint_text = (
-        "链接一个剪辑；勾上「循环」就循环播放，否则停在最后一帧。"
+        "链接一个剪辑；通用预设播一遍就停。"
         if link["preset"] == PRESET_GENERAL
-        else "「左」「右」各链接一个剪辑；勾上「循环」就循环播放，否则停在最后一帧。"
+        else "「左」「右」各链接一个剪辑；起跳、落地播一遍，其余动作循环。"
     )
     hint = font.render(hint_text, True, DIM_TEXT)
     surface.blit(
