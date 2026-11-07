@@ -69,7 +69,7 @@ class Scene:
         self.debug: bool = False
         self.player_debug: bool = False
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
-        self.player_animation: dict = {}     # 玩家动画剪辑：状态名 → AnimationClip
+        self.player_animation: dict = {}     # 玩家动画：动作名 → {"right": 剪辑, "left": 剪辑}
         self.player_animator: PlayerAnimator | None = None
         self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
         self.cutscene: Cutscene | None = None  # 进这一关之前的过场
@@ -115,7 +115,7 @@ class Scene:
         # 触发行为：来源名字解析一次，之后每帧派发事件
         scene.trigger_system.attach(objects)
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
-        # 玩家动画：game.json 的 player.animations（关卡里的同名项覆盖），按物理状态轮播
+        # 玩家动画：game.json 的 player.animations（关卡里的同名项按方向覆盖），按物理状态轮播
         scene.player_animation = player_animations(level_definition, game_settings, base_dir)
         scene.player_animator = PlayerAnimator(scene.player, scene.player_animation)
         # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐

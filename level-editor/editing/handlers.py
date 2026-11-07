@@ -307,47 +307,44 @@ def handle_settings_click(surface: pygame.Surface, editor: Editor, position: tup
 
 
 def handle_animation_click(editor: Editor, position: tuple, page: dict) -> None:
-    """玩家动画页：点行选中状态，点缩略图选中帧、按住可以拖动换顺序；
-    按钮管预览、加帧和删帧。"""
-    for row in page["rows"]:
-        index = row["index"]
-
-        def focus() -> None:
-            if editor.animation_state != index:
-                editor.select_animation_state(index)
-
-        if row["fps"].collidepoint(position):
-            focus()
-            left, right = stepper_rects(row["fps"])
-            if left.collidepoint(position):
-                editor.adjust_animation_fps(-1)
-            elif right.collidepoint(position):
-                editor.adjust_animation_fps(1)
-            return
-        if row["loop"].collidepoint(position):
-            focus()
-            editor.toggle_animation_loop()
-            return
-        if row["preview"].collidepoint(position):
-            focus()
-            editor.open_animation_preview(index)
-            return
-        if row["add"].collidepoint(position):
-            focus()
-            editor.add_animation_frame()
-            return
-        if row["remove"].collidepoint(position):
-            focus()
-            editor.remove_animation_frame()
-            return
-        for thumb in row["thumbs"]:
-            if thumb["rect"].collidepoint(position):
-                editor.select_animation_state(index)
-                editor.select_animation_frame(thumb["index"])
-                editor.begin_animation_drag(index, thumb["index"], position)
+    """玩家动画页：点动作页签切动作，点方向选左右；点缩略图选中帧、按住可以拖动换顺序，
+    点秒数直接改这一帧的停留时长；＋ / − 加删帧，预览弹出播放小窗。"""
+    if page["side_menu_open"]:
+        for rect, side, _ in page["side_menu"]:
+            if rect.collidepoint(position):
+                editor.select_animation_side(side)
                 return
-        if row["rect"].collidepoint(position):
+        editor.close_animation_side_menu()      # 点别处：菜单收起来，这一次点击就到此为止
+        return
+    for rect, index, _ in page["tabs"]:
+        if rect.collidepoint(position):
             editor.select_animation_state(index)
+            return
+    if page["side"].collidepoint(position):
+        editor.toggle_animation_side_menu()
+        return
+    if page["loop"].collidepoint(position):
+        editor.toggle_animation_loop()
+        return
+    if page["add"].collidepoint(position):
+        editor.add_animation_frame()
+        return
+    if page["remove"].collidepoint(position):
+        editor.remove_animation_frame()
+        return
+    if page["preview"].collidepoint(position):
+        editor.open_animation_preview(editor.animation_action_name(), editor.animation_side)
+        return
+    for delay in page["delays"]:
+        if delay["rect"].collidepoint(position):
+            editor.begin_animation_delay_edit(delay["index"])
+            return
+    for cell in page["cells"]:
+        if cell["rect"].collidepoint(position):
+            editor.select_animation_frame(cell["index"])
+            editor.begin_animation_drag(
+                editor.animation_action_name(), editor.animation_side, cell["index"], position
+            )
             return
 
 
@@ -384,6 +381,14 @@ def handle_game_settings_click(
     """
     geometry = game_settings_geometry(surface, editor)
     panel = geometry["panel"]
+    # 正在改某一帧的时长：点到别的任何地方就先把它收下
+    if editor.animation_delay_active():
+        page = geometry["animation"]
+        hit = page is not None and any(
+            delay["rect"].collidepoint(position) for delay in page["delays"]
+        )
+        if not hit:
+            editor.commit_animation_delay()
     if geometry["apply"].collidepoint(position):
         editor.close_game_settings(True)
         return

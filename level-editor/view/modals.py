@@ -468,8 +468,8 @@ def _credit_card_height(card: dict) -> int:
 def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
     """游戏配置：常规 / 玩家动画 / 制作名单 / 声音 / 过场五页，底下是应用和取消。
 
-    常规页是标题与玩家参数；玩家动画页是玩家那五个状态的帧动画（见 view.animation，
-    每行有「预览」弹出播放小窗）；
+    常规页是标题与玩家参数；玩家动画页是五个动作的画面，每个动作分左右两侧，每一帧下面
+    写自己的停留秒数（见 view.animation，「预览」弹出播放小窗）；
     制作名单页每个职位一张卡片，装不下就用滚轮按像素上下滚（滚了多少记在编辑器的
     game_card_scroll 上）；声音页把标题与制作名单两块上下排开，每块是路径、循环和淡入淡出；
     过场页和关卡设置里的是同一页（见 view.cutscene）。只有当前页的那些矩形有值。
@@ -479,7 +479,9 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
     if tab == 0:
         height = GAME_GENERAL_HEIGHT
     elif tab == GAME_ANIMATION_TAB:
-        height = animation_page_height(GAME_CONTENT_TOP)
+        # 玩家动画页有滚动，窗口矮的时候面板跟着矮，格子区按剩下的高度画
+        max_height = max(240, surface.get_height() - HEADER - FOOTER - 8)
+        height = min(animation_page_height(GAME_CONTENT_TOP), max_height)
     elif tab == 2:                      # 制作名单
         card_heights = [_credit_card_height(card) for card in cards]
         content = sum(card_height + CREDIT_CARD_GAP for card_height in card_heights)

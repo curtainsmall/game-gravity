@@ -27,9 +27,11 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              hide 表示初始隐藏，triggers 的 hide / show 由按钮或道具切换显示
                              （卡片同样带 mode：一次 / 按住 / 切换）
     player                   起点；跳高、速度和动画默认来自 game.json，这里写了就覆盖。
-                             animations 是玩家动画剪辑：名字固定（idle/run/jump/fall/flip），
-                             {"frames": [相对路径…], "fps": 8, "loop": true}；
-                             game.json 的 player.animations 也能写，关卡里的同名剪辑盖住它
+                             animations 是玩家动画：名字固定（idle/run/jump/fall/flip），每个动作分
+                             right / left 两侧，各写 {"frames": [相对路径…],
+                             "holds": [每帧停留秒数…], "loop": true}；一侧空着就用另一侧的帧
+                             镜像（游戏里也这样画）。game.json 的 player.animations 也能写，
+                             关卡里的同名动作按方向盖住它
     destination              终点
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
     sound                    这一关的音乐：bgm（相对 game.json 的路径）、loop、fade_in、fade_out
@@ -39,9 +41,9 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
 「底面」的中点、size 是没转过的宽高，face（up/right/down/left）决定从底面往哪边
 长出去，左右朝向时屏幕上的宽高是对调的。
 玩家参数一般写在 game.json 的 player 里（jump_height 格、可以是小数，move_speed 格/秒、
-animations 动画）；
-关卡 json 的 player 里写同名键就是这一关的覆盖值。老数据把玩家动画写在 player.animation
-里（动作名 → 单张图），读成只有一帧的剪辑；更早一版写在顶层的 animations，也当成同一张表。
+animations 动画）；关卡 json 的 player 里写同名键就是这一关的覆盖值。老数据把动画写成
+动作 → 一套 frames + fps（读成右侧），更早一版把动作写成单张图放在 player.animation，
+或者把整张表写在顶层 animations，也都读。
 图片路径都相对游戏根。
 """
 
@@ -49,6 +51,7 @@ import json
 from pathlib import Path
 
 from animation.clip import AnimationClip
+from animation.player import PLAYER_SIDES
 from controller.controller import Controller
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
@@ -172,56 +175,77 @@ def player_animations(
     game_settings: dict | None = None,
     base_dir: str | Path | None = None,
 ) -> dict:
-    """玩家的帧动画：game.json 的 player.animations，关卡 json 里的同名剪辑盖住它。
+    """玩家的帧动画：动作 → {"right": 剪辑, "left": 剪辑}。
 
-    形状 {"idle": {"frames": [...], "fps": 8, "loop": true}, ...}，名字固定（见
-    animation.player.PLAYER_STATES）；帧路径相对 game.json，找不到的帧跳过，一帧都没剩的
-    剪辑不算数。老数据把动作写在 player.animation 里（动作名 → 单张图），读成单帧剪辑；
-    更早一版把动画表写在顶层 animations，也读。
+    基础是 game.json 的 player.animations，关卡 json 里的 player.animations 按动作、按方向
+    覆盖它。每一侧写 {"frames": [...], "holds": [...], "loop": true}；名字固定（见
+    animation.player.PLAYER_STATES）。帧路径相对 game.json，找不到的帧跳过，一侧一帧都不剩
+    就不算这一侧。老格式（动作 → 一套 frames + fps）读成 right 侧；更早的顶层 animations、
+    player.animation（动作名 → 单张图）也读。
     """
     clips: dict = {}
     settings = game_settings or {}
     for source in (settings, level_definition):
         if not isinstance(source, dict):
             continue
-        clips.update(_animation_clips(source.get("animations"), base_dir))  # 顶层的旧位置
+        _merge_animation_table(clips, source.get("animations"), base_dir)   # 顶层的旧位置
         player = source.get("player")
         if isinstance(player, dict):
-            clips.update(_animation_clips(player.get("animations"), base_dir))
-    # 老格式：player 里的 animation，动作名 → 单张图
+            _merge_animation_table(clips, player.get("animations"), base_dir)
+    # 老格式：player 里的 animation，动作名 → 单张图；只补还没配的 right 侧
     for source in (settings.get("player"), player_settings(level_definition)):
         legacy = source.get("animation") if isinstance(source, dict) else None
         if not isinstance(legacy, dict):
             continue
         for action, value in legacy.items():
-            name = str(action)
-            if name in clips:
-                continue
             path = resolve_texture(value, base_dir)
-            if path is not None:
-                clips[name] = AnimationClip([path])
+            if path is None:
+                continue
+            sides = clips.setdefault(str(action), {})
+            if "right" not in sides:
+                sides["right"] = AnimationClip([path])
     return clips
 
 
-def _animation_clips(table, base_dir: str | Path | None) -> dict:
-    """player.animations 表 → 剪辑；空表、坏条目、一帧都找不到的剪辑都跳过。"""
-    clips: dict = {}
+def _merge_animation_table(clips: dict, table, base_dir: str | Path | None) -> None:
+    """把一张 animations 表并进 clips；新格式按动作、按方向覆盖，老格式只当 right 侧。"""
     if not isinstance(table, dict):
-        return clips
-    for name, value in table.items():
-        if not isinstance(value, dict):
+        return
+    for name, entry in table.items():
+        if not isinstance(entry, dict):
             continue
-        frames = []
-        for frame in value.get("frames") or []:
-            found = resolve_texture(frame, base_dir)
-            if found is not None:
-                frames.append(found)
-        if not frames:
+        sides: dict = {}
+        if "frames" in entry or "holds" in entry or "fps" in entry:
+            clip = _animation_clip(entry, base_dir)
+            if clip is not None:
+                sides["right"] = clip
+        else:
+            for side in PLAYER_SIDES:
+                value = entry.get(side)
+                if isinstance(value, dict):
+                    clip = _animation_clip(value, base_dir)
+                    if clip is not None:
+                        sides[side] = clip
+        if not sides:
             continue
-        clips[str(name)] = AnimationClip(
-            frames, value.get("fps", 8), bool(value.get("loop", True))
-        )
-    return clips
+        clips.setdefault(str(name), {}).update(sides)
+
+
+def _animation_clip(entry: dict, base_dir: str | Path | None) -> AnimationClip | None:
+    """一侧的帧 + 每帧时长 → 剪辑；缺帧跳过，一帧都没有返回 None。"""
+    given = entry.get("holds")
+    given = given if isinstance(given, list) else []
+    frames = []
+    holds = []
+    for index, frame in enumerate(entry.get("frames") or []):
+        found = resolve_texture(frame, base_dir)
+        if found is None:
+            continue
+        frames.append(found)
+        holds.append(given[index] if index < len(given) else None)
+    if not frames:
+        return None
+    return AnimationClip(frames, holds, bool(entry.get("loop", True)), fps=entry.get("fps"))
 
 
 def flip_area_offsets_of(level_definition: LevelDefinition) -> tuple[float, float]:

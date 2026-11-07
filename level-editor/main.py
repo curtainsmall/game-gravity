@@ -163,9 +163,10 @@ def run() -> None:
                     handle_settings_click(screen, editor, event.pos)
             elif editor.game_settings is not None:
                 # 游戏配置：Tab 切常规/玩家动画/制作名单/声音/过场，↑↓ 选格子，←→ 调值，敲字直接改，
-                # 制作名单用滚轮按像素上下滚、过场的卡片按张翻；玩家动画页 ↑↓ 选状态、←→ 调 fps、
-                # Delete 删帧，缩略图按住可以拖动换顺序；「预览」弹出的小窗自己吃掉事件，
-                # Esc / 回车 / 点面板外关掉
+                # 制作名单用滚轮按像素上下滚、过场的卡片按张翻；玩家动画页点动作页签换动作、
+                # 方向下拉框换左右、点缩略图选帧（拖动换顺序）、点秒数改停留时长（回车落下、
+                # Esc 取消），←→ 按 0.01 秒调、Delete 删帧、滚轮翻格子；「预览」弹出的小窗自己吃
+                # 事件，Esc / 回车 / 点面板外关掉
                 if editor.animation_preview is not None:
                     if event.type == pygame.KEYDOWN and event.key in (
                         pygame.K_ESCAPE,
@@ -176,6 +177,21 @@ def run() -> None:
                     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         handle_animation_preview_click(screen, editor, event.pos)
                     continue
+                if event.type == pygame.KEYDOWN and editor.animation_delay_active():
+                    # 正在敲某一帧的时长：回车落下，Esc 撤回，退格删字；别的键先落下再照常处理
+                    if event.key == pygame.K_ESCAPE:
+                        editor.cancel_animation_delay()
+                        continue
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        editor.commit_animation_delay()
+                        continue
+                    if event.key == pygame.K_BACKSPACE:
+                        editor.erase_animation_delay_char()
+                        continue
+                    if event.unicode and event.unicode.isprintable():
+                        editor.type_animation_delay(event.unicode)
+                        continue
+                    editor.commit_animation_delay()
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_game_settings(False)
