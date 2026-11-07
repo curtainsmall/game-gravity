@@ -46,7 +46,7 @@ from core.helpers import (
 from view.background import draw_background
 from view.layout import Layout
 from view.picker import pick_menu_hovered
-from view.texture import draw_textures, texture_rect
+from view.texture import draw_textures, load_scaled, texture_rect
 
 if TYPE_CHECKING:
     from editing.editor import Editor
@@ -162,9 +162,18 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         for entry in level.portals:
             draw_portal(surface, layout, entry)
 
-        # 起点和终点都画成同一款标记：2px 方框 + 中心小方点
+        # 起点和终点都画成同一款标记：2px 方框 + 中心小方点。
+        # 起点还会按属性面板选的那套动画画第一帧，只为核对玩家在关卡里的尺寸；没有就不画
         if level.player is not None:
-            draw_cell_marker(surface, layout.entry_rect(level.player), PLAYER_COLOR)
+            marker = layout.entry_rect(level.player)
+            preview = editor.start_preview()
+            image = None
+            if preview is not None:
+                path, mirror = preview
+                image = load_scaled(path, marker.size, True, flip=mirror)
+            if image is not None:
+                surface.blit(image, marker.topleft)
+            draw_cell_marker(surface, marker, PLAYER_COLOR)
         if level.destination:
             draw_cell_marker(surface, layout.entry_rect(level.destination), DESTINATION_COLOR)
 

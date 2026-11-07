@@ -24,6 +24,8 @@ PLAYER_SIDES = (
     ("left", "向左"),
 )
 SIDE_NAMES = {"right": "右侧", "left": "左侧"}
+PREVIEW_KEY = "preview_animation"   # 起点里记着显示哪一套动画；游戏不读，只给编辑器看
+DEFAULT_PREVIEW = "idle"
 DEFAULT_HOLD = 0.1          # 一帧默认停 0.1 秒
 MIN_HOLD = 0.01
 MAX_HOLD = 10.0

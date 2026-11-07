@@ -156,6 +156,7 @@ class Editor:
         self.cutscene_area_height = 0.0             # 过场卡片可视区有多高（几何算出来）
         self.cutscene_card_step = 0.0               # 过场卡片一行占多高（几何算出来）
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
+        self.player_animations: dict = animation.new_state()  # game.json 的动画（只读快照，起点预览用）
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
         self.game_backgrounds: dict = {}           # 浮层里的标题 / 结算背景：键 → 相对路径
@@ -215,6 +216,28 @@ class Editor:
             MOVE_SPEED_DEFAULT,
         )
         return jump, speed, overridden
+
+    def start_preview(self) -> tuple[str, bool] | None:
+        """起点上要显示的那一帧：(图片绝对路径, 要不要水平镜像)。
+
+        显示哪一套动画记在起点的 preview_animation 里（默认站立）；这一侧空着时和游戏里
+        一样用另一侧镜像。选的动作没有帧、或者图片找不到，就返回 None —— 不显示。
+        """
+        if not isinstance(self.level.player, dict):
+            return None
+        action = str(
+            self.level.player.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW
+        )
+        names = [name for name, _ in animation.PLAYER_ANIMATIONS]
+        if action not in names:
+            action = animation.DEFAULT_PREVIEW
+        frames, _, _, mirrored = animation.resolved(self.player_animations, action, "right")
+        if not frames:
+            return None
+        path = resolve_level_path(frames[0], self.media_base_dir)
+        if path is None:
+            return None
+        return path, mirrored is not None
 
     def show_textures(self) -> bool:
         """视图菜单里的「显示贴图」：关掉时贴图不画、也点不中（像被藏起来一样）。"""
@@ -464,8 +487,12 @@ class Editor:
             clamp_nozzle_power(nozzle)     # 力度至少比风区长 0.5 格
             level.nozzles.append(nozzle)
         elif self.tool == TOOL_PLAYER:
-            # 起点只有一份：再放一次就是把它挪过去
-            level.player = {"pos": [x, y], "size": list(size)}
+            # 起点只有一份：再放一次就是把它挪过去；顺带记上默认要显示的动画
+            level.player = {
+                "pos": [x, y],
+                "size": list(size),
+                animation.PREVIEW_KEY: animation.DEFAULT_PREVIEW,
+            }
         elif self.tool == TOOL_DEST:
             # 终点也只有一份
             level.destination = {"pos": [x, y], "size": list(size)}
@@ -517,6 +544,8 @@ class Editor:
         settings = game.load_settings(path)
         self.game_path = os.path.abspath(path)
         self.game_player = game.player_of(settings)
+        # 起点预览用的动画表：从 game.json 读一次，改过动画并「应用」之后再刷新
+        self.player_animations = animation.from_settings(settings)
         self.startup = False
         self.level = Level()
         self.level_in_view = False
@@ -921,6 +950,8 @@ class Editor:
             return
         # 顶栏显示的跳高、速度跟着更新
         self.game_player = player
+        # 起点预览用的动画表也换成刚保存的这一份
+        self.player_animations = animation.from_settings(settings)
         names = sum(len(names) for names in settings["credits"].values())
         pictures = len(cutscene_value["pictures"])
         tracks = sum(1 for spec in block.values() if spec.get("bgm"))
@@ -2341,6 +2372,12 @@ class Editor:
             rows.append(("水平翻转", "是" if entry.get("flip") else "否"))
             rows.append(("跟随", entry.get("follow") or "无"))
             rows.append(("隐藏", "是" if entry.get("hide") else "否"))
+        elif kind == KIND_PLAYER:
+            # 起点上显示哪一套动画：只是给眼睛看的，方便核对玩家在关卡里的尺寸
+            chosen = str(
+                entry.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW
+            )
+            rows.append(("动画", dict(animation.PLAYER_ANIMATIONS).get(chosen, "站立")))
         return rows
 
     def dialog_checkbox(self, index: int) -> bool | None:
@@ -2552,6 +2589,12 @@ class Editor:
                     if current_face in FACE_ORDER
                     else FACE_ORDER[0]
                 )
+        elif kind == KIND_PLAYER:
+            if field == 4:                 # 显示哪一套动画：五个动作循环
+                names = [name for name, _ in animation.PLAYER_ANIMATIONS]
+                current = str(entry.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
+                index = names.index(current) if current in names else 0
+                entry[animation.PREVIEW_KEY] = names[(index + delta) % len(names)]
         elif kind == KIND_TEXTURE:
             if field == 5:                 # 朝向：顺时针转一格（向上也照样写 up）
                 face = str(entry.get("face", FACE_ORDER[0]))
@@ -2582,7 +2625,8 @@ class Editor:
     def dialog_options(self, field: int) -> list | None:
         """选择型字段的可选项 [(显示文字, 值)]；数字、开关字段返回 None。
 
-        朝向、传送门的目标、贴图的跟随，以及触发卡片上的来源、行为和模式都从这里出下拉列表。
+        朝向、传送门的目标、贴图的跟随、起点显示的动画，以及触发卡片上的来源、行为和
+        模式都从这里出下拉列表。
         """
         if self.dialog is None:
             return None
@@ -2618,6 +2662,8 @@ class Editor:
                 if block.get("name")
             ]
             return [("无", "")] + [(name, name) for name in names]
+        if kind == KIND_PLAYER and field == 4:
+            return [(label, name) for name, label in animation.PLAYER_ANIMATIONS]
         return None
 
     def dialog_option_value(self, field: int):
@@ -2641,6 +2687,8 @@ class Editor:
             return str(entry.get("mode") or ITEM_MODE_DEFAULT)
         if kind == KIND_TEXTURE and field == 7:
             return entry.get("follow") or ""
+        if kind == KIND_PLAYER and field == 4:
+            return str(entry.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
         return entry.get("face", FACE_ORDER[0])
 
     def toggle_dropdown(self, field: int) -> bool:
@@ -2682,6 +2730,8 @@ class Editor:
                 entry["face"] = value or FACE_ORDER[0]
             elif kind == KIND_TEXTURE and field == 7:
                 entry["follow"] = value or ""
+            elif kind == KIND_PLAYER and field == 4:
+                entry[animation.PREVIEW_KEY] = value or animation.DEFAULT_PREVIEW
             else:
                 entry["face"] = value
         self.dropdown_field = None

@@ -11,6 +11,7 @@ sounds 里，由「游戏配置」的声音页改（见 core.sound）。
 import copy
 import json
 
+from core import animation
 from core.constants import (
     BUTTON_SIZE,
     COLS,
@@ -184,8 +185,15 @@ class Level:
         )
         # 起点和终点都只有一份，没有就不写这个键。跳高、速度、动画属于整个游戏，
         # 写在 game.json 里；这一关原本写过的覆盖值原样留着，不动它。
+        # preview_animation 是起点自己的属性：在编辑器里显示哪一套动画，默认站立。
         if self.player is not None:
-            definition["player"] = copy.deepcopy(self.player)
+            player = copy.deepcopy(self.player)
+            action = str(player.get(animation.PREVIEW_KEY) or animation.DEFAULT_PREVIEW)
+            names = [name for name, _ in animation.PLAYER_ANIMATIONS]
+            player[animation.PREVIEW_KEY] = (
+                action if action in names else animation.DEFAULT_PREVIEW
+            )
+            definition["player"] = player
         if self.destination is not None:
             definition["destination"] = copy.deepcopy(self.destination)
         # 背景、音乐、过场这三项在编辑器里都有字段，空着也照写（空值表示没有）
