@@ -284,10 +284,6 @@
     {
       "pos": [146.0, 6.5],
       "size": [2.0, 1.0]
-    },
-    {
-      "pos": [100.0, 6.5],
-      "size": [2.0, 1.0]
     }
   ],
   "movable_blocks": [
@@ -483,12 +479,6 @@
       "pos": [63.5, 0.0],
       "size": [3.0, 7.5],
       "image": "textures/level1/3-4.png",
-      "smooth": false
-    },
-    {
-      "pos": [99.75, 5.99],
-      "size": [2.5, 2.0],
-      "image": "textures/level1/1.5x1.png",
       "smooth": false
     },
     {

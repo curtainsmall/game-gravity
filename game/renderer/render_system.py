@@ -28,6 +28,7 @@ class RenderSystem:
         view_mode: ViewMode = ViewMode.VERTICAL_EXPAND,
         debug: bool = False,
         flip_area_offsets=(0.0, 0.0),
+        player_debug: bool = False,
     ) -> None:
         if world is None:
             return
@@ -50,12 +51,19 @@ class RenderSystem:
             if not self._texture(surface, rect, render, playable) and debug and texture:
                 draw_missing_texture(surface, rect.clip(playable))
 
-        # 调试显示：翻转带（半透明）铺在美术上面，其余对象的占位几何体再压上来
-        if not debug:
+        # 调试显示：翻转带（半透明）铺在美术上面，其余对象的占位几何体再压上来。
+        # 玩家的占位框跟着自己的开关走：整体调试显示开不开，都不影响它
+        if not debug and not player_debug:
             return
-        self._debug_flip_area(surface, world, flip_area_offsets)
+        if debug:
+            self._debug_flip_area(surface, world, flip_area_offsets)
         for game_object in objects:
             if game_object.kind == GameObjectKind.TEXTURE:
+                continue
+            if game_object.kind == GameObjectKind.PLAYER:
+                if not player_debug:
+                    continue
+            elif not debug:
                 continue
             body = game_object.body
             render = game_object.render

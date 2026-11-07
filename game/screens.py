@@ -130,6 +130,34 @@ def draw_cutscene_pause(surface: pygame.Surface) -> None:
     ui.draw_button(surface, rects["title"], "返回标题界面")
 
 
+def _draw_check_row(surface: pygame.Surface, rect: pygame.Rect, checked: bool, label: str) -> None:
+    """设置里的一个复选框行：整行都能点，勾上时在方框里画个勾。"""
+    if rect.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(surface, (245, 245, 245), rect)
+    box = pygame.Rect(rect.left + 6, rect.centery - 8, 16, 16)
+    pygame.draw.rect(surface, ui.BUTTON_HOVER if checked else ui.BUTTON, box)
+    pygame.draw.rect(surface, ui.BORDER, box, 2)
+    if checked:
+        pygame.draw.lines(
+            surface,
+            ui.TEXT,
+            False,
+            [
+                (box.left + 3, box.centery),
+                (box.centerx, box.bottom - 4),
+                (box.right - 3, box.top + 4),
+            ],
+            2,
+        )
+    ui.draw_text(
+        surface,
+        label,
+        18,
+        pos=(box.right + 10, rect.centery - 11),
+        color=ui.TEXT if checked else ui.DIM_TEXT,
+    )
+
+
 def draw_settings(surface: pygame.Surface, app) -> None:
     ui.draw_shade(surface)
     rects = ui.settings_rects(surface)
@@ -158,31 +186,10 @@ def draw_settings(surface: pygame.Surface, app) -> None:
         ui.draw_button(surface, row["plus"], "＋", 18)
         ui.draw_text(surface, f"{round(amount * 100)}%", 18, center=row["value"].center)
 
-    row = rects["debug"]
-    hovered = row.collidepoint(pygame.mouse.get_pos())
-    if hovered:
-        pygame.draw.rect(surface, (245, 245, 245), row)
-    box = pygame.Rect(row.left + 6, row.centery - 8, 16, 16)
-    pygame.draw.rect(surface, ui.BUTTON_HOVER if app.debug else ui.BUTTON, box)
-    pygame.draw.rect(surface, ui.BORDER, box, 2)
-    if app.debug:
-        pygame.draw.lines(
-            surface,
-            ui.TEXT,
-            False,
-            [
-                (box.left + 3, box.centery),
-                (box.centerx, box.bottom - 4),
-                (box.right - 3, box.top + 4),
-            ],
-            2,
-        )
-    ui.draw_text(
-        surface,
-        "调试显示（占位几何体 + 翻转带）",
-        18,
-        pos=(box.right + 10, row.centery - 11),
-        color=ui.TEXT if app.debug else ui.DIM_TEXT,
+    # 两个开关：整体调试显示（其他机关 + 翻转带）和只管玩家的调试显示
+    _draw_check_row(surface, rects["debug"], app.debug, "调试显示（占位几何体 + 翻转带）")
+    _draw_check_row(
+        surface, rects["player_debug"], app.player_debug, "玩家调试显示（橙色占位框）"
     )
 
     ui.draw_button(surface, rects["back"], "返回")

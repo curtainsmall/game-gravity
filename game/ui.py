@@ -32,7 +32,7 @@ VOLUME_ROW_GAP = 6
 VOLUME_LABEL_WIDTH = 84
 VOLUME_STEP_WIDTH = 26
 VOLUME_VALUE_WIDTH = 48
-SETTINGS_PANEL_SIZE = (460, 356)
+SETTINGS_PANEL_SIZE = (460, 386)
 
 _FONTS: dict[int, pygame.font.Font] = {}
 
@@ -212,10 +212,11 @@ def cutscene_pause_rects(surface: pygame.Surface) -> dict:
 
 
 def settings_rects(surface: pygame.Surface) -> dict:
-    """设置浮层：三档音量、一个调试显示开关，加上返回按钮。
+    """设置浮层：三档音量、两个调试开关，加上返回按钮。
 
     音量每行是「标签 | 滑条 | − ＋ | 百分比」：点滑条直接跳到那个位置，点加减按
-    10% 一格走。滑条的 hit 比画出来的条高，整行都能点中。
+    10% 一格走。滑条的 hit 比画出来的条高，整行都能点中。两个开关各占一行：
+    整体的调试显示和只管玩家的调试显示。
     """
     width, height = surface.get_size()
     panel = pygame.Rect(0, 0, *SETTINGS_PANEL_SIZE)
@@ -250,10 +251,14 @@ def settings_rects(surface: pygame.Surface) -> dict:
             "value": value,
         }
 
+    debug = pygame.Rect(panel.left + 24, panel.top + 236, panel.width - 48, DEBUG_ROW_HEIGHT)
     return {
         "panel": panel,
         "volume": rows,
-        "debug": pygame.Rect(panel.left + 24, panel.top + 236, panel.width - 48, DEBUG_ROW_HEIGHT),
+        "debug": debug,
+        "player_debug": pygame.Rect(
+            debug.left, debug.bottom + 6, debug.width, DEBUG_ROW_HEIGHT
+        ),
         "back": pygame.Rect(
             panel.left + 30, panel.bottom - 20 - BUTTON_SIZE[1], panel.width - 60, BUTTON_SIZE[1]
         ),

@@ -87,8 +87,9 @@ class App:
         self.flip_edge = False
         self.toast_text = ""
         self.toast_seconds = 0.0
-        # 调试显示：启动时不画占位几何体
+        # 调试显示：启动时不画占位几何体；玩家的占位框是单独一个开关
         self.debug = False
+        self.player_debug = False
 
     # ---- 事件 -------------------------------------------------------
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -243,6 +244,9 @@ class App:
                 return
         if rects["debug"].collidepoint(event.pos):
             self.debug = not self.debug
+            return
+        if rects["player_debug"].collidepoint(event.pos):
+            self.player_debug = not self.player_debug
             return
         if rects["back"].collidepoint(event.pos) or not rects["panel"].collidepoint(event.pos):
             self.settings_open = False
@@ -470,6 +474,7 @@ class App:
             self.cutscene_player.draw(surface)
         elif self.screen == Screen.PLAYING and self.scene is not None:
             self.scene.debug = self.debug
+            self.scene.player_debug = self.player_debug
             surface.fill(BACKGROUND_COLOR)
             self.scene.draw(surface)
         elif self.screen == Screen.LEVEL_SELECT:

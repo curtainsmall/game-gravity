@@ -65,8 +65,9 @@ class Scene:
 
         self.requested_next_scene: Scene | None = None
         self.elapsed_seconds: float = 0.0
-        # 调试显示：由 App 按设置里的那一个开关填进来
+        # 调试显示：由 App 按设置里的开关填进来；玩家那一个开关是单独的
         self.debug: bool = False
+        self.player_debug: bool = False
         self.flip_area_offsets: tuple[float, float] = FLIP_AREA_OFFSETS_DEFAULT
         self.player_animation: dict = {}     # 玩家动画剪辑：状态名 → AnimationClip
         self.player_animator: PlayerAnimator | None = None
@@ -180,4 +181,5 @@ class Scene:
             self.view_mode,
             self.debug,
             self.flip_area_offsets,
+            self.player_debug,
         )
