@@ -9,6 +9,7 @@ from core.constants import (
     DIALOG_BG,
     DIALOG_BORDER,
     DIM_TEXT,
+    DOCK_TAB_HEIGHT,
     FOOTER,
     HEADER,
     HIGHLIGHT,
@@ -44,8 +45,8 @@ TRIGGER_ADD_HEIGHT = ROW_HEIGHT
 
 
 def detail_viewport(panel: pygame.Rect) -> pygame.Rect:
-    """属性面板里可滚的内容区：标题下面到底部按钮上面。"""
-    top = panel.top + DETAIL_CONTENT_TOP
+    """属性页里可滚的内容区：标题下面到底部按钮上面（上面先让开标签条）。"""
+    top = panel.top + DOCK_TAB_HEIGHT + DETAIL_CONTENT_TOP
     bottom = panel.bottom - DETAIL_CONTENT_BOTTOM
     return pygame.Rect(panel.left, top, panel.width, max(0, bottom - top))
 
@@ -135,11 +136,16 @@ def trigger_geometry(surface: pygame.Surface, editor: "Editor") -> dict | None:
 
 
 def detail_panel_width(surface: pygame.Surface) -> int:
-    return min(DETAIL_PANEL_WIDTH, max(180, surface.get_width() // 3))
+    return detail_panel_width_for(surface.get_width())
+
+
+def detail_panel_width_for(window_width: int) -> int:
+    """右侧面板的宽度：窗口窄的时候跟着收一点。"""
+    return min(DETAIL_PANEL_WIDTH, max(180, window_width // 3))
 
 
 def detail_panel_rect(surface: pygame.Surface) -> pygame.Rect:
-    """右侧常驻的详细设置面板，和画布之间留一道 MARGIN 的缝。"""
+    """右侧常驻的面板（上面是标签，属性页和对象列表共用），和画布之间留一道 MARGIN 的缝。"""
     width = detail_panel_width(surface)
     return pygame.Rect(
         surface.get_width() - MARGIN - width,
@@ -277,10 +283,11 @@ def draw_selection_panel(surface: pygame.Surface, editor: Editor, font: pygame.f
     pygame.draw.rect(surface, DIALOG_BORDER, panel, 1)
     count = len(editor.selection)
     surface.blit(
-        font.render(f"已选择 {count} 个对象", True, TEXT), (panel.left + 10, panel.top + 8)
+        font.render(f"已选择 {count} 个对象", True, TEXT),
+        (panel.left + 10, panel.top + DOCK_TAB_HEIGHT + 8),
     )
 
-    top = panel.top + 34
+    top = panel.top + DOCK_TAB_HEIGHT + 34
     row = ROW_HEIGHT - 2
     visible = max(1, (panel.bottom - 76 - top) // row)
     for index, (kind, entry) in enumerate(editor.selection[:visible]):
@@ -390,7 +397,10 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
     panel = detail_panel_rect(surface)
     pygame.draw.rect(surface, DIALOG_BG, panel)
     pygame.draw.rect(surface, DIALOG_BORDER, panel, 1)
-    surface.blit(font.render(editor.dialog_title(), True, TEXT), (panel.left + 10, panel.top + 8))
+    surface.blit(
+        font.render(editor.dialog_title(), True, TEXT),
+        (panel.left + 10, panel.top + DOCK_TAB_HEIGHT + 8),
+    )
 
     # 内容区（标题下面到底部按钮上面）按像素滚动：画的时候裁掉超出部分
     viewport = detail_viewport(panel)
@@ -501,4 +511,30 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
             text,
             (rect.left + 6, rect.centery - text.get_height() // 2),
             (0, 0, min(text.get_width(), rect.width - 10), text.get_height()),
+        )
+
+
+def draw_property_tab(
+    surface: pygame.Surface, editor: Editor, font: pygame.font.Font
+) -> None:
+    """属性页：选中一个就列属性，多选就列清单，什么都没选先说一句怎么用。"""
+    if editor.dialog is not None:
+        draw_detail_panel(surface, editor, font)
+        return
+    if len(editor.selection) > 1:
+        draw_selection_panel(surface, editor, font)
+        return
+    panel = detail_panel_rect(surface)
+    pygame.draw.rect(surface, DIALOG_BG, panel)
+    pygame.draw.rect(surface, DIALOG_BORDER, panel, 1)
+    lines = (
+        "选中一个对象，属性显示在这里。",
+        "「对象列表」页可以按类型找对象。",
+    )
+    top = panel.top + DOCK_TAB_HEIGHT + 40
+    for index, line in enumerate(lines):
+        text = font.render(line, True, DIM_TEXT)
+        surface.blit(
+            text,
+            (panel.centerx - text.get_width() // 2, top + index * 20),
         )

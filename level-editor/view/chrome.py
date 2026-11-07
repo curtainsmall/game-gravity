@@ -111,7 +111,8 @@ def view_menu_rects(editor: Editor, window_width: int) -> list:
 
     这里的东西只影响编辑器自己的显示，不进关卡数据、不写盘。调试显示和游戏里那个
     开关是一回事：关掉就只看背景和贴图（发布后的样子），打开则连翻转带一起画出来；
-    「显示贴图」关掉时贴图不画也点不中，方便看底下的方块和机关。
+    「显示贴图」关掉时贴图不画也点不中，方便看底下的方块和机关；「侧栏」关掉时右边
+    那块「属性 / 对象列表」面板收起，画布铺满整个宽度。
     """
     anchor = next(rect for rect, _, action in toolbar_rects(editor, window_width) if action == "view")
     items = [
@@ -119,6 +120,7 @@ def view_menu_rects(editor: Editor, window_width: int) -> list:
         ("textures", "显示贴图"),
         ("grid", "显示网格"),
         ("debug", "调试显示"),
+        ("dock", "侧栏"),
     ]
     return [
         (
@@ -154,6 +156,8 @@ def handle_view_menu_click(editor: Editor, position: tuple, window_width: int) -
     for rect, key, _ in view_menu_rects(editor, window_width):
         if rect.collidepoint(position):
             editor.view_settings[key] = not editor.view_settings.get(key, True)
+            if key == "dock" and not editor.view_settings[key]:
+                editor.close_go_list_menu()     # 面板收起来了，筛选菜单也一起收
             return True
     return False
 

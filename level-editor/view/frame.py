@@ -8,6 +8,7 @@ from core.constants import BACKGROUND, FOOTER, MARGIN, STATUS_TEXT
 from view.animation import draw_animation_link
 from view.canvas import draw_canvas, draw_ruler
 from view.chrome import draw_create_menu, draw_file_menu, draw_header, draw_view_menu
+from view.dock import dock_visible, draw_dock
 from view.layout import Layout
 from view.modals import (
     draw_game_settings,
@@ -18,7 +19,6 @@ from view.modals import (
     draw_startup,
     draw_switch_confirm,
 )
-from view.panel import draw_detail_panel, draw_selection_panel
 from view.picker import draw_pick_menu
 
 if TYPE_CHECKING:
@@ -42,10 +42,8 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_view_menu(surface, editor, font)
     if editor.pick_menu is not None:
         draw_pick_menu(surface, editor, font)
-    if editor.dialog is not None:
-        draw_detail_panel(surface, editor, font)
-    elif len(editor.selection) > 1:
-        draw_selection_panel(surface, editor, font)
+    if dock_visible(editor):
+        draw_dock(surface, editor, font)
     if editor.settings is not None:
         draw_settings(surface, editor, font)
     if editor.game_settings is not None:

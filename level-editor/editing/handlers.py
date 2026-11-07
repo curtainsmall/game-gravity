@@ -27,11 +27,52 @@ from view.panel import (
     selection_panel_buttons,
     trigger_geometry,
 )
+from view.dock import dock_tab_at
+from view.objects import go_list_geometry
 from view.picker import pick_menu_rects
 from view.widgets import stepper_rects
 
 if TYPE_CHECKING:
     from editing.editor import Editor
+
+
+def handle_dock_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> None:
+    """右侧面板：先看标签条，再交给属性页或对象列表页。"""
+    tab = dock_tab_at(surface, position)
+    if tab is not None:
+        editor.set_panel_tab(tab)
+        return
+    if editor.panel_tab == "objects":
+        handle_go_list_click(surface, editor, position)
+        return
+    handle_detail_click(surface, editor, position)
+
+
+def handle_go_list_click(
+    surface: pygame.Surface, editor: Editor, position: tuple
+) -> bool:
+    """对象列表页：点一行选中它，点筛选按钮展开/收起筛选菜单。
+
+    返回点击是不是落在列表面板里：落在里面就不再交给画布（空白处点了也只是收起筛选）。
+    """
+    geometry = go_list_geometry(surface, editor)
+    if geometry["popup"] is not None:
+        for rect, _, value in geometry["popup_rows"]:
+            if rect.collidepoint(position):
+                editor.set_go_list_filter(value)
+                return True
+        editor.close_go_list_menu()
+        return geometry["panel"].collidepoint(position)
+    if geometry["filter"].collidepoint(position):
+        editor.toggle_go_list_menu()
+        return True
+    for row in geometry["rows"]:
+        if row["rect"].collidepoint(position):
+            editor.select_go_list_item(row["kind"], row["entry"])
+            return True
+    return geometry["panel"].collidepoint(position)
 
 
 def handle_toolbar(editor: Editor, position: tuple, window_width: int) -> str | None:

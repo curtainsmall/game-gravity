@@ -18,7 +18,7 @@ from editing.handlers import (
     handle_animation_edit_drag_release,
     handle_animation_link_click,
     handle_create_menu,
-    handle_detail_click,
+    handle_dock_click,
     handle_dropdown_click,
     handle_game_settings_click,
     handle_level_select_click,
@@ -28,10 +28,11 @@ from editing.handlers import (
     handle_toolbar,
 )
 from view.chrome import handle_file_menu_click, handle_view_menu_click
+from view.dock import dock_reserved, dock_visible
 from view.frame import draw
 from view.layout import Layout
 from view.modals import quit_geometry, startup_rects
-from view.panel import detail_panel_rect, detail_panel_width
+from view.panel import detail_panel_rect
 
 MODIFIER_KEYS = (pygame.K_LCTRL, pygame.K_RCTRL, pygame.K_LSHIFT, pygame.K_RSHIFT)
 
@@ -53,10 +54,9 @@ def run() -> None:
     editor = Editor()
 
     running = True
-    panel_open = lambda: editor.dialog is not None or len(editor.selection) > 1
     while running:
         dt = clock.tick(60) / 1000.0
-        reserved_right = 0 if not panel_open() else detail_panel_width(screen) + MARGIN
+        reserved_right = dock_reserved(editor, screen.get_width())
         layout = Layout(
             screen.get_size(),
             editor.zoom,
@@ -75,7 +75,7 @@ def run() -> None:
             elif event.type == pygame.VIDEORESIZE:
                 size = (max(MIN_WINDOW[0], event.w), max(MIN_WINDOW[1], event.h))
                 screen = pygame.display.set_mode(size, pygame.RESIZABLE)
-                reserved_right = 0 if not panel_open() else detail_panel_width(screen) + MARGIN
+                reserved_right = dock_reserved(editor, size[0])
                 layout = Layout(
                     size,
                     editor.zoom,
@@ -300,6 +300,11 @@ def run() -> None:
                 sync_modifiers(editor)
                 if not editor.level_in_view:
                     continue
+                if dock_visible(editor) and detail_panel_rect(screen).collidepoint(
+                    event.pos
+                ):
+                    editor.hovered = None       # 光标在右侧面板上：画布不跟着悬停
+                    continue
                 if editor.object_grab is not None:
                     editor.update_object_grab(event.pos, layout)
                     continue
@@ -316,10 +321,13 @@ def run() -> None:
             elif event.type == pygame.MOUSEWHEEL:
                 if not editor.level_in_view:
                     continue
-                if editor.dialog is not None and detail_panel_rect(screen).collidepoint(
+                if dock_visible(editor) and detail_panel_rect(screen).collidepoint(
                     pygame.mouse.get_pos()
                 ):
-                    editor.scroll_detail(-event.y)      # 光标在属性面板上：滚面板而不是缩放
+                    if editor.panel_tab == "objects":
+                        editor.scroll_go_list(-event.y)     # 对象列表页：滚列表
+                    elif editor.dialog is not None:
+                        editor.scroll_detail(-event.y)      # 属性页：滚面板
                     continue
                 if event.y:
                     factor = ZOOM_STEP if event.y > 0 else 1.0 / ZOOM_STEP
@@ -333,19 +341,29 @@ def run() -> None:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button in (4, 5):
                     continue
+                # 筛选菜单开着时点别处：先把它收起来，再照常处理这次点击
+                if (
+                    dock_visible(editor)
+                    and editor.go_list_menu
+                    and not detail_panel_rect(screen).collidepoint(event.pos)
+                ):
+                    editor.close_go_list_menu()
                 if editor.dropdown_field is not None and event.button == 1:
                     if handle_dropdown_click(screen, editor, event.pos):
                         continue
                     # 列表已经收起：点在面板里就继续走面板，点在画布上就只是收起列表
-                    if not (panel_open() and detail_panel_rect(screen).collidepoint(event.pos)):
+                    if not (
+                        dock_visible(editor)
+                        and detail_panel_rect(screen).collidepoint(event.pos)
+                    ):
                         continue
                 if editor.pick_menu is not None:
                     if event.button == 1 and handle_pick_menu_click(screen, editor, event.pos):
                         continue
                     editor.close_pick_menu()
-                if panel_open() and detail_panel_rect(screen).collidepoint(event.pos):
+                if dock_visible(editor) and detail_panel_rect(screen).collidepoint(event.pos):
                     if event.button == 1:
-                        handle_detail_click(screen, editor, event.pos)
+                        handle_dock_click(screen, editor, event.pos)
                     continue
                 if event.button == 1 and handle_toolbar(
                     editor, event.pos, screen.get_width()
@@ -404,6 +422,8 @@ def run() -> None:
                 elif event.key == pygame.K_ESCAPE:
                     if editor.dropdown_field is not None:
                         editor.close_dropdown()
+                    elif editor.go_list_menu:
+                        editor.close_go_list_menu()
                     elif editor.name_focused:
                         editor.blur_name()
                     elif editor.selection:

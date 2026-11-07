@@ -208,6 +208,21 @@ KIND_TITLES = {
     KIND_ANIMATION: "动画",
 }
 
+# 左侧对象列表里的种类顺序（筛选菜单也按这个顺序列）
+KIND_ORDER = (
+    KIND_BLOCK,
+    KIND_PLANK,
+    KIND_MOVABLE,
+    KIND_BUTTON,
+    KIND_PORTAL,
+    KIND_ITEM,
+    KIND_NOZZLE,
+    KIND_PLAYER,
+    KIND_DESTINATION,
+    KIND_TEXTURE,
+    KIND_ANIMATION,
+)
+
 # ---- 触发行为 ----
 # 每种对象能接的触发行为：(显示文字, json 里的行为名)。TriggerSystem 只派发事件名，这些名字
 # 由游戏里各自读 events 的系统认领（move 由 ControllerSystem，hide/show 由渲染）；编辑器这边
@@ -273,6 +288,7 @@ TOOLBAR_HEIGHT = 24
 ROW_HEIGHT = 22
 BUTTON_HEIGHT = 22
 DETAIL_PANEL_WIDTH = 250
+DOCK_TAB_HEIGHT = 26          # 右侧面板顶上「属性 / 对象列表」两个标签占多高
 CREATE_MENU_WIDTH = 150
 RULER_HEIGHT = 24
 RULER_STEP = 10

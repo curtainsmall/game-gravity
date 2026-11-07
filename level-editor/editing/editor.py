@@ -35,6 +35,7 @@ from core.constants import (
     KIND_ITEM,
     KIND_MOVABLE,
     KIND_NOZZLE,
+    KIND_ORDER,
     KIND_PLANK,
     KIND_PLAYER,
     KIND_PORTAL,
@@ -103,6 +104,9 @@ if TYPE_CHECKING:
 TRIGGER_FIELD_BASE = 1000
 TRIGGER_PARTS = ("source", "behavior", "mode")
 
+# 对象列表排序用：种类在 KIND_ORDER 里的位置
+KIND_ORDER_INDEX = {kind: index for index, kind in enumerate(KIND_ORDER)}
+
 
 class Editor:
     def __init__(self) -> None:
@@ -144,7 +148,13 @@ class Editor:
             "textures": True,
             "grid": True,
             "debug": True,
+            "dock": True,
         }
+        # 右侧面板：哪一页（属性 / 对象列表），列表自己的筛选、滚动和筛选下拉
+        self.panel_tab = "properties"
+        self.go_list_filter = ""
+        self.go_list_scroll = 0.0
+        self.go_list_menu = False
         self.menu_open = False
         self.menu_origin = (MARGIN, HEADER)
         self.creating = False
@@ -507,7 +517,7 @@ class Editor:
             return
         # 关卡名就是文件名，不写在快照里：撤销时从当前关卡带过去，别把名字丢了
         name = self.level.name
-        self.level = Level.from_definition(self.undo_stack.pop())
+        self.level = Level.from_definition(self.undo_stack.pop(), self.animation_library)
         self.level.name = name
         self.dialog = None
         self.dropdown_field = None
@@ -515,6 +525,7 @@ class Editor:
         self.marquee_start = None
         self.marquee_current = None
         self.pick_menu = None
+        self.reset_go_list()
         self.dirty = True
         self.status = "已撤销上一步操作。"
 
@@ -542,6 +553,7 @@ class Editor:
         self.dropdown_field = None
         self.selection = []
         self.pick_menu = None
+        self.reset_go_list()
         self.marquee_start = None
         self.marquee_current = None
         self.object_grab = None
@@ -595,6 +607,7 @@ class Editor:
         self.dialog = None
         self.dropdown_field = None
         self.selection = []
+        self.reset_go_list()
         self.marquee_start = None
         self.marquee_current = None
         self.name_focused = False
@@ -703,6 +716,7 @@ class Editor:
         self.dialog = None
         self.dropdown_field = None
         self.selection = []                 # 上一个关卡的选中项不能带过来
+        self.reset_go_list()
         self.marquee_start = None
         self.marquee_current = None
         self.name_focused = False
@@ -2373,6 +2387,91 @@ class Editor:
         pos = entry["pos"]
         name = entry.get("name") or KIND_TITLES.get(kind, "对象")
         return f"{name}（{pos[0]}, {pos[1]}）"
+
+    # ---- 右侧面板：属性 / 对象列表 -----------------------------------
+    def set_panel_tab(self, tab: str) -> None:
+        """右侧面板切页：属性跟着选中项走，对象列表列这一关的对象。"""
+        if tab not in ("properties", "objects"):
+            return
+        self.panel_tab = tab
+        self.go_list_menu = False
+        # 换页时把属性页上没结束的下拉和输入收掉，免得留在背后
+        self.dropdown_field = None
+        self.name_focused = False
+        self.number_buffer = None
+        self.status = "右侧面板：" + ("属性。" if tab == "properties" else "对象列表。")
+
+    def go_list_objects(self) -> list:
+        """列表里的对象：这一关能点选的全部对象，按种类排好，种类里保持原顺序。
+
+        和画布用同一份清单（stacked_entries）：视图菜单里关掉「显示贴图」时，
+        贴图既画不出来、也点不中，列表里跟着不列出来。
+        """
+        return sorted(
+            self.stacked_entries(),
+            key=lambda pair: KIND_ORDER_INDEX.get(pair[0], len(KIND_ORDER_INDEX)),
+        )
+    def go_list_counts(self) -> list:
+        """筛选菜单的内容：这一关里有的种类和各自的个数。"""
+        counts: dict = {}
+        for kind, _ in self.go_list_objects():
+            counts[kind] = counts.get(kind, 0) + 1
+        return [(kind, counts[kind]) for kind in KIND_ORDER if kind in counts]
+
+    def go_list_items(self) -> list:
+        """按种类筛过一遍的对象；筛的那种这一关里没有就是空列表。"""
+        entries = self.go_list_objects()
+        if not self.go_list_filter:
+            return entries
+        return [
+            (kind, entry) for kind, entry in entries if kind == self.go_list_filter
+        ]
+
+    def go_list_label(self, kind: str, entry: dict) -> str:
+        """一行写什么：种类、名字（有的话）和位置（格，去掉多余的小数位）。"""
+        title = KIND_TITLES.get(kind, "对象")
+        name = str(entry.get("name") or "").strip()
+        position = entry.get("pos") or [0.0, 0.0]
+        x, y = (f"{float(value):g}" for value in list(position)[:2])
+        if name:
+            return f"{title} {name}（{x}, {y}）"
+        return f"{title}（{x}, {y}）"
+
+    def go_list_filter_label(self) -> str:
+        if not self.go_list_filter:
+            return "全部"
+        return KIND_TITLES.get(self.go_list_filter, "全部")
+
+    def set_go_list_filter(self, kind: str) -> None:
+        """筛选菜单里选一种：只列那种对象；空字符串是全部。"""
+        kind = str(kind or "")
+        if kind and kind not in KIND_ORDER:
+            return
+        self.go_list_filter = kind
+        self.go_list_scroll = 0.0
+        self.go_list_menu = False
+        self.status = f"对象列表：{self.go_list_filter_label()}。"
+
+    def toggle_go_list_menu(self) -> None:
+        self.go_list_menu = not self.go_list_menu
+
+    def close_go_list_menu(self) -> None:
+        self.go_list_menu = False
+
+    def scroll_go_list(self, delta: float) -> None:
+        """对象列表的滚轮：按像素滚（上界在绘制时按内容高度夹住）。"""
+        self.go_list_scroll = max(0.0, self.go_list_scroll + float(delta) * SCROLL_STEP)
+
+    def select_go_list_item(self, kind: str, entry: dict) -> None:
+        """点一行：在画布上选中这个对象，属性面板跟着打开。"""
+        self.go_list_menu = False
+        self.select(kind, entry)
+
+    def reset_go_list(self) -> None:
+        """换关卡时：筛选、滚动和展开的筛选菜单都回到初始状态。"""
+        self.go_list_filter = ""
+        self.go_list_scroll = 0.0
+        self.go_list_menu = False
 
     def delete_selection(self) -> None:
         """删掉所有选中的对象，算一步撤销。"""
