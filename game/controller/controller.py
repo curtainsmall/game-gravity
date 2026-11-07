@@ -13,4 +13,3 @@ class Controller:
     ) -> None:
         self.source = source                      # InputSource / None（None = 由触发事件驱动）
         self.offset: tuple[float, float] = (float(offset[0]), float(offset[1]))
-        self.passes_through_planks: bool = False

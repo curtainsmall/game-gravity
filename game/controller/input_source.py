@@ -71,7 +71,7 @@ class InputSource:
         if input_state.flip_pressed and can_flip_gravity(
             body, InputSource.level_height_blocks, InputSource.flip_area_offsets
         ):
-            flip_gravity(body, game_object.controller)
+            flip_gravity(body)
 
         if input_state.jump_pressed and body.is_grounded:
             # 起跳方向与重力方向相反

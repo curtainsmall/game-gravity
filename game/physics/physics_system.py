@@ -21,8 +21,8 @@ class PhysicsSystem:
             self._move_along_x(body, solids, body.velocity_x * delta_seconds)
             self._move_along_y(body, solids, body.velocity_y * delta_seconds)
 
-            if game_object.controller is not None and body.is_grounded:
-                game_object.controller.passes_through_planks = False
+            if body.is_grounded:
+                body.is_flipping = False            # 落过地，这次翻转的穿板许可就用完了
 
         self._sample_sensors(objects, gravity, delta_seconds)
 
@@ -82,10 +82,8 @@ class PhysicsSystem:
         return solids
 
     def _is_solid_for(self, mover: GameObject, other: GameObject) -> bool:
-        """对方是否挡住这个 mover：翻转穿透期间，可穿过的方块不挡。"""
-        controller = mover.controller
-        passes_through = controller is not None and controller.passes_through_planks
-        if other.body.is_passable_during_flip and passes_through:
+        """对方是否挡住这个 mover：刚翻过还没落地时，木板不挡路。"""
+        if other.body.is_passable_during_flip and mover.body.is_flipping:
             return False
         return True
 

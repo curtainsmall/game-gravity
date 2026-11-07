@@ -26,7 +26,7 @@ def can_flip_gravity(body, level_height: float, offsets=FLIP_AREA_OFFSETS_DEFAUL
     return body.bottom < high and body.top > low
 
 
-def flip_gravity(body, controller) -> None:
-    """翻转重力：加速度方向取反，木板穿透置真。"""
+def flip_gravity(body) -> None:
+    """翻转重力：加速度方向取反，并允许这一趟穿过木板（落地后由物理系统清掉）。"""
     body.gravity_direction_sign = -body.gravity_direction_sign
-    controller.passes_through_planks = True
+    body.is_flipping = True
