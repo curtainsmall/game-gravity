@@ -1,7 +1,8 @@
 """动画相关的界面：游戏配置里的「动画集」页、单条动画的编辑弹窗、动画对象的链接弹窗。
 
-- 动画集页只列 game.json 动画库里的条目：键名 + 一行帧缩略图，点一行打开编辑弹窗。
-- 编辑弹窗：改键名、加/删/拖动帧、改每帧停留时长、循环、预览。
+- 动画集页只列 game.json 动画库里的条目：名字 + 帧数，点一行打开编辑弹窗。
+- 编辑弹窗：改键名、加/删/拖动帧、改每帧停留时长；「预览」会弹出一个大窗口循环播放，
+  循环规则在动画对象的链接上（游戏按动作决定）。
 - 链接弹窗：动画对象自己的预设（通用 / 玩家）和每个动作左/右链接；链接的是动画库的键。
 """
 
@@ -45,6 +46,10 @@ EDIT_THUMB_HEIGHT = 64
 EDIT_CELL_GAP = 8
 EDIT_DELAY_WIDTH = 64
 EDIT_DELAY_HEIGHT = 20
+
+PREVIEW_PANEL_WIDTH = 460
+PREVIEW_IMAGE_SIZE = 360
+PREVIEW_PANEL_HEIGHT = 480
 
 LINK_PANEL_WIDTH = 560
 LINK_GENERAL_HEIGHT = 196
@@ -242,8 +247,9 @@ def draw_animation_edit(
     previous = surface.get_clip()
     surface.set_clip(previous.clip(grid))
     shown = editor.animation_edit_shown_frame()
+    marked = edit["selected"] if edit["previewing"] else shown
     for cell in geometry["cells"]:
-        highlight = cell["index"] == shown
+        highlight = cell["index"] == marked
         _draw_frame(surface, cell["thumb"], edit, cell["index"], editor.media_base_dir, highlight)
         _draw_delay(surface, font, cell, edit["delay"])
         number = font.render(str(cell["index"] + 1), True, DIM_TEXT)
@@ -265,7 +271,7 @@ def draw_animation_edit(
     draw_button(surface, font, geometry["add"], "＋")
     draw_button(surface, font, geometry["remove"], "−")
     draw_button(surface, font, geometry["preview"], "停止预览" if edit["previewing"] else "预览")
-    hint = font.render("循环在动画对象的链接上设置", True, DIM_TEXT)
+    hint = font.render("循环由动作决定：起跳、落地播一遍", True, DIM_TEXT)
     surface.blit(hint, (geometry["preview"].right + 10, geometry["preview"].centery - 8))
     draw_button(surface, font, geometry["delete"], "删除动画")
     draw_button(surface, font, geometry["ok"], "确定")
@@ -279,6 +285,78 @@ def draw_animation_edit(
             geometry["preview"].centery - 8,
         ),
     )
+
+    # 预览是另一个更小的弹窗，压在编辑弹窗上面
+    if edit["previewing"]:
+        draw_animation_preview(surface, editor, font)
+
+
+def animation_preview_geometry(surface: pygame.Surface, editor) -> dict | None:
+    """预览弹窗：标题、大图、第几帧和停止按钮；没在预览就是 None。"""
+    edit = editor.animation_edit
+    if edit is None or not edit["previewing"]:
+        return None
+    panel = place_panel(
+        surface, pygame.Rect(0, 0, PREVIEW_PANEL_WIDTH, PREVIEW_PANEL_HEIGHT)
+    )
+    left = panel.left + 16
+    width = panel.width - 32
+    title = pygame.Rect(left, panel.top + 10, width, 24)
+    image = pygame.Rect(
+        0, 0, PREVIEW_IMAGE_SIZE, PREVIEW_IMAGE_SIZE
+    )
+    image.center = (panel.centerx, panel.top + 46 + PREVIEW_IMAGE_SIZE // 2)
+    caption = pygame.Rect(left, image.bottom + 10, width, 20)
+    stop = pygame.Rect(panel.centerx - 50, panel.bottom - 12 - BUTTON_HEIGHT, 100, BUTTON_HEIGHT)
+    return {
+        "panel": panel,
+        "title": title,
+        "image": image,
+        "caption": caption,
+        "stop": stop,
+    }
+
+
+def draw_animation_preview(
+    surface: pygame.Surface, editor, font: pygame.font.Font
+) -> None:
+    geometry = animation_preview_geometry(surface, editor)
+    edit = editor.animation_edit
+    if geometry is None or edit is None:
+        return
+    draw_panel(surface, geometry["panel"])
+    title = font.render(f"预览：{edit['name'] or '（未命名）'}", True, TEXT)
+    surface.blit(title, (geometry["title"].left, geometry["title"].top))
+
+    image_rect = geometry["image"]
+    pygame.draw.rect(surface, (40, 40, 46), image_rect)
+    pygame.draw.rect(surface, (70, 70, 78), image_rect, 1)
+    index = editor.animation_edit_shown_frame()
+    frames = edit["frames"]
+    path = (
+        resolve_level_path(frames[index], editor.media_base_dir)
+        if 0 <= index < len(frames)
+        else None
+    )
+    image = None
+    if path is not None:
+        size = image_size(path)
+        if size is not None:
+            image = load_scaled(path, _fit_within(size, image_rect.size), True)
+    if image is None:
+        draw_missing_texture(surface, image_rect)
+    else:
+        surface.blit(image, image.get_rect(center=image_rect.center))
+
+    caption = font.render(
+        f"第 {index + 1} / {len(frames)} 帧" if frames else "还没有帧",
+        True,
+        DIM_TEXT,
+    )
+    surface.blit(
+        caption, (geometry["caption"].left, geometry["caption"].top)
+    )
+    draw_button(surface, font, geometry["stop"], "停止预览")
 
 
 def _edit_drag_marker(geometry: dict, slot: int) -> tuple:

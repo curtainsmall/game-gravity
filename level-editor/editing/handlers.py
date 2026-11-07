@@ -7,7 +7,11 @@ import pygame
 from core.constants import ROW_HEIGHT
 from core.animation import PRESET_GENERAL, PRESET_PLAYER
 from core.sound import PRESET_GENERAL as SOUND_GENERAL, PRESET_PLAYER as SOUND_PLAYER
-from view.animation import animation_edit_geometry, animation_link_geometry
+from view.animation import (
+    animation_edit_geometry,
+    animation_link_geometry,
+    animation_preview_geometry,
+)
 from view.chrome import create_menu_rects, toolbar_rects
 from view.modals import (
     game_settings_geometry,
@@ -413,6 +417,14 @@ def handle_animation_edit_click(
 ) -> None:
     """单条动画的编辑弹窗：改名字、帧、时长、循环、预览、删除、确定/取消。"""
     if editor.animation_edit is None:
+        return
+    preview = animation_preview_geometry(surface, editor)
+    if preview is not None:
+        # 预览弹窗开着：点停止或面板外面就关掉，其他点击一律不听
+        if preview["stop"].collidepoint(position) or not preview["panel"].collidepoint(
+            position
+        ):
+            editor.close_animation_preview()
         return
     editor.commit_animation_delay()
     geometry = animation_edit_geometry(surface, editor)

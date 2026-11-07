@@ -46,6 +46,54 @@ def sync_modifiers(editor: Editor) -> None:
     editor.click_through = bool(mods & pygame.KMOD_ALT)
 
 
+def handle_animation_edit_key(editor: Editor, event: pygame.event.Event) -> None:
+    """动画弹窗里的按键：名字、帧时长两种输入各自只吃该吃的键。
+
+    名字输入中只认退格和可打印字符；方向键、Delete 在输入时都不碰帧，
+    否则一边改名一边就把选中帧的时长/顺序改了。
+    """
+    edit = editor.animation_edit
+    if edit is None:
+        return
+    if edit["previewing"]:
+        # 预览弹窗开着：Esc / 回车把预览关掉，其余键不动编辑界面
+        if event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_KP_ENTER):
+            editor.close_animation_preview()
+        return
+    if event.key == pygame.K_ESCAPE:
+        if editor.animation_delay_active():
+            editor.cancel_animation_delay()
+        else:
+            editor.close_animation_edit(False)
+    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+        if editor.animation_delay_active():
+            editor.commit_animation_delay()
+        elif edit["name_focus"]:
+            editor.blur_animation_name()
+        else:
+            editor.close_animation_edit(True)
+    elif edit["name_focus"]:
+        if event.key == pygame.K_BACKSPACE:
+            editor.erase_animation_name_char()
+        elif event.unicode and event.unicode.isprintable():
+            editor.type_animation_name(event.unicode)
+    elif editor.animation_delay_active():
+        if event.key == pygame.K_BACKSPACE:
+            editor.erase_animation_delay_char()
+        elif event.unicode and event.unicode.isprintable():
+            editor.type_animation_delay(event.unicode)
+    elif event.key == pygame.K_DELETE:
+        editor.remove_animation_frame()
+    elif event.key == pygame.K_LEFT:
+        editor.adjust_animation_hold(-1)
+    elif event.key == pygame.K_RIGHT:
+        editor.adjust_animation_hold(1)
+    elif event.key == pygame.K_UP:
+        editor.move_animation_frame(-1)
+    elif event.key == pygame.K_DOWN:
+        editor.move_animation_frame(1)
+
+
 def run() -> None:
     pygame.init()
     pygame.display.set_caption("level editor")
@@ -201,38 +249,7 @@ def run() -> None:
                 # 游戏配置：Tab 切页；动画集里点「新建动画」或点一行开编辑弹窗；
                 # 弹窗里 Esc 取消、回车确定、点秒数改停留时长、滚轮翻格子。
                 if event.type == pygame.KEYDOWN and editor.animation_edit is not None:
-                    if event.key == pygame.K_ESCAPE:
-                        if editor.animation_delay_active():
-                            editor.cancel_animation_delay()
-                        else:
-                            editor.close_animation_edit(False)
-                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        if editor.animation_delay_active():
-                            editor.commit_animation_delay()
-                        elif editor.animation_edit["name_focus"]:
-                            editor.blur_animation_name()
-                        else:
-                            editor.close_animation_edit(True)
-                    elif event.key == pygame.K_BACKSPACE:
-                        if editor.animation_delay_active():
-                            editor.erase_animation_delay_char()
-                        elif editor.animation_edit["name_focus"]:
-                            editor.erase_animation_name_char()
-                    elif event.key == pygame.K_DELETE:
-                        editor.remove_animation_frame()
-                    elif event.key == pygame.K_LEFT:
-                        editor.adjust_animation_hold(-1)
-                    elif event.key == pygame.K_RIGHT:
-                        editor.adjust_animation_hold(1)
-                    elif event.key == pygame.K_UP:
-                        editor.move_animation_frame(-1)
-                    elif event.key == pygame.K_DOWN:
-                        editor.move_animation_frame(1)
-                    elif event.unicode and event.unicode.isprintable():
-                        if editor.animation_delay_active():
-                            editor.type_animation_delay(event.unicode)
-                        elif editor.animation_edit["name_focus"]:
-                            editor.type_animation_name(event.unicode)
+                    handle_animation_edit_key(editor, event)
                     continue
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:

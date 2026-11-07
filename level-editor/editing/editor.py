@@ -1781,9 +1781,16 @@ class Editor:
         edit = self.animation_edit
         if edit is None or not edit["frames"]:
             return
+        self.commit_animation_delay()
         edit["previewing"] = not edit["previewing"]
         edit["preview_frame"] = max(0, min(edit["selected"], len(edit["frames"]) - 1))
         edit["preview_elapsed"] = 0.0
+
+    def close_animation_preview(self) -> None:
+        """关掉预览弹窗，回到编辑帧的界面。"""
+        edit = self.animation_edit
+        if edit is not None and edit["previewing"]:
+            edit["previewing"] = False
 
     def advance_animation_edit(self, seconds: float) -> None:
         """弹窗里的预览：按每帧时长循环播放（编辑器里只看效果，不跟 loop 停住）。"""
