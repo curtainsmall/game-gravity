@@ -4,8 +4,8 @@
 动画对象自己的事（见编辑器里的动画对象弹窗）：
 
     general   一条剪辑，没有动作名、没有左右
-    player    五个动作（站立 / 移动 / 上升 / 下落 / 翻转），每个动作左、右两个链接；
-              空着的一侧用另一侧镜像
+    player    四个动作（站立 / 移动 / 上升 / 下落），每个动作左、右两个链接；
+              空着的一侧用另一侧镜像；重力翻转时先取相反一侧，再整体转 180°
 
 老数据（player.animations 里按动作分左右）在读取时一次性迁进动画库，键名是
 「动作_left / 动作_right」；应用游戏配置后旧字段就删掉，之后只认新结构。
@@ -26,8 +26,8 @@ PLAYER_ACTIONS = (
     ("run", "移动"),
     ("jump", "上升"),
     ("fall", "下落"),
-    ("flip", "翻转"),
 )
+PLAYER_ACTION_NAMES = {name for name, _ in PLAYER_ACTIONS}
 SIDES = (("left", "左"), ("right", "右"))
 
 DEFAULT_HOLD = 0.1
@@ -136,6 +136,8 @@ def _migrate_legacy(library: dict, settings: dict) -> None:
     legacy = player.get("animation")
     if isinstance(legacy, dict):
         for action, value in legacy.items():
+            if str(action) not in PLAYER_ACTION_NAMES:
+                continue
             key = f"{action}_right"
             if key in library or not isinstance(value, str) or not value.strip():
                 continue
@@ -150,6 +152,8 @@ def _migrate_action_table(library: dict, table) -> None:
     if not isinstance(table, dict):
         return
     for action, entry in table.items():
+        if str(action) not in PLAYER_ACTION_NAMES:
+            continue                    # flip 等旧动作不再迁移
         if not isinstance(entry, dict):
             continue
         if "frames" in entry or "holds" in entry or "fps" in entry:

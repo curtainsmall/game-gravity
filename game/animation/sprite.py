@@ -5,8 +5,12 @@ follow 就记下加载时和目标对象的相对位置，之后一起平移（�
 "@player"）。显示哪一段剪辑看预设：
 
     general  只有一条剪辑，链接在 links.general.clip，不看任何状态
-    player   五个动作（idle/run/jump/fall/flip），动作来自玩家的物理状态；
-             每个动作分左/右两个链接，空着的一侧用另一侧镜像
+    player   四个动作（idle/run/jump/fall），动作来自玩家的物理状态；每个动作分左/右
+             两个链接，空着的一侧用另一侧镜像
+
+重力翻转时（目标就是玩家、且玩家倒挂）：先取相反方向的链接（朝右取左、朝左取右），
+取不到再借本侧镜像，然后整体绕 z 轴旋转 180°；跟随玩家的通用预设也一起转。
+这样朝右走、倒挂时显示的是另一侧的身体动画，并且仍然朝着运动方向。
 
 链接里写的是动画库的键（见 animation.library）；键找不到、帧文件缺失都不画。
 """
@@ -16,7 +20,7 @@ from animation.clip import AnimationClip
 PRESET_GENERAL = "general"
 PRESET_PLAYER = "player"
 GENERAL_CLIP = "clip"
-PLAYER_ACTIONS = ("idle", "run", "jump", "fall", "flip")
+PLAYER_ACTIONS = ("idle", "run", "jump", "fall")
 SIDES = ("left", "right")
 PLAYER_FOLLOW = ("@player", "player")
 
@@ -43,12 +47,16 @@ class AnimationSprite:
 
 
 def state_of(body) -> str:
-    """玩家当前的动作名：翻转优先，然后按站没站住、上下速度分。"""
-    if body.gravity_direction_sign < 0:
-        return "flip"
+    """玩家当前的动作名：站住按有没有水平速度分；空中按速度相对重力方向分。
+
+    翻转重力后起跳方向也反了，所以不能只看 velocity_y 的正负：
+    「跳」是速度与重力同向（离开脚下那面），反过来就是下落。
+    """
     if body.is_grounded:
         return "run" if body.velocity_x else "idle"
-    return "jump" if body.velocity_y > 0 else "fall"
+    if body.velocity_y * body.gravity_direction_sign > 0:
+        return "jump"
+    return "fall"
 
 
 class AnimationSystem:
@@ -124,17 +132,27 @@ class AnimationSystem:
         render = game_object.render
         if render is None:
             return
-        clip, mirror = self._resolve(game_object, sprite)
+        target = self.targets.get(id(game_object))
+        flipped = (
+            target is self.player
+            and self.player is not None
+            and self.player.body is not None
+            and self.player.body.gravity_direction_sign < 0
+        )
+        clip, mirror = self._resolve(game_object, sprite, flipped)
         if clip is None:
             render.texture_path = None
             return
         self._advance(sprite, clip, delta_seconds)
         render.texture_path = clip.frames[sprite.frame_index]
-        render.texture_face = "up"
+        # 倒挂时绕 z 轴转 180°；再按需水平镜像，合起来就是“先镜像再转”或“转后再镜像”
+        render.texture_face = "down" if flipped else "up"
         render.texture_flip = mirror
 
-    def _resolve(self, game_object, sprite: AnimationSprite) -> tuple:
-        """这一帧要播的剪辑和要不要镜像；没有就 (None, False)。"""
+    def _resolve(
+        self, game_object, sprite: AnimationSprite, gravity_flipped: bool
+    ) -> tuple:
+        """这一帧要播的剪辑和要不要水平镜像；没有就 (None, False)。"""
         if sprite.preset == PRESET_GENERAL:
             key = _link_value(sprite.links.get("general"), GENERAL_CLIP)
             return self.clips.get(key) if key else None, False
@@ -143,8 +161,11 @@ class AnimationSystem:
             body = self.player.body
             action = state_of(body) if body is not None else "idle"
             side = "right" if self.facing > 0 else "left"
+            if gravity_flipped:
+                # 倒挂时看到的是身体另一侧：朝右取左、朝左取右
+                side = "left" if side == "right" else "right"
         else:
-            # 目标不是玩家：没有玩家那五个状态，退到站立；方向用右侧
+            # 目标不是玩家：没有玩家那四个状态，退到站立；方向用右侧
             action, side = "idle", "right"
         pairs = sprite.links.get("player")
         pairs = pairs if isinstance(pairs, dict) else {}
