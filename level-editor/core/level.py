@@ -212,7 +212,9 @@ class Level:
         return definition
 
     @classmethod
-    def from_definition(cls, definition: dict) -> "Level":
+    def from_definition(
+        cls, definition: dict, animation_library: dict | None = None
+    ) -> "Level":
         level = cls()
         # 编辑器不认识的顶层键（老字段、手写的东西）原样留着，保存时照写回去
         level.extra = {
@@ -270,7 +272,7 @@ class Level:
             entry.setdefault("size", [1.0, 1.0])
             entry.setdefault("follow", "")
             entry.setdefault("preset", animation.PRESET_GENERAL)
-            entry["links"] = animation.links_of(entry)
+            entry["links"] = animation.links_of(entry, animation_library)
             level.animation_objects.append(entry)
 
         # 玩家：这里只放位置和大小，跳高/速度属于整个游戏（game.json，编辑器不写）；

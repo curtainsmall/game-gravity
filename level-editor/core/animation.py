@@ -1,7 +1,8 @@
 """动画库：game.json 里 animation_library 的「键 → 一条动画」。
 
-一条动画只有帧、每帧停留秒数、循环；它不知道左右，也不知道预设——左右和预设是
-动画对象自己的事（见编辑器里的动画对象弹窗）：
+一条动画只有帧和每帧停留秒数；它不知道左右，也不知道预设——左右和预设是动画
+对象自己的事（见编辑器里的动画对象弹窗）。循环写在动画对象的链接上，每条链接
+各管各的；老库里写的 loop 只在链接没写时当默认值，保存时不再写回库里：
 
     general   一条剪辑，没有动作名、没有左右
     player    四个动作（站立 / 移动 / 上升 / 下落），每个动作左、右两个链接；
@@ -56,36 +57,64 @@ def hold_text(value) -> str:
 
 
 def new_animation() -> dict:
-    return {"frames": [], "holds": [], "loop": True}
+    """新建一条动画：只有帧和每帧时长，循环在动画对象的链接上设。"""
+    return {"frames": [], "holds": []}
 
 
 def new_links() -> dict:
-    """动画对象的链接默认值：两套预设都写全，切换预设不丢另一套。"""
+    """动画对象的链接默认值：两套预设、每个动作/方向都带自己的循环开关。"""
     return {
-        PRESET_GENERAL: {GENERAL_CLIP: ""},
+        PRESET_GENERAL: {GENERAL_CLIP: "", "loop": True},
         PRESET_PLAYER: {
-            action: {"left": "", "right": ""} for action, _ in PLAYER_ACTIONS
+            action: {
+                side: {"clip": "", "loop": True} for side, _ in SIDES
+            }
+            for action, _ in PLAYER_ACTIONS
         },
     }
 
 
-def links_of(entry: dict) -> dict:
-    """条目里的 links 整理成完整形状：缺的预设/动作/方向都补空字符串。"""
+def links_of(entry: dict, library: dict | None = None) -> dict:
+    """条目里的 links 整理成完整形状：缺的预设/动作/方向都补空链接。
+
+    老数据直接写字符串（甚至整条没有 loop）：有库时用那条剪辑原来的 loop 当默认，
+    没有就用 true。新数据每条链接写 {"clip": 键, "loop": 是否循环}。
+    """
     links = new_links()
     value = entry.get("links") if isinstance(entry, dict) else None
     if not isinstance(value, dict):
         return links
-    general = value.get(PRESET_GENERAL)
-    if isinstance(general, dict):
-        links[PRESET_GENERAL][GENERAL_CLIP] = str(general.get(GENERAL_CLIP) or "")
+    links[PRESET_GENERAL] = _normalize_link(value.get(PRESET_GENERAL), library)
     player = value.get(PRESET_PLAYER)
     if isinstance(player, dict):
         for action, _ in PLAYER_ACTIONS:
             pair = player.get(action)
-            if isinstance(pair, dict):
-                for side, _ in SIDES:
-                    links[PRESET_PLAYER][action][side] = str(pair.get(side) or "")
+            if not isinstance(pair, dict):
+                continue
+            for side, _ in SIDES:
+                links[PRESET_PLAYER][action][side] = _normalize_link(
+                    pair.get(side), library
+                )
     return links
+
+
+def _normalize_link(value, library: dict | None) -> dict:
+    if isinstance(value, dict):
+        clip = str(value.get("clip") or "")
+        loop = value.get("loop")
+        loop = None if loop is None else bool(loop)
+    else:
+        clip = str(value or "")
+        loop = None
+    if loop is None:
+        loop = _library_loop(library, clip)
+    return {"clip": clip, "loop": bool(loop)}
+
+
+def _library_loop(library: dict | None, key: str) -> bool:
+    """老库条目自带的 loop：链接没写循环时拿它当默认。"""
+    clip = (library or {}).get(key)
+    return bool(clip.get("loop", True)) if isinstance(clip, dict) else True
 
 
 # ---- 读 / 写 -------------------------------------------------------
@@ -209,7 +238,6 @@ def to_settings(settings: dict, library: dict) -> dict:
         table[name] = {
             "frames": frames,
             "holds": [round(hold, 2) for hold in holds],
-            "loop": bool(clip.get("loop", True)),
         }
     settings[LIBRARY_KEY] = table
     player = settings.get("player")
@@ -239,49 +267,85 @@ def preset_of(entry: dict) -> str:
 
 
 def link_key(links: dict, preset: str, action: str = "", side: str = "") -> str:
+    return str(_link_value(links, preset, action, side).get("clip") or "")
+
+
+def link_loop(links: dict, preset: str, action: str = "", side: str = "") -> bool:
+    return bool(_link_value(links, preset, action, side).get("loop", True))
+
+
+def _link_value(links: dict, preset: str, action: str = "", side: str = "") -> dict:
     if preset == PRESET_GENERAL:
-        return str((links.get(PRESET_GENERAL) or {}).get(GENERAL_CLIP) or "")
+        value = links.get(PRESET_GENERAL)
+        return value if isinstance(value, dict) else {}
     pair = (links.get(PRESET_PLAYER) or {}).get(action)
     pair = pair if isinstance(pair, dict) else {}
-    return str(pair.get(side) or "")
+    value = pair.get(side)
+    return value if isinstance(value, dict) else {}
 
 
 def set_link(links: dict, preset: str, action: str, side: str, key: str) -> None:
+    """只改链接指向的剪辑，循环开关保留。"""
+    value = _link_value(links, preset, action, side)
+    loop = bool(value.get("loop", True))
+    _store_link(links, preset, action, side, {"clip": key, "loop": loop})
+
+
+def set_link_loop(links: dict, preset: str, action: str, side: str, loop: bool) -> None:
+    value = _link_value(links, preset, action, side)
+    _store_link(
+        links,
+        preset,
+        action,
+        side,
+        {"clip": str(value.get("clip") or ""), "loop": bool(loop)},
+    )
+
+
+def _store_link(links: dict, preset: str, action: str, side: str, value: dict) -> None:
     if preset == PRESET_GENERAL:
-        links.setdefault(PRESET_GENERAL, {})[GENERAL_CLIP] = key
+        links[PRESET_GENERAL] = dict(value)
         return
     player = links.setdefault(PRESET_PLAYER, {})
-    pair = player.setdefault(action, {"left": "", "right": ""})
-    pair[side] = key
+    pair = player.setdefault(action, {})
+    pair[side] = dict(value)
 
 
 def resolve_for_editor(
     library: dict, entry: dict, action: str | None = None, side: str = "right"
-) -> tuple[list, list, bool, str]:
+) -> tuple[list, list, bool, str, bool]:
     """编辑器画布用：这个动画对象现在该显示哪条剪辑。
 
-    返回 (帧路径, 每帧时长, 要不要镜像, 实际动作名)。玩家预设默认用 idle、右侧；
-    找不到剪辑就是空列表。
+    返回 (帧路径, 每帧时长, 要不要镜像, 实际动作名, 要不要循环)。玩家预设默认用
+    idle、右侧；找不到剪辑就是空列表。
     """
-    links = links_of(entry)
+    links = links_of(entry, library)
     if preset_of(entry) == PRESET_GENERAL:
         key = link_key(links, PRESET_GENERAL)
         clip = library.get(key)
         if clip is None:
-            return [], [], False, GENERAL_CLIP
-        return list(clip["frames"]), holds_of(clip), False, GENERAL_CLIP
+            return [], [], False, GENERAL_CLIP, True
+        return (
+            list(clip["frames"]),
+            holds_of(clip),
+            False,
+            GENERAL_CLIP,
+            link_loop(links, PRESET_GENERAL),
+        )
     action = action or "idle"
     for candidate in (action, "idle", *[name for name, _ in PLAYER_ACTIONS]):
         key = link_key(links, PRESET_PLAYER, candidate, side)
+        loop = link_loop(links, PRESET_PLAYER, candidate, side)
         mirror = False
         if not key:
             other = "left" if side == "right" else "right"
             key = link_key(links, PRESET_PLAYER, candidate, other)
+            loop = link_loop(links, PRESET_PLAYER, candidate, other)
             mirror = bool(key)
         clip = library.get(key) if key else None
         if clip is not None:
-            return list(clip["frames"]), holds_of(clip), mirror, candidate
-    return [], [], False, action
+            return list(clip["frames"]), holds_of(clip), mirror, candidate, loop
+    return [], [], False, action, True
 
 
 def referenced_keys(level_definition: dict) -> set:

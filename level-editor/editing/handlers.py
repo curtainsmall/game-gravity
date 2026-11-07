@@ -350,9 +350,6 @@ def handle_animation_edit_click(
     if geometry["remove"].collidepoint(position):
         editor.remove_animation_frame()
         return
-    if geometry["loop"].collidepoint(position):
-        editor.toggle_animation_edit_loop()
-        return
     if geometry["preview"].collidepoint(position):
         editor.toggle_animation_edit_preview()
         return
@@ -412,10 +409,23 @@ def handle_animation_link_click(
         return
     for row in geometry["rows"]:
         if row["kind"] == "general":
+            if row["loop"].collidepoint(position):
+                editor.toggle_animation_link_loop((PRESET_GENERAL, "", ""))
+                return
             if row["field"].collidepoint(position):
                 editor.toggle_animation_link_dropdown((PRESET_GENERAL, "", ""))
                 return
         else:
+            if row["left_loop"].collidepoint(position):
+                editor.toggle_animation_link_loop(
+                    (PRESET_PLAYER, row["action"], "left")
+                )
+                return
+            if row["right_loop"].collidepoint(position):
+                editor.toggle_animation_link_loop(
+                    (PRESET_PLAYER, row["action"], "right")
+                )
+                return
             if row["left"].collidepoint(position):
                 editor.toggle_animation_link_dropdown(
                     (PRESET_PLAYER, row["action"], "left")

@@ -8,7 +8,6 @@
 import pygame
 
 from core.animation import (
-    GENERAL_CLIP,
     PLAYER_ACTIONS,
     PRESET_GENERAL,
     PRESET_PLAYER,
@@ -201,8 +200,7 @@ def animation_edit_geometry(surface: pygame.Surface, editor) -> dict:
         cells.append({"index": index, "frame": frame, "thumb": thumb, "delay": delay, "hold": holds[index]})
     add = pygame.Rect(left, controls_y, 26, 24)
     remove = pygame.Rect(add.right + 4, controls_y, 26, 24)
-    loop = pygame.Rect(remove.right + 10, controls_y, 90, 24)
-    preview = pygame.Rect(loop.right + 8, controls_y, 82, 24)
+    preview = pygame.Rect(remove.right + 10, controls_y, 82, 24)
     delete = pygame.Rect(left, button_y, 96, BUTTON_HEIGHT)
     ok = pygame.Rect(panel.right - 16 - 76, button_y, 76, BUTTON_HEIGHT)
     cancel = pygame.Rect(ok.left - 8 - 76, button_y, 76, BUTTON_HEIGHT)
@@ -221,7 +219,6 @@ def animation_edit_geometry(surface: pygame.Surface, editor) -> dict:
         "scroll": scroll,
         "add": add,
         "remove": remove,
-        "loop": loop,
         "preview": preview,
         "delete": delete,
         "ok": ok,
@@ -289,8 +286,9 @@ def draw_animation_edit(
 
     draw_button(surface, font, geometry["add"], "＋")
     draw_button(surface, font, geometry["remove"], "−")
-    draw_checkbox(surface, font, geometry["loop"], "循环", bool(edit["loop"]), inset=4)
     draw_button(surface, font, geometry["preview"], "停止预览" if edit["previewing"] else "预览")
+    hint = font.render("循环在动画对象的链接上设置", True, DIM_TEXT)
+    surface.blit(hint, (geometry["preview"].right + 10, geometry["preview"].centery - 8))
     draw_button(surface, font, geometry["delete"], "删除动画")
     draw_button(surface, font, geometry["ok"], "确定")
     draw_button(surface, font, geometry["cancel"], "取消")
@@ -298,7 +296,10 @@ def draw_animation_edit(
     count = font.render(f"共 {len(edit['frames'])} 帧", True, DIM_TEXT)
     surface.blit(
         count,
-        (geometry["preview"].right + 10, geometry["preview"].centery - 8),
+        (
+            geometry["panel"].right - 16 - count.get_width(),
+            geometry["preview"].centery - 8,
+        ),
     )
 
 
@@ -377,23 +378,29 @@ def animation_link_geometry(surface: pygame.Surface, editor) -> dict:
     if link is not None:
         if link["preset"] == PRESET_GENERAL:
             y = rows_top
-            label = pygame.Rect(left, y, 110, 24)
-            field = pygame.Rect(left + 118, y, width - 118, 24)
-            rows.append({"kind": "general", "label": label, "field": field})
+            label = pygame.Rect(left, y, 70, 24)
+            loop = pygame.Rect(left + width - 64, y, 64, 24)
+            field = pygame.Rect(left + 78, y, loop.left - 8 - (left + 78), 24)
+            rows.append(
+                {"kind": "general", "label": label, "field": field, "loop": loop}
+            )
         else:
             for action, action_text in PLAYER_ACTIONS:
                 y = rows_top + len(rows) * LINK_ROW_HEIGHT
-                label = pygame.Rect(left, y, 84, 24)
-                half = (width - 84 - 8 - 8) // 2
-                left_field = pygame.Rect(left + 92, y, half, 24)
-                right_field = pygame.Rect(left_field.right + 8, y, half, 24)
+                label = pygame.Rect(left, y, 64, 24)
+                left_field = pygame.Rect(left + 72, y, 150, 24)
+                left_loop = pygame.Rect(left_field.right + 4, y, 58, 24)
+                right_field = pygame.Rect(left_loop.right + 8, y, 150, 24)
+                right_loop = pygame.Rect(right_field.right + 4, y, 58, 24)
                 rows.append(
                     {
                         "kind": "player",
                         "action": action,
                         "label": label,
                         "left": left_field,
+                        "left_loop": left_loop,
                         "right": right_field,
+                        "right_loop": right_loop,
                     }
                 )
     hint = pygame.Rect(left, rows_top + (1 if link is not None and link["preset"] == PRESET_GENERAL else len(rows)) * LINK_ROW_HEIGHT + 8, width, 20)
@@ -482,20 +489,45 @@ def draw_animation_link(
         )
         surface.blit(label, (row["label"].left, row["label"].centery - label.get_height() // 2))
         if row["kind"] == "general":
-            key = link["links"].get(PRESET_GENERAL, {}).get(GENERAL_CLIP, "")
+            value = link["links"].get(PRESET_GENERAL, {})
+            key = value.get("clip", "")
             _draw_key_field(surface, font, row["field"], key or "（未选择）", bool(key))
+            draw_checkbox(
+                surface, font, row["loop"], "循环", bool(value.get("loop", True))
+            )
         else:
             pair = link["links"].get(PRESET_PLAYER, {}).get(row["action"], {})
-            left_key = pair.get("left", "")
-            right_key = pair.get("right", "")
+            left_value = pair.get("left", {})
+            right_value = pair.get("right", {})
+            left_key = str(left_value.get("clip") or "")
+            right_key = str(right_value.get("clip") or "")
             _draw_key_field(
                 surface, font, row["left"], f"左：{left_key or '（未选择）'}", bool(left_key)
+            )
+            draw_checkbox(
+                surface,
+                font,
+                row["left_loop"],
+                "循环",
+                bool(left_value.get("loop", True)),
             )
             _draw_key_field(
                 surface, font, row["right"], f"右：{right_key or '（未选择）'}", bool(right_key)
             )
+            draw_checkbox(
+                surface,
+                font,
+                row["right_loop"],
+                "循环",
+                bool(right_value.get("loop", True)),
+            )
 
-    hint = font.render("「左」「右」各指一个动画库里的剪辑；确定后随关卡保存。", True, DIM_TEXT)
+    hint_text = (
+        "链接一个剪辑；勾上「循环」就循环播放，否则停在最后一帧。"
+        if link["preset"] == PRESET_GENERAL
+        else "「左」「右」各链接一个剪辑；勾上「循环」就循环播放，否则停在最后一帧。"
+    )
+    hint = font.render(hint_text, True, DIM_TEXT)
     surface.blit(
         hint,
         (geometry["hint"].left, geometry["hint"].centery - hint.get_height() // 2),
@@ -532,10 +564,13 @@ def animation_link_current(link: dict, field) -> str:
         return ""
     preset, action, side = field
     if preset == PRESET_GENERAL:
-        return str((link["links"].get(PRESET_GENERAL) or {}).get(GENERAL_CLIP) or "")
+        return str((link["links"].get(PRESET_GENERAL) or {}).get("clip") or "")
     pair = (link["links"].get(PRESET_PLAYER) or {}).get(action)
     pair = pair if isinstance(pair, dict) else {}
-    return str(pair.get(side) or "")
+    value = pair.get(side)
+    if isinstance(value, dict):
+        return str(value.get("clip") or "")
+    return str(value or "")
 
 
 def _draw_key_field(

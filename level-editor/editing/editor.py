@@ -693,7 +693,7 @@ class Editor:
         except (OSError, json.JSONDecodeError) as error:
             self.status = f"打开失败：{error}。"
             return
-        self.level = Level.from_definition(definition)
+        self.level = Level.from_definition(definition, self.animation_library)
         self.level.name = level_name_of(path)      # 关卡名就是文件名，json 里不写
         self.path = path
         self.level_in_view = True
@@ -1220,7 +1220,6 @@ class Editor:
             "name": name,
             "frames": list(clip["frames"]),
             "holds": list(clip["holds"]),
-            "loop": bool(clip.get("loop", True)),
             "selected": 0,
             "scroll": 0.0,
             "delay": None,
@@ -1263,7 +1262,6 @@ class Editor:
         self.game_animation_library[name] = {
             "frames": list(edit["frames"]),
             "holds": list(edit["holds"]),
-            "loop": bool(edit["loop"]),
         }
         self.animation_selected = name
         self.animation_edit = None
@@ -1541,13 +1539,6 @@ class Editor:
         edit["previewing"] = False
         self.status = f"第 {index + 1} 帧：停留 {edit['holds'][index]} 秒。"
 
-    def toggle_animation_edit_loop(self) -> None:
-        edit = self.animation_edit
-        if edit is None:
-            return
-        edit["loop"] = not bool(edit["loop"])
-        self.status = f"这条动画：{'循环' if edit['loop'] else '停在最后一帧'}。"
-
     def toggle_animation_edit_preview(self) -> None:
         edit = self.animation_edit
         if edit is None or not edit["frames"]:
@@ -1610,7 +1601,7 @@ class Editor:
     # ---- 画布上的动画对象 -------------------------------------------
     def animation_object_frame(self, entry: dict) -> tuple[str, bool] | None:
         """动画对象这一刻该画的图：(绝对路径, 要不要镜像)；没有就不画。"""
-        frames, _, mirror, _ = animation.resolve_for_editor(self.animation_library, entry)
+        frames, _, mirror, _, _ = animation.resolve_for_editor(self.animation_library, entry)
         if not frames:
             return None
         state = self.animation_object_states.get(id(entry)) or {}
@@ -1621,12 +1612,12 @@ class Editor:
         return path, mirror
 
     def advance_animation_objects(self, seconds: float) -> None:
-        """画布上的动画对象按自己的帧和时长播放（一直循环）。"""
+        """画布上的动画对象按自己的帧、时长和链接的 loop 播放。"""
         for entry in self.level.animation_objects:
-            frames, holds, _, action = animation.resolve_for_editor(
+            frames, holds, _, action, loop = animation.resolve_for_editor(
                 self.animation_library, entry
             )
-            signature = (action, tuple(frames))
+            signature = (action, tuple(frames), bool(loop))
             state = self.animation_object_states.get(id(entry))
             if state is None or state.get("signature") != signature:
                 state = {"signature": signature, "frame": 0, "elapsed": 0.0}
@@ -1641,7 +1632,13 @@ class Editor:
                 if state["elapsed"] < hold - 1e-9:
                     break
                 state["elapsed"] = max(0.0, state["elapsed"] - hold)
-                index = (index + 1) % len(frames)
+                if index + 1 < len(frames):
+                    index += 1
+                elif loop:
+                    index = 0
+                else:
+                    state["elapsed"] = 0.0
+                    break
             state["frame"] = index
 
     # ---- 动画对象：跟随与链接弹窗 -----------------------------------
@@ -1680,7 +1677,7 @@ class Editor:
         self.animation_link = {
             "entry": entry,
             "preset": animation.preset_of(entry),
-            "links": copy.deepcopy(animation.links_of(entry)),
+            "links": copy.deepcopy(animation.links_of(entry, self.animation_library)),
             "dropdown": None,
             "dropdown_scroll": 0,
         }
@@ -1715,6 +1712,25 @@ class Editor:
             return ""
         preset, action, side = field
         return animation.link_key(link["links"], preset, action, side)
+
+    def animation_link_loop(self, field: tuple) -> bool:
+        link = self.animation_link
+        if link is None:
+            return True
+        preset, action, side = field
+        return animation.link_loop(link["links"], preset, action, side)
+
+    def toggle_animation_link_loop(self, field: tuple) -> None:
+        link = self.animation_link
+        if link is None:
+            return
+        preset, action, side = field
+        animation.set_link_loop(
+            link["links"], preset, action, side, not animation.link_loop(
+                link["links"], preset, action, side
+            )
+        )
+        self.status = "链接循环：" + ("开" if self.animation_link_loop(field) else "关")
 
     def animation_link_options(self) -> list:
         return [("（未选择）", "")] + [

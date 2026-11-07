@@ -12,14 +12,15 @@ follow 就记下加载时和目标对象的相对位置，之后一起平移（�
 取不到再借本侧镜像，然后整体绕 z 轴旋转 180°；跟随玩家的通用预设也一起转。
 这样朝右走、倒挂时显示的是另一侧的身体动画，并且仍然朝着运动方向。
 
-链接里写的是动画库的键（见 animation.library）；键找不到、帧文件缺失都不画。
+链接里写的是动画库的键（见 animation.library）和这一条要不要循环（每条链接各管
+各的，左右可以不一样）；键找不到、帧文件缺失都不画。老数据的链接只有键、没有循环，
+这时用库里那条动画的 loop 当默认值。
 """
 
 from animation.clip import AnimationClip
 
 PRESET_GENERAL = "general"
 PRESET_PLAYER = "player"
-GENERAL_CLIP = "clip"
 PLAYER_ACTIONS = ("idle", "run", "jump", "fall")
 SIDES = ("left", "right")
 PLAYER_FOLLOW = ("@player", "player")
@@ -139,11 +140,11 @@ class AnimationSystem:
             and self.player.body is not None
             and self.player.body.gravity_direction_sign < 0
         )
-        clip, mirror = self._resolve(game_object, sprite, flipped)
+        clip, mirror, loop = self._resolve(game_object, sprite, flipped)
         if clip is None:
             render.texture_path = None
             return
-        self._advance(sprite, clip, delta_seconds)
+        self._advance(sprite, clip, delta_seconds, loop)
         render.texture_path = clip.frames[sprite.frame_index]
         # 倒挂时绕 z 轴转 180°；再按需水平镜像，合起来就是“先镜像再转”或“转后再镜像”
         render.texture_face = "down" if flipped else "up"
@@ -152,10 +153,13 @@ class AnimationSystem:
     def _resolve(
         self, game_object, sprite: AnimationSprite, gravity_flipped: bool
     ) -> tuple:
-        """这一帧要播的剪辑和要不要水平镜像；没有就 (None, False)。"""
+        """这一帧要播的剪辑、要不要水平镜像、要不要循环；没有就 (None, False, True)。"""
         if sprite.preset == PRESET_GENERAL:
-            key = _link_value(sprite.links.get("general"), GENERAL_CLIP)
-            return self.clips.get(key) if key else None, False
+            key, loop = _link_parts(sprite.links.get("general"))
+            clip = self.clips.get(key) if key else None
+            if clip is None:
+                return None, False, True
+            return clip, False, clip.loop if loop is None else loop
         target = self.targets.get(id(game_object))
         if target is not None and target is self.player and self.player is not None:
             body = self.player.body
@@ -173,23 +177,25 @@ class AnimationSystem:
             pair = pairs.get(candidate)
             if not isinstance(pair, dict):
                 continue
-            key = str(pair.get(side) or "")
+            key, loop = _link_parts(pair.get(side))
             mirror = False
             if not key:
                 other = "left" if side == "right" else "right"
-                key = str(pair.get(other) or "")
+                key, loop = _link_parts(pair.get(other))
                 mirror = bool(key)
             if not key:
                 continue
             clip = self.clips.get(key)
             if clip is not None:
                 sprite.reset(candidate, side, key)
-                return clip, mirror
+                return clip, mirror, clip.loop if loop is None else loop
         sprite.reset(action, side, "")
-        return None, False
+        return None, False, True
 
     @staticmethod
-    def _advance(sprite: AnimationSprite, clip: AnimationClip, delta_seconds: float) -> None:
+    def _advance(
+        sprite: AnimationSprite, clip: AnimationClip, delta_seconds: float, loop: bool
+    ) -> None:
         count = len(clip.frames)
         if count <= 1:
             sprite.frame_index = 0
@@ -201,7 +207,7 @@ class AnimationSystem:
             sprite.elapsed = max(0.0, sprite.elapsed - clip.hold(index))
             if index + 1 < count:
                 index += 1
-            elif clip.loop:
+            elif loop:
                 index = 0
             else:
                 index = count - 1
@@ -210,7 +216,10 @@ class AnimationSystem:
         sprite.frame_index = index
 
 
-def _link_value(pair, key: str) -> str:
-    if not isinstance(pair, dict):
-        return ""
-    return str(pair.get(key) or "")
+def _link_parts(value) -> tuple:
+    """一条链接 → (剪辑键, 循环或 None)。老数据直接写字符串、没有循环时返回 None。"""
+    if isinstance(value, dict):
+        key = str(value.get("clip") or "")
+        loop = value.get("loop")
+        return key, (None if loop is None else bool(loop))
+    return str(value or ""), None
