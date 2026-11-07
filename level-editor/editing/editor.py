@@ -12,7 +12,6 @@ from core.constants import (
     COLS,
     FACE_LABELS,
     FACE_ORDER,
-    GAME_CARD_SCROLL_STEP,
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
     GAME_SETTINGS_TABS,
@@ -52,6 +51,7 @@ from core.constants import (
     NUMBER_TEXT_MAX_LENGTH,
     PORTAL_SIZE,
     ROWS,
+    SCROLL_STEP,
     SETTINGS_CUTSCENE_TAB,
     SETTINGS_TABS,
     TOOL_BLOCK,
@@ -121,6 +121,7 @@ class Editor:
         self.pan_drag: tuple | None = None
         self.dialog: dict | None = None
         self.dialog_field = 0
+        self.detail_scroll = 0.0                 # 属性面板内容滚了多少像素
         self.dropdown_field: int | None = None   # 正在展开下拉列表的选择型字段
         self.name_focused = False
         self.number_buffer: str | None = None   # 正在键盘输入的数字字段，None 表示没在输入
@@ -147,8 +148,9 @@ class Editor:
         self.cutscene: dict | None = None           # 过场页编辑中的状态
         self.cutscene_scope = "level"               # "level" / "game"：声音选项的叫法
         self.cutscene_field = 0                     # 过场页选中的格（cell 下标）
-        self.cutscene_scroll = 0                    # 过场卡片滚到第几张
-        self.cutscene_visible = cutscene.VISIBLE_CARDS  # 过场卡片一屏能看见几张（几何算出来）
+        self.cutscene_scroll = 0                    # 过场卡片滚了多少像素
+        self.cutscene_area_height = 0.0             # 过场卡片可视区有多高（几何算出来）
+        self.cutscene_card_step = 0.0               # 过场卡片一行占多高（几何算出来）
         self.game_player: dict = {}                # game.json 里的玩家参数（跳高、速度）
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
@@ -164,7 +166,7 @@ class Editor:
         self.game_sound: dict = {}                 # 声音页：键 → {bgm, loop, fade_in, fade_out}
         self.preview = sound.Preview()             # 试听（和游戏共用一个混音器）
         self.level_select_open = False             # 关卡列表浮层
-        self.level_select_scroll = 0               # 列表滚到第几行
+        self.level_select_scroll = 0               # 关卡列表滚了多少像素
         self.pending_switch: tuple[str, str] | None = None  # 等确认的切换：("level"/"game"/"new", 目标)
         self.save_notice = ""                      # 存完弹的那句提示：这关缺起点/终点（空串=不弹）
         self.confirm_quit = False
@@ -594,8 +596,11 @@ class Editor:
         self.view_menu_open = False
         self.file_menu_open = False
 
-    def scroll_level_select(self, delta: int) -> None:
-        self.level_select_scroll = max(0, self.level_select_scroll + delta)
+    def scroll_level_select(self, delta: float) -> None:
+        """关卡列表的滚轮：按像素滚（上界在绘制时按内容高度夹住）。"""
+        self.level_select_scroll = max(
+            0.0, self.level_select_scroll + float(delta) * SCROLL_STEP
+        )
 
     def choose_level(self, path: str) -> None:
         """在列表里选一关：有没保存的修改就先问，别直接丢掉。"""
@@ -1272,7 +1277,7 @@ class Editor:
         if self.game_animation_tab():
             return                      # 玩家动画页是固定的五行，不用滚
         self.game_card_scroll = max(
-            0.0, self.game_card_scroll + float(delta) * GAME_CARD_SCROLL_STEP
+            0.0, self.game_card_scroll + float(delta) * SCROLL_STEP
         )
 
     def add_credit_card(self) -> None:
@@ -1443,19 +1448,23 @@ class Editor:
     def keep_cutscene_visible(self) -> None:
         """光标落在某张图的格子上时，把那张卡片滚进视野。"""
         index = self.cutscene_picture_index()
-        if index is None:
+        if index is None or self.cutscene_card_step <= 0.0:
             return
-        visible = max(1, self.cutscene_visible)
-        if index < self.cutscene_scroll:
-            self.cutscene_scroll = index
-        elif index >= self.cutscene_scroll + visible:
-            self.cutscene_scroll = index - visible + 1
+        top = index * self.cutscene_card_step
+        bottom = top + self.cutscene_card_step
+        height = max(1.0, self.cutscene_area_height)
+        if top < self.cutscene_scroll:
+            self.cutscene_scroll = top
+        elif bottom > self.cutscene_scroll + height:
+            self.cutscene_scroll = bottom - height
 
-    def scroll_cutscene(self, delta: int) -> None:
+    def scroll_cutscene(self, delta: float) -> None:
+        """过场卡片的滚轮：按像素滚（上界在绘制时按内容高度夹住）。"""
         if self.cutscene is None:
             return
-        last = max(0, len(self.cutscene["pictures"]) - 1)
-        self.cutscene_scroll = max(0, min(self.cutscene_scroll + delta, last))
+        self.cutscene_scroll = max(
+            0.0, self.cutscene_scroll + float(delta) * SCROLL_STEP
+        )
 
     def adjust_cutscene(self, delta: int) -> None:
         """←→ 和面板上的加减：时间 ±0.5，复选框/声音模式切换。"""
@@ -1521,7 +1530,6 @@ class Editor:
         self.cutscene["pictures"].append(cutscene.new_picture())
         index = len(self.cutscene["pictures"]) - 1
         self.set_cutscene_field(("path", index))
-        self.cutscene_scroll = max(0, index - max(1, self.cutscene_visible) + 1)
         self.status = "已添加一张过场图，请填路径和三个时间。"
 
     def remove_cutscene_picture(self, index: int) -> None:
@@ -1529,9 +1537,7 @@ class Editor:
             return
         del self.cutscene["pictures"][index]
         self.cutscene_field = min(self.cutscene_field, max(0, len(self.cutscene_cells()) - 1))
-        self.cutscene_scroll = max(
-            0, min(self.cutscene_scroll, max(0, len(self.cutscene["pictures"]) - 1))
-        )
+        self.keep_cutscene_visible()
         self.status = "已删除一张过场图。"
 
     def move_cutscene_picture(self, index: int, delta: int) -> None:
@@ -1805,6 +1811,7 @@ class Editor:
         self.selection = [(kind, entry)]
         self.dialog = {"kind": kind, "entry": entry}
         self.dialog_field = 0
+        self.detail_scroll = 0.0
         self.dropdown_field = None
         self.name_focused = False
         self.number_buffer = None
@@ -1814,6 +1821,7 @@ class Editor:
         """多选：面板只列清单和数量，不给属性；正好一个时回到属性面板。"""
         self.selection = list(pairs)
         self.pick_menu = None
+        self.detail_scroll = 0.0
         if len(self.selection) == 1:
             kind, entry = self.selection[0]
             self.dialog = {"kind": kind, "entry": entry}
@@ -1995,9 +2003,51 @@ class Editor:
 
     def close_dialog(self) -> None:
         self.dialog = None
+        self.detail_scroll = 0.0
         self.dropdown_field = None
         self.name_focused = False
         self.number_buffer = None
+
+    def scroll_detail(self, delta: float) -> None:
+        """属性面板的滚轮：内容按像素上下滚（上界在几何里按内容高度夹住）。"""
+        self.detail_scroll = max(0.0, self.detail_scroll + float(delta) * SCROLL_STEP)
+
+    def keep_detail_focus_visible(self, surface) -> None:
+        """上下键换格时，把选中的格子滚进属性面板的可视区。"""
+        if self.dialog is None:
+            return
+        from view import panel as panel_view
+
+        panel = panel_view.detail_panel_rect(surface)
+        viewport = panel_view.detail_viewport(panel)
+        rect = None
+        if self.name_focused:
+            rect = panel_view.detail_slot_rect(surface, self, "name")
+        else:
+            for row_rect, kind, index in panel_view.detail_slots(surface, self):
+                if kind == "row" and index == self.dialog_field:
+                    rect = row_rect
+                    break
+            if rect is None:
+                trigger = panel_view.trigger_geometry(surface, self)
+                for layout in trigger["cards"] if trigger is not None else []:
+                    for part in TRIGGER_PARTS:
+                        if self.trigger_field(layout["index"], part) == self.dialog_field:
+                            rect = layout[part]
+                            break
+                    if rect is not None:
+                        break
+        if rect is None or viewport.height <= 0:
+            return
+        _, max_scroll = panel_view.detail_scroll_limits(surface, self)
+        if rect.top < viewport.top:
+            self.detail_scroll = max(
+                0.0, self.detail_scroll - (viewport.top - rect.top)
+            )
+        elif rect.bottom > viewport.bottom:
+            self.detail_scroll = min(
+                max_scroll, self.detail_scroll + (rect.bottom - viewport.bottom)
+            )
 
     # ---- 名称输入 ---------------------------------------------------
     def focus_name(self) -> None:
@@ -2135,6 +2185,7 @@ class Editor:
         self.dialog_field = self.trigger_field(len(cards) - 1, "source")
         self.dropdown_field = None
         self.number_buffer = None
+        self.detail_scroll = float("inf")   # 下一帧按内容高度夹到底，新卡片就在眼前
         self.dirty = True
         self.status = "已添加一条触发行为，请选择来源。"
 

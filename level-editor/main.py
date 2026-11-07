@@ -120,7 +120,7 @@ def run() -> None:
                             editor.create_game() if action == "create" else editor.open_game()
                             break
             elif editor.level_select_open:
-                # 关卡列表：点一行切过去，另有「新建关卡」「关闭」，滚轮翻页
+                # 关卡列表：点一行切过去，另有「新建关卡」「关闭」，滚轮上下滚
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.level_select_open = False
@@ -131,12 +131,12 @@ def run() -> None:
                     elif event.key == pygame.K_DOWN:
                         editor.scroll_level_select(1)
                 elif event.type == pygame.MOUSEWHEEL:
-                    editor.scroll_level_select(-3 * event.y)
+                    editor.scroll_level_select(-event.y)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     handle_level_select_click(screen, editor, event.pos)
             elif editor.settings is not None:
                 # 关卡设置：Tab 切常规/玩家/声音/过场，↑↓ 选字段，←→ 调值，敲字改路径，
-                # 过场页的图片卡片用滚轮翻
+                # 过场页的图片卡片用滚轮上下滚
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         editor.close_settings(False)
@@ -277,6 +277,11 @@ def run() -> None:
             elif event.type == pygame.MOUSEWHEEL:
                 if not editor.level_in_view:
                     continue
+                if editor.dialog is not None and detail_panel_rect(screen).collidepoint(
+                    pygame.mouse.get_pos()
+                ):
+                    editor.scroll_detail(-event.y)      # 光标在属性面板上：滚面板而不是缩放
+                    continue
                 if event.y:
                     factor = ZOOM_STEP if event.y > 0 else 1.0 / ZOOM_STEP
                     new_tile = min(max(layout.tile * factor, layout.min_tile), layout.max_tile)
@@ -394,8 +399,10 @@ def run() -> None:
                     editor.blur_number()
                 elif editor.dialog is not None and event.key == pygame.K_UP:
                     editor.move_dialog_field(-1)
+                    editor.keep_detail_focus_visible(screen)
                 elif editor.dialog is not None and event.key == pygame.K_DOWN:
                     editor.move_dialog_field(1)
+                    editor.keep_detail_focus_visible(screen)
                 elif editor.dialog is not None and event.key == pygame.K_LEFT:
                     editor.adjust_dialog(-1)
                 elif editor.dialog is not None and event.key == pygame.K_RIGHT:

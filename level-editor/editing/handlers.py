@@ -10,14 +10,17 @@ from view.chrome import create_menu_rects, toolbar_rects
 from view.modals import (
     game_settings_geometry,
     level_select_geometry,
+    level_select_scroll,
     settings_geometry,
     switch_geometry,
 )
 from view.panel import (
     detail_button_rects,
     detail_image_rect,
+    detail_panel_rect,
     detail_row_rects,
     detail_slot_rect,
+    detail_viewport,
     dropdown_rects,
     field_rect,
     selection_panel_buttons,
@@ -66,9 +69,8 @@ def handle_level_select_click(
         return
     if not area.collidepoint(position):
         return
-    scroll = max(0, min(editor.level_select_scroll, max(0, len(files) - rows_visible)))
-    row = (position[1] - area.top) // ROW_HEIGHT
-    index = scroll + int(row)
+    scroll = level_select_scroll(editor, len(files), area)
+    index = int((position[1] - area.top + scroll) // ROW_HEIGHT)
     if 0 <= index < len(files):
         editor.choose_level(files[index])
 
@@ -130,6 +132,8 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
     if close_rect.collidepoint(position):
         editor.close_dialog()
         return
+    if not detail_viewport(detail_panel_rect(surface)).collidepoint(position):
+        return                      # 内容区外面（底部按钮那条、标题）不参与命中
     image_rect = detail_image_rect(surface, editor)
     if image_rect is not None and image_rect.collidepoint(position):
         editor.blur_name()
@@ -223,6 +227,8 @@ def handle_cutscene_click(editor: Editor, position: tuple, page: dict) -> None:
     if page["add"].collidepoint(position):
         editor.add_cutscene_picture()
         return
+    if not page["cards_area"].collidepoint(position):
+        return                      # 滚动区外面的那半张卡片点不中
     for layout in page["cards"]:
         index = layout["index"]
         if layout["browse"].collidepoint(position):

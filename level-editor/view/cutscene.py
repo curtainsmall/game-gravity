@@ -19,6 +19,7 @@ from core.constants import (
 from view.widgets import (
     draw_button,
     draw_checkbox,
+    draw_scrollbar,
     draw_stepper,
     stepper_rects,
 )
@@ -87,14 +88,19 @@ def cutscene_geometry(
     add_y = panel.bottom - 12 - BUTTON_HEIGHT
     cards_area = pygame.Rect(left, cards_top, width, max(0, add_y - 8 - cards_top))
     row_step = CARD_HEIGHT + CARD_GAP
-    visible = max(1, cards_area.height // row_step)
     count = len(state["pictures"])
-    scroll = max(0, min(editor.cutscene_scroll, max(0, count - visible)))
-    editor.cutscene_visible = visible   # 键盘上下走时按实际能看见的张数夹住光标
+    content_height = max(0.0, count * row_step - CARD_GAP)
+    scroll = max(
+        0.0, min(float(editor.cutscene_scroll), max(0.0, content_height - cards_area.height))
+    )
+    editor.cutscene_scroll = scroll
+    editor.cutscene_area_height = float(cards_area.height)
+    editor.cutscene_card_step = float(row_step)
 
     cards = []
-    for position, index in enumerate(range(scroll, min(count, scroll + visible))):
-        card = pygame.Rect(left, cards_area.top + position * row_step, width, CARD_HEIGHT)
+    top = cards_area.top - round(scroll)
+    for index in range(count):
+        card = pygame.Rect(left, top + index * row_step, width, CARD_HEIGHT)
         remove = pygame.Rect(
             card.right - CARD_PAD - CARD_ICON, card.top + CARD_PAD, CARD_ICON, CARD_ICON
         )
@@ -145,8 +151,9 @@ def cutscene_geometry(
         "label_top": label_top,
         "cards_area": cards_area,
         "cards": cards,
-        "visible": visible,
+        "visible": max(1, round(cards_area.height / row_step)),
         "scroll": scroll,
+        "content_height": content_height,
         "count": count,
         "add": pygame.Rect(left, add_y, 110, BUTTON_HEIGHT),
     }
@@ -255,8 +262,8 @@ def draw_cutscene_page(
             draw_stepper(surface, right, 1)
 
     label = "图片（每张图一张卡片；顺序就是播放顺序）"
-    if geometry["count"] > geometry["visible"]:
-        label += f"   滚轮翻卡片（{geometry['scroll'] + 1} / {geometry['count']}）"
+    if geometry["content_height"] > geometry["cards_area"].height:
+        label += "   滚轮上下滚动"
     surface.blit(
         font.render(label, True, DIM_TEXT), (geometry["cards_area"].left, geometry["label_top"] + 2)
     )
@@ -298,5 +305,6 @@ def draw_cutscene_page(
             draw_stepper(surface, left, -1)
             draw_stepper(surface, right, 1)
     surface.set_clip(previous_clip)
+    draw_scrollbar(surface, geometry["cards_area"], geometry["content_height"], geometry["scroll"])
 
     draw_button(surface, font, geometry["add"], "添加图片")

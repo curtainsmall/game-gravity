@@ -21,7 +21,6 @@ SOUND_MODE_NONE = "none"
 SOUND_MODE_SCENE = "scene"
 SOUND_MODE_CUSTOM = "custom"
 SOUND_ORDER = (SOUND_MODE_NONE, SOUND_MODE_SCENE, SOUND_MODE_CUSTOM)
-VISIBLE_CARDS = 3   # 键盘滚动时名义上能看见几张卡片（几何会按实际高度再夹一次）
 SOUND_MODE_LABELS = {
     "level": {"none": "无", "scene": "跟随本关", "custom": "指定"},
     "game": {"none": "无", "scene": "跟随制作名单", "custom": "指定"},

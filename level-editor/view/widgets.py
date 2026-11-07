@@ -88,6 +88,26 @@ def stepper_rects(cell: pygame.Rect) -> tuple:
     return left, right
 
 
+def draw_scrollbar(
+    surface: pygame.Surface, area: pygame.Rect, content_height: float, scroll: float
+) -> None:
+    """内容比可视区高时，在右边画一条滚动条（轨道 + 按比例的滑块）。"""
+    if content_height <= area.height:
+        return
+    track = pygame.Rect(area.right - 4, area.top, 4, area.height)
+    pygame.draw.rect(surface, (60, 60, 66), track)
+    thumb_height = max(24, round(area.height * area.height / content_height))
+    max_scroll = content_height - area.height
+    offset = 0
+    if max_scroll > 0:
+        offset = round((area.height - thumb_height) * (scroll / max_scroll))
+    pygame.draw.rect(
+        surface,
+        (150, 150, 160),
+        pygame.Rect(track.left, track.top + offset, track.width, thumb_height),
+    )
+
+
 def place_panel(surface: pygame.Surface, panel: pygame.Rect) -> pygame.Rect:
     """居中摆放，并夹在信息栏与状态栏之间。"""
     panel.center = (surface.get_width() // 2, surface.get_height() // 2)

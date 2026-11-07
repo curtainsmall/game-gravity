@@ -1,4 +1,4 @@
-"""右侧详细面板：槽位几何、绘制与命中。"""
+"""右侧详细面板：槽位几何、绘制与命中。内容（属性行和触发器卡片）多了按像素滚动，底部按钮固定。"""
 
 import pygame
 from typing import TYPE_CHECKING
@@ -18,28 +18,82 @@ from core.constants import (
     ROW_HEIGHT,
     TEXT,
 )
-from view.widgets import draw_button, draw_checkbox, draw_stepper, stepper_rects
+from view.widgets import (
+    draw_button,
+    draw_checkbox,
+    draw_scrollbar,
+    draw_stepper,
+    stepper_rects,
+)
 
 if TYPE_CHECKING:
     from editing.editor import Editor
+
+# 属性面板里能滚的内容区：标题下面到底部按钮上面，底部按钮固定不动
+DETAIL_CONTENT_TOP = 28
+DETAIL_CONTENT_BOTTOM = 34
+DETAIL_SLOT_STEP = ROW_HEIGHT   # 每个槽位（名称 / 属性行 / 选择图片）占多高
 
 TRIGGER_LABEL_HEIGHT = 18
 TRIGGER_CARD_HEIGHT = ROW_HEIGHT * 2     # 一行来源 / 行为，一行模式
 TRIGGER_CARD_GAP = 2
 TRIGGER_ADD_WIDTH = 140
+TRIGGER_TOP_GAP = 10           # 属性行和触发器标题之间
+TRIGGER_ADD_HEIGHT = ROW_HEIGHT
+
+
+def detail_viewport(panel: pygame.Rect) -> pygame.Rect:
+    """属性面板里可滚的内容区：标题下面到底部按钮上面。"""
+    top = panel.top + DETAIL_CONTENT_TOP
+    bottom = panel.bottom - DETAIL_CONTENT_BOTTOM
+    return pygame.Rect(panel.left, top, panel.width, max(0, bottom - top))
+
+
+def _detail_slot_kinds(editor) -> list:
+    """面板从上到下的槽位：名称、属性行（贴图在第 5 行后面插一个「选择图片」）。"""
+    slots = []
+    kind = editor.dialog["kind"] if editor.dialog else None
+    if kind in KIND_HAS_NAME:
+        slots.append(("name", None))
+    for index in range(len(editor.dialog_rows())):
+        slots.append(("row", index))
+        if kind == KIND_TEXTURE and index == 4:
+            slots.append(("image", None))
+    return slots
+
+
+def detail_content_height(editor) -> float:
+    """内容总高度：属性槽位 + （有触发器时的）触发器区，用来夹住滚动量。"""
+    height = max(0.0, len(_detail_slot_kinds(editor)) * DETAIL_SLOT_STEP - 2)
+    cards = editor.trigger_cards()
+    if cards is not None:
+        height += TRIGGER_TOP_GAP + TRIGGER_LABEL_HEIGHT + 2
+        height += len(cards) * (TRIGGER_CARD_HEIGHT + TRIGGER_CARD_GAP)
+        height += 2 + TRIGGER_ADD_HEIGHT
+    return height
+
+
+def detail_scroll_limits(surface: pygame.Surface, editor: "Editor") -> tuple[float, float]:
+    """返回 (当前滚动量, 最大滚动量)；几何、绘制和点击都用这一套夹取。"""
+    panel = detail_panel_rect(surface)
+    viewport = detail_viewport(panel)
+    max_scroll = max(0.0, detail_content_height(editor) - viewport.height)
+    scroll = max(0.0, min(float(editor.detail_scroll), max_scroll))
+    editor.detail_scroll = scroll
+    return scroll, max_scroll
 
 
 def trigger_geometry(surface: pygame.Surface, editor: "Editor") -> dict | None:
     """属性行下面的触发器区：标题、每张卡片（来源 / 行为 / − / 模式）和「添加」按钮。
 
-    这个种类不接触发器时返回 None；卡片顺着属性行往下排，数量多了会顶到底部按钮。
+    这个种类不接触发器时返回 None；卡片顺着属性行往下排，多了就跟着面板一起滚。
     """
     cards = editor.trigger_cards()
     if cards is None:
         return None
     panel = detail_panel_rect(surface)
     slots = detail_slots(surface, editor)
-    top = slots[-1][0].bottom + 10 if slots else panel.top + 28
+    top = slots[-1][0].bottom + TRIGGER_TOP_GAP if slots else panel.top + DETAIL_CONTENT_TOP
     label = pygame.Rect(
         panel.left + 10, top, panel.width - 20, TRIGGER_LABEL_HEIGHT
     )
@@ -95,27 +149,24 @@ def detail_slots(surface: pygame.Surface, editor: Editor) -> list:
     """面板从上到下的槽位：('name', None) / ('row', 字段下标) / ('image', None)。
 
     有名字的对象最上面是名称输入框；贴图的「图片」下面插一个「选择图片」按钮。
+    内容按像素滚动，超出可视区的部分绘制时裁掉。
     """
     panel = detail_panel_rect(surface)
-    count = len(editor.dialog_rows())
-    kind = editor.dialog["kind"] if editor.dialog else None
-    slots = []
-    if kind in KIND_HAS_NAME:
-        slots.append(("name", None))
-    for index in range(count):
-        slots.append(("row", index))
-        if kind == KIND_TEXTURE and index == 4:
-            slots.append(("image", None))
-    top = panel.top + 28
-    bottom = panel.bottom - 34
-    height = min(ROW_HEIGHT, max(16, (bottom - top) // max(1, len(slots))))
+    viewport = detail_viewport(panel)
+    scroll, _ = detail_scroll_limits(surface, editor)
+    top = viewport.top - round(scroll)
     return [
         (
-            pygame.Rect(panel.left + 10, top + position * height, panel.width - 20, height - 2),
+            pygame.Rect(
+                panel.left + 10,
+                top + position * DETAIL_SLOT_STEP,
+                panel.width - 20,
+                DETAIL_SLOT_STEP - 2,
+            ),
             slot_kind,
             index,
         )
-        for position, (slot_kind, index) in enumerate(slots)
+        for position, (slot_kind, index) in enumerate(_detail_slot_kinds(editor))
     ]
 
 
@@ -337,6 +388,12 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
     pygame.draw.rect(surface, DIALOG_BORDER, panel, 1)
     surface.blit(font.render(editor.dialog_title(), True, TEXT), (panel.left + 10, panel.top + 8))
 
+    # 内容区（标题下面到底部按钮上面）按像素滚动：画的时候裁掉超出部分
+    viewport = detail_viewport(panel)
+    scroll, _ = detail_scroll_limits(surface, editor)
+    previous_clip = surface.get_clip()
+    surface.set_clip(viewport)
+
     rows = editor.dialog_rows()
     for rect, index in detail_row_rects(surface, editor):
         label, value = rows[index]
@@ -398,13 +455,6 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
     if trigger is not None:
         draw_trigger_section(surface, font, editor, trigger)
 
-    delete_rect, close_rect, copy_rect = detail_button_rects(surface, editor)
-    texture = editor.dialog is not None and editor.dialog["kind"] == KIND_TEXTURE
-    draw_button(surface, font, delete_rect, "删除" if texture else "删除对象")
-    if copy_rect is not None:
-        draw_button(surface, font, copy_rect, "复制")
-    draw_button(surface, font, close_rect, "关闭")
-
     image_rect = detail_image_rect(surface, editor)
     if image_rect is not None:
         hovered = image_rect.collidepoint(pygame.mouse.get_pos())
@@ -412,6 +462,17 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
         pygame.draw.rect(surface, DIALOG_BORDER, image_rect, 1)
         text = font.render("选择图片", True, TEXT)
         surface.blit(text, (image_rect.left + 8, image_rect.centery - text.get_height() // 2))
+
+    surface.set_clip(previous_clip)
+    draw_scrollbar(surface, viewport, detail_content_height(editor), scroll)
+
+    # 底部按钮固定在面板底部，不跟着内容滚
+    delete_rect, close_rect, copy_rect = detail_button_rects(surface, editor)
+    texture = editor.dialog is not None and editor.dialog["kind"] == KIND_TEXTURE
+    draw_button(surface, font, delete_rect, "删除" if texture else "删除对象")
+    if copy_rect is not None:
+        draw_button(surface, font, copy_rect, "复制")
+    draw_button(surface, font, close_rect, "关闭")
 
     # 展开的下拉列表画在最上面，盖住下面的行和按钮
     if editor.dropdown_field is None:

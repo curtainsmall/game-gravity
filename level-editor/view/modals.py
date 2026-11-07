@@ -31,6 +31,7 @@ from view.widgets import (
     draw_button,
     draw_checkbox,
     draw_panel,
+    draw_scrollbar,
     draw_stepper,
     place_panel,
     stepper_rects,
@@ -89,6 +90,15 @@ def level_select_geometry(surface: pygame.Surface, count: int) -> tuple:
     return panel, area, rows_visible, create_rect, close_rect
 
 
+def level_select_scroll(editor: "Editor", count: int, area: pygame.Rect) -> float:
+    """关卡列表滚到多少像素：绘制和点击都用这一套夹取，结果写回编辑器。"""
+    content = count * ROW_HEIGHT
+    max_scroll = max(0.0, content - area.height)
+    scroll = max(0.0, min(float(editor.level_select_scroll), max_scroll))
+    editor.level_select_scroll = scroll
+    return scroll
+
+
 def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
     files = editor.level_files()
     panel, area, rows_visible, create_rect, close_rect = level_select_geometry(surface, len(files))
@@ -102,30 +112,24 @@ def draw_level_select(surface: pygame.Surface, editor: Editor, font: pygame.font
         text = font.render("levels/ 目录中暂无关卡，请点击「新建关卡」创建。", True, DIM_TEXT)
         surface.blit(text, (area.left + 6, area.top + 6))
     else:
-        # 列表超出窗口时按 scroll 翻页，只画能看见的几行
-        scroll = max(0, min(editor.level_select_scroll, max(0, len(files) - rows_visible)))
+        # 列表按像素滚动：行从 area.top - 滚动量 开始摆，超出可视区的靠裁剪
+        scroll = level_select_scroll(editor, len(files), area)
         previous = surface.get_clip()
         surface.set_clip(area)
         mouse = pygame.mouse.get_pos()
         current = os.path.normpath(editor.path) if editor.path else None
-        for row in range(rows_visible):
-            index = scroll + row
-            if index >= len(files):
-                break
-            path = files[index]
-            rect = pygame.Rect(area.left, area.top + row * ROW_HEIGHT, area.width, ROW_HEIGHT)
+        top = area.top - round(scroll)
+        for index, path in enumerate(files):
+            rect = pygame.Rect(area.left, top + index * ROW_HEIGHT, area.width, ROW_HEIGHT)
             if rect.collidepoint(mouse):
                 pygame.draw.rect(surface, (100, 100, 110), rect)
             mark = "✓" if current is not None and os.path.normpath(path) == current else "  "
             text = font.render(f"{mark} {level_name_of(path)}", True, TEXT)
             surface.blit(text, (rect.left + 6, rect.centery - text.get_height() // 2))
         surface.set_clip(previous)
-        if len(files) > rows_visible:
-            more = font.render(
-                f"{scroll + 1}-{min(scroll + rows_visible, len(files))} / {len(files)}（滚轮翻页）",
-                True,
-                DIM_TEXT,
-            )
+        draw_scrollbar(surface, area, len(files) * ROW_HEIGHT, scroll)
+        if len(files) * ROW_HEIGHT > area.height:
+            more = font.render("滚轮上下滚动", True, DIM_TEXT)
             surface.blit(more, (area.right - more.get_width(), area.bottom + 2))
 
     draw_button(surface, font, create_rect, "新建关卡")
@@ -736,24 +740,6 @@ def _draw_game_general(
     surface.blit(note, (geometry["panel"].left + MARGIN, geometry["note_top"]))
 
 
-def _draw_scrollbar(
-    surface: pygame.Surface, area: pygame.Rect, content_height: float, scroll: float
-) -> None:
-    """内容比可视区高时，在右边画一条滚动条（轨道 + 滑块）。"""
-    if content_height <= area.height:
-        return
-    track = pygame.Rect(area.right - 4, area.top, 4, area.height)
-    pygame.draw.rect(surface, (60, 60, 66), track)
-    thumb_height = max(24, round(area.height * area.height / content_height))
-    max_scroll = content_height - area.height
-    offset = 0
-    if max_scroll > 0:
-        offset = round((area.height - thumb_height) * (scroll / max_scroll))
-    pygame.draw.rect(
-        surface, (150, 150, 160), pygame.Rect(track.left, track.top + offset, track.width, thumb_height)
-    )
-
-
 def _draw_game_credits(
     surface: pygame.Surface, editor: Editor, font: pygame.font.Font, geometry: dict
 ) -> None:
@@ -792,7 +778,7 @@ def _draw_game_credits(
             draw_icon_button(surface, layout["minus"][line], "−", font)
         draw_icon_button(surface, layout["plus"], "＋", font)
     surface.set_clip(previous_clip)
-    _draw_scrollbar(surface, cards_area, geometry["content_height"], geometry["scroll"])
+    draw_scrollbar(surface, cards_area, geometry["content_height"], geometry["scroll"])
 
     note = font.render(
         f"{display_path(editor.game_path) if editor.game_path else 'game.json'}："

@@ -160,8 +160,8 @@ GAME_ANIMATION_TAB = 1
 GAME_CUTSCENE_TAB = 4
 BACKGROUND_MAX_LENGTH = 120
 
-# 游戏配置里可滚的页面：滚轮一格滚多少像素
-GAME_CARD_SCROLL_STEP = 48
+# 编辑器里可滚的页面：滚轮一格滚多少像素
+SCROLL_STEP = 48
 
 # ---- 对象种类 ----
 KIND_BLOCK = "block"
