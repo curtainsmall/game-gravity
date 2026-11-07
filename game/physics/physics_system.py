@@ -1,9 +1,12 @@
-"""PhysicsSystem：先积分、再解算，最后采样传感器并施加风力。"""
+"""PhysicsSystem：先积分速度、按最浅的一面推开已有的重叠，再按轴解算位移，
+最后采样传感器并施加风力。"""
 
 from core.game_object import GameObject
 from physics.ballistics import launch_speed
 from physics.body import Body
 from world.world import World
+
+OVERLAP_RESOLVE_PASSES = 4   # 重叠兜底最多推几轮，夹在两个物体中间时够用
 
 
 class PhysicsSystem:
@@ -18,13 +21,55 @@ class PhysicsSystem:
             body.velocity_y -= gravity * body.gravity_direction_sign * delta_seconds
 
             solids = self._solids_for(game_object, objects)
+            # 先处理已经压在身体里的物体（比如被机关挤进来）：按最浅的一面推出去，
+            # 再去走这一帧的位移；否则竖直解算会先按速度方向把人顶到别的面上。
+            self._resolve_overlaps(body, solids)
+            body.is_grounded = False          # 推出来之后重新由这一帧的位移判定站没站稳
             self._move_along_x(body, solids, body.velocity_x * delta_seconds)
             self._move_along_y(body, solids, body.velocity_y * delta_seconds)
+            self._resolve_overlaps(body, solids)
 
             if body.is_grounded and not self._overlaps_passable(body, objects):
                 body.is_flipping = False            # 落过地、也离开木板了：穿板许可用完
 
         self._sample_sensors(objects, gravity, delta_seconds)
+
+    def _resolve_overlaps(self, body: Body, solids: list[Body]) -> None:
+        """还和实心体重叠时，沿穿透最浅的那一面把身体推出去。
+
+        正常移动时轴分离的解算已经贴面停住；这里兜底处理被移动方块挤进来、
+        出生就重叠这类残留情况。多推几轮，夹在两个物体中间也能稳定下来。
+        """
+        for _ in range(OVERLAP_RESOLVE_PASSES):
+            solid = next((other for other in solids if self._overlaps(body, other)), None)
+            if solid is None:
+                return
+            self._push_out(body, solid)
+
+    def _push_out(self, body: Body, solid: Body) -> None:
+        """沿碰撞面法线推：每轴挑近的一侧，再挑穿透更浅的一轴。"""
+        push_left = body.right - solid.left
+        push_right = solid.right - body.left
+        push_down = body.top - solid.bottom
+        push_up = solid.top - body.bottom
+        horizontal = min(push_left, push_right)
+        vertical = min(push_down, push_up)
+        if horizontal <= vertical:
+            if push_left <= push_right:
+                body.left = solid.left - body.width
+            else:
+                body.left = solid.right
+            body.velocity_x = 0.0
+            return
+        if push_down <= push_up:
+            body.bottom = solid.bottom - body.height
+            if body.gravity_direction_sign < 0:
+                body.is_grounded = True          # 重力向上：头顶着天花板即站立
+        else:
+            body.bottom = solid.top
+            if body.gravity_direction_sign > 0:
+                body.is_grounded = True          # 重力向下：脚下踩着东西即站立
+        body.velocity_y = 0.0
 
     def _overlaps_passable(self, body: Body, objects: list[GameObject]) -> bool:
         """还压在某块可穿木板上没有：人卡在木板里时不能立刻恢复碰撞，否则会被挤得弹起来。"""
