@@ -2,24 +2,640 @@
   "width": 240,
   "height": 16,
   "flip_area_offsets": [8.0, 8.0],
-  "blocks": [],
-  "planks": [],
-  "movable_blocks": [],
-  "trigger_sources": [],
-  "portals": [],
-  "nozzles": [],
-  "textures": [],
-  "animation_objects": [],
+  "blocks": [
+    {
+      "pos": [0.0, 0.0],
+      "size": [14.0, 2.0]
+    },
+    {
+      "pos": [0.0, 2.0],
+      "size": [10.0, 2.0]
+    },
+    {
+      "pos": [0.0, 4.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [17.0, 0.0],
+      "size": [2.0, 13.0]
+    },
+    {
+      "pos": [21.0, 7.0],
+      "size": [4.0, 2.0]
+    },
+    {
+      "pos": [23.0, 5.0],
+      "size": [4.0, 2.0]
+    },
+    {
+      "pos": [25.0, 3.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [24.95, 12.15],
+      "size": [0.05, 0.05]
+    },
+    {
+      "pos": [23.0, 12.0],
+      "size": [2.0, 4.0]
+    },
+    {
+      "pos": [33.0, 3.0],
+      "size": [9.0, 2.0]
+    },
+    {
+      "pos": [42.0, 5.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [44.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [48.0, 3.0],
+      "size": [12.0, 2.0]
+    },
+    {
+      "pos": [60.0, 5.0],
+      "size": [4.0, 2.0]
+    },
+    {
+      "pos": [62.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [28.0, 12.0],
+      "size": [3.0, 1.0]
+    },
+    {
+      "pos": [31.0, 11.0],
+      "size": [44.0, 2.0]
+    },
+    {
+      "pos": [67.0, 9.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [66.0, 4.0],
+      "size": [5.0, 2.0]
+    },
+    {
+      "pos": [73.0, 0.0],
+      "size": [2.0, 11.0]
+    },
+    {
+      "pos": [75.0, 6.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [77.0, 3.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [79.0, 8.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [77.0, 14.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [81.0, 0.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [85.0, 3.0],
+      "size": [2.0, 13.0]
+    },
+    {
+      "pos": [87.0, 7.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [89.0, 11.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [95.0, 6.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [91.0, 0.0],
+      "size": [2.0, 11.0]
+    },
+    {
+      "pos": [89.0, 3.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [99.0, 4.0],
+      "size": [2.0, 12.0]
+    },
+    {
+      "pos": [104.0, 0.0],
+      "size": [2.0, 6.0]
+    },
+    {
+      "pos": [106.0, 0.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [114.0, 0.0],
+      "size": [2.0, 7.0]
+    },
+    {
+      "pos": [112.0, 7.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [110.0, 9.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [108.0, 11.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [118.0, 4.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [121.0, 3.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [118.0, 10.0],
+      "size": [9.0, 2.0]
+    },
+    {
+      "pos": [127.0, 0.0],
+      "size": [2.0, 16.0]
+    },
+    {
+      "pos": [125.0, 0.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [129.0, 8.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [135.0, 6.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [141.0, 4.0],
+      "size": [6.0, 2.0]
+    },
+    {
+      "pos": [132.0, 0.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [137.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [137.0, 11.0],
+      "size": [8.0, 2.0]
+    },
+    {
+      "pos": [143.0, 9.0],
+      "size": [18.0, 2.0]
+    },
+    {
+      "pos": [161.0, 3.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [154.0, 0.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [151.0, 4.0],
+      "size": [3.0, 2.0]
+    },
+    {
+      "pos": [163.0, 9.0],
+      "size": [12.0, 2.0]
+    },
+    {
+      "pos": [175.0, 11.0],
+      "size": [9.0, 2.0]
+    },
+    {
+      "pos": [186.0, 12.0],
+      "size": [2.0, 4.0]
+    },
+    {
+      "pos": [182.0, 5.0],
+      "size": [2.0, 6.0]
+    },
+    {
+      "pos": [184.0, 5.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [182.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [188.0, 0.0],
+      "size": [2.0, 8.0]
+    },
+    {
+      "pos": [190.0, 3.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [166.0, 0.0],
+      "size": [6.0, 3.0]
+    },
+    {
+      "pos": [168.0, 3.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [194.0, 0.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [198.0, 0.0],
+      "size": [24.0, 2.0]
+    },
+    {
+      "pos": [220.0, 2.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [198.0, 2.0],
+      "size": [2.0, 8.0]
+    },
+    {
+      "pos": [200.0, 8.0],
+      "size": [9.0, 2.0]
+    },
+    {
+      "pos": [209.0, 6.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [204.0, 10.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [213.0, 2.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [196.0, 13.0],
+      "size": [2.0, 3.0]
+    },
+    {
+      "pos": [208.0, 12.8],
+      "size": [2.08, 3.2]
+    },
+    {
+      "pos": [225.0, 10.0],
+      "size": [15.0, 2.0]
+    },
+    {
+      "pos": [231.0, 5.0],
+      "size": [4.0, 2.0]
+    },
+    {
+      "pos": [227.0, 2.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [229.0, 0.0],
+      "size": [2.0, 2.0]
+    },
+    {
+      "pos": [215.0, 8.0],
+      "size": [10.0, 2.0]
+    },
+    {
+      "pos": [213.0, 9.0],
+      "size": [2.0, 1.0]
+    },
+    {
+      "pos": [225.69, 15.5],
+      "size": [0.05, 0.05]
+    }
+  ],
+  "planks": [
+    {
+      "pos": [31.0, 3.5],
+      "size": [2.0, 1.0]
+    },
+    {
+      "pos": [161.0, 9.5],
+      "size": [2.0, 1.0]
+    }
+  ],
+  "movable_blocks": [
+    {
+      "name": "l_gate_3",
+      "pos": [19.0, 0.0],
+      "size": [2.0, 4.0],
+      "offset": [0, 7.0],
+      "triggers": [
+        {
+          "source": "l_button_3",
+          "behavior": "move",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "name": "l_gate_2",
+      "pos": [97.0, 0.0],
+      "size": [2.0, 4.0],
+      "offset": [0, 7.0],
+      "triggers": [
+        {
+          "source": "l_button_2",
+          "behavior": "move",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "name": "l_gate_1",
+      "pos": [106.0, 6.0],
+      "size": [4.0, 2.0],
+      "offset": [2.0, 0],
+      "triggers": [
+        {
+          "source": "l_button_1",
+          "behavior": "move",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "name": "r_gate_4",
+      "pos": [147.0, 0.0],
+      "size": [2.0, 4.0],
+      "offset": [0, 5.0],
+      "triggers": [
+        {
+          "source": "r_button_4",
+          "behavior": "move",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "name": "r_gate_3",
+      "pos": [161.0, 5.0],
+      "size": [2.0, 4.0],
+      "offset": [0, -5.0],
+      "triggers": [
+        {
+          "source": "r_button_3",
+          "behavior": "move",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "name": "r_gate_2",
+      "pos": [194.0, 7.0],
+      "size": [4.0, 2.0],
+      "offset": [-10.0, 0],
+      "triggers": [
+        {
+          "source": "r_button_2",
+          "behavior": "move",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "name": "r_gate_1",
+      "pos": [211.0, 10.0],
+      "size": [2.0, 4.0],
+      "offset": [0, -8.0],
+      "triggers": [
+        {
+          "source": "r_button_1",
+          "behavior": "move",
+          "mode": "switch"
+        }
+      ]
+    }
+  ],
+  "trigger_sources": [
+    {
+      "name": "l_button_3",
+      "pos": [71.0, 10.0],
+      "size": [2.0, 1.0],
+      "mode": "once",
+      "jump_offset": 0.0
+    },
+    {
+      "name": "prop1",
+      "pos": [21.0, 0.0],
+      "size": [3.0, 3.0],
+      "mode": "once",
+      "jump_offset": -1.0
+    },
+    {
+      "name": "l_button_2",
+      "pos": [113.0, 0.0],
+      "size": [1.0, 2.0],
+      "mode": "hold",
+      "jump_offset": 0.0
+    },
+    {
+      "name": "l_button_1",
+      "pos": [123.0, 0.0],
+      "size": [2.0, 1.0],
+      "mode": "once",
+      "jump_offset": 0.0
+    },
+    {
+      "name": "r_button_4",
+      "pos": [179.0, -0.02],
+      "size": [2.0, 1.0],
+      "mode": "once",
+      "jump_offset": 0.0
+    },
+    {
+      "name": "r_button_3",
+      "pos": [184.0, 0.0],
+      "size": [2.0, 1.0],
+      "mode": "once",
+      "jump_offset": 0.0
+    },
+    {
+      "name": "r_button_2",
+      "pos": [197.0, 0.0],
+      "size": [1.0, 2.0],
+      "mode": "once",
+      "jump_offset": 0.0
+    },
+    {
+      "name": "r_button_1",
+      "pos": [214.0, 10.0],
+      "size": [2.0, 1.0],
+      "mode": "hold",
+      "jump_offset": 0.0
+    }
+  ],
+  "portals": [
+    {
+      "name": "l_portalr",
+      "pos": [125.0, 12.0],
+      "size": [2.0, 1.0],
+      "face": "up",
+      "target": ""
+    },
+    {
+      "name": "r_portal",
+      "pos": [129.0, 2.0],
+      "size": [2.0, 1.0],
+      "face": "right",
+      "target": "l_portalr"
+    },
+    {
+      "name": "r_portal_2",
+      "pos": [205.0, 2.0],
+      "size": [2.0, 1.0],
+      "face": "up",
+      "target": ""
+    },
+    {
+      "name": "r_portal_1",
+      "pos": [240.0, 7.0],
+      "size": [2.0, 1.0],
+      "face": "left",
+      "target": ""
+    }
+  ],
+  "nozzles": [
+    {
+      "pos": [72.0, 0.0],
+      "face": "up",
+      "power": 10.0,
+      "size": [2.0, 1.0]
+    },
+    {
+      "pos": [94.0, 0.0],
+      "face": "up",
+      "power": 9.0,
+      "size": [2.0, 1.0]
+    },
+    {
+      "pos": [176.0, 0.0],
+      "face": "up",
+      "power": 10.5,
+      "size": [2.0, 9.0]
+    },
+    {
+      "pos": [187.0, 0.0],
+      "face": "up",
+      "power": 10.0,
+      "size": [2.0, 8.0]
+    }
+  ],
+  "textures": [
+    {
+      "pos": [21.0, -0.5],
+      "size": [3.5, 4.01],
+      "image": "textures/level2/prop1.png",
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "prop1",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
+    },
+    {
+      "pos": [129.0, 10.0],
+      "size": [3.0, 3.0],
+      "image": "textures/level2/prop2.png",
+      "smooth": false
+    }
+  ],
+  "animation_objects": [
+    {
+      "pos": [237.55, 11.86],
+      "size": [2.02, 2.68],
+      "follow": "@player",
+      "preset": "player",
+      "links": {
+        "general": {
+          "clip": ""
+        },
+        "player": {
+          "idle": {
+            "left": {
+              "clip": "idle_left"
+            },
+            "right": {
+              "clip": "idle_right"
+            }
+          },
+          "run": {
+            "left": {
+              "clip": "run_left"
+            },
+            "right": {
+              "clip": "run_right"
+            }
+          },
+          "takeoff": {
+            "left": {
+              "clip": "takeoff_left"
+            },
+            "right": {
+              "clip": "takeoff_right"
+            }
+          },
+          "raise": {
+            "left": {
+              "clip": "raise_left"
+            },
+            "right": {
+              "clip": "raise_right"
+            }
+          },
+          "fall": {
+            "left": {
+              "clip": "raise_left"
+            },
+            "right": {
+              "clip": "raise_right"
+            }
+          },
+          "landing": {
+            "left": {
+              "clip": "landing_left"
+            },
+            "right": {
+              "clip": "landing_right"
+            }
+          }
+        }
+      }
+    }
+  ],
   "sound_objects": [],
   "player": {
-    "pos": [0.0, 0.0],
-    "size": [1.0, 1.0]
+    "pos": [238.0, 12.0],
+    "size": [1.0, 2.0],
+    "jump_height": 4.0
   },
   "destination": {
-    "pos": [7.0, 0.0],
-    "size": [1.0, 1.0]
+    "pos": [1.0, 6.0],
+    "size": [1.0, 2.0]
   },
-  "background": "",
+  "background": "textures/level2/background.jpeg",
   "sound": {
     "sound": "开场曲beta",
     "loop": true,

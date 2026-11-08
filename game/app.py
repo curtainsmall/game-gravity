@@ -183,9 +183,9 @@ class App:
         elif event.key == pygame.K_TAB and self.scene is not None:
             self.scene.toggle_view_mode()
             self.view_mode = self.scene.view_mode
-        elif event.key == pygame.K_SPACE:
+        elif event.key == pygame.K_w:
             self.jump_edge = True
-        elif event.key == pygame.K_r:
+        elif event.key == pygame.K_SPACE:
             self.flip_edge = True
 
     def handle_cutscene_event(self, event: pygame.event.Event) -> None:

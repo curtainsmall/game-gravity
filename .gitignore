@@ -70,6 +70,8 @@ saves/
 save/
 *.save
 *.tmp
+# 导出/测试用的压缩包
+*.zip
 crash-*.txt
 # 玩家自己的设置与存档（exe 旁边的 .game/）：每台机器都不一样，不进仓库
 .game/
