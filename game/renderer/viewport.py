@@ -1,7 +1,8 @@
 """Viewport：纵向铺满时沿 x 滚动；横向铺满时整关可见。
 
 纵向铺满分格不看窗口高度：可玩行（0 到 height_in_blocks）恒定 BAND_PIXEL_HEIGHT
-像素高，行数变了就变格子大小。背景图按这个像素高度画，且只铺可玩区——地面行和
+像素高，行数变了就变格子大小。底部被教程图占掉、可用高度不够时，整条带等比缩到
+画面内，地面和天花板都不裁。背景图按这个像素高度画，且只铺可玩区——地面行和
 天花板行都在背景之外，所以关卡改高改矮都不用重画背景。
 """
 
@@ -35,6 +36,10 @@ class Viewport:
             # 地面行和天花板行各再占一格，落在背景外侧
             self.pixels_per_tile = BAND_PIXEL_HEIGHT / max(1, world.height_in_blocks)
         band_height = total_row_count(world) * self.pixels_per_tile
+        # 底部被教程图占掉时可用高度会变小：整条带缩到画面内，不能裁掉地面
+        if band_height > surface.get_height() > 0:
+            self.pixels_per_tile *= surface.get_height() / band_height
+            band_height = surface.get_height()
         self.origin_y = (surface.get_height() - band_height) / 2.0  # 多出来的高度上下均分
 
     def follow(self, center_x: float | None, world: World, surface: pygame.Surface) -> None:

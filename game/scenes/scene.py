@@ -17,10 +17,12 @@ from game_settings import (
     player_animation_of,
     player_of,
     player_sound_of,
+    tutorial_of,
 )
 from physics.physics_system import PhysicsSystem
 from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
+from renderer.texture import image_size, load_scaled
 from renderer.viewport import ViewMode
 from sound.bgm import Bgm, level_bgm
 from sound.library import library_sounds
@@ -86,6 +88,8 @@ class Scene:
         self.sound_objects: SoundObjects = SoundObjects({})
         self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
         self.cutscene: Cutscene | None = None  # 进这一关之前的过场
+        # 所有关卡共用的教程图：贴在窗口底部，由 Scene.draw 在关卡视图之后画
+        self.tutorial_path: str | None = None
         # 触发源解锁的物品 id：App 每帧取走交给背包，不写回关卡
         self.unlocked_items: list[str] = []
 
@@ -154,6 +158,8 @@ class Scene:
         scene.bgm = level_bgm(level_definition, base_dir, sounds)
         # 进这一关之前的过场：没图就当作没有
         scene.cutscene = cutscene_of(level_definition, base_dir, sounds)
+        # 教程图由 game.json 给，所有关卡共用；路径找不到就不画
+        scene.tutorial_path = tutorial_of(game_settings or {}, base_dir)
         return scene
 
     def start_sounds(self, sound_system) -> None:
@@ -245,18 +251,48 @@ class Scene:
         return self.trigger_system.inactive_cards(self._destination())
 
     def draw(self, surface: pygame.Surface) -> None:
-        """每帧一次：绘制。镜头跟随玩家水平居中。"""
+        """每帧一次：绘制。镜头跟随玩家水平居中，教程图占掉底部一条。"""
         focus_x = None
         if self.player is not None and self.player.body is not None:
             body = self.player.body
             focus_x = body.left + body.width / 2.0
+        tutorial_height = self._tutorial_height(surface)
+        gameplay = surface
+        if tutorial_height:
+            # 关卡视图只画在教程图上方，底部不再被教程盖住
+            gameplay = surface.subsurface(
+                (0, 0, surface.get_width(), surface.get_height() - tutorial_height)
+            )
         self.render_system.update(
             self.objects,
             self.world,
-            surface,
+            gameplay,
             focus_x,
             self.view_mode,
             self.debug,
             self.flip_area_offsets,
             self.player_debug,
         )
+        self._draw_tutorial(surface, tutorial_height)
+
+    def _tutorial_height(self, surface: pygame.Surface) -> int:
+        """教程图按画面宽度铺满后占多高；没图或太高就不占位置。"""
+        if self.tutorial_path is None:
+            return 0
+        original = image_size(self.tutorial_path)
+        if original is None or original[0] <= 0 or original[1] <= 0:
+            return 0
+        width = surface.get_width()
+        if width <= 0:
+            return 0
+        height = max(1, round(original[1] * width / original[0]))
+        return height if height < surface.get_height() else 0
+
+    def _draw_tutorial(self, surface: pygame.Surface, height: int) -> None:
+        """教程图：按画面宽度铺满，贴在底部，不随镜头滚动。"""
+        if height <= 0 or self.tutorial_path is None:
+            return
+        picture = load_scaled(self.tutorial_path, (surface.get_width(), height), True)
+        if picture is None:
+            return
+        surface.blit(picture, (0, surface.get_height() - height))

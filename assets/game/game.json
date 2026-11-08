@@ -1,5 +1,6 @@
 {
   "title": "记忆归档",
+  "tutorial": "textures/tutorial.jpg",
   "credits": {
     "主创团队": [
       "捞捞小队"
@@ -135,10 +136,10 @@
           "sound": ""
         },
         "run": {
-          "sound": ""
+          "sound": "walk_1"
         },
         "takeoff": {
-          "sound": ""
+          "sound": "jump"
         },
         "raise": {
           "sound": ""
@@ -147,7 +148,7 @@
           "sound": ""
         },
         "landing": {
-          "sound": ""
+          "sound": "touch the ground"
         }
       }
     }
@@ -792,6 +793,15 @@
     },
     "level3": {
       "path": "sounds/level3.mp3"
+    },
+    "jump": {
+      "path": "sounds/sfx/jump.wav"
+    },
+    "walk_1": {
+      "path": "sounds/sfx/walk_1.wav"
+    },
+    "touch the ground": {
+      "path": "sounds/sfx/touch the ground.wav"
     }
   },
   "item_library": {

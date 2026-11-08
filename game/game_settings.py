@@ -6,6 +6,7 @@
                        所有关卡共用的玩家表现（size + 相对玩家 AABB 底边中点的 offset +
                        动画/音效 links），animation_library 是动画库，
                        item_library 是物品库（图标与说明图，触发源按 id 解锁），
+                       tutorial 是所有关卡游玩时贴在窗口底部的教程图，
                        sounds 是标题与制作名单的音乐，backgrounds 是标题画面和结算画面的背景图
     levels/<名字>.json 一个文件是一关，文件名（去掉 .json）就是关卡名
 game.json 和 levels/*.json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
@@ -35,6 +36,20 @@ PLAYER_SOUND_KEY = "player_sound"
 
 # 物品库：触发源按 id 解锁物品，背包只显示这些图标和说明图；路径同样相对游戏根
 ITEM_LIBRARY_KEY = "item_library"
+
+# 教程图：所有关卡游玩时都贴在窗口底部，按宽度铺满；路径同样相对游戏根
+TUTORIAL_KEY = "tutorial"
+
+
+def tutorial_of(settings: dict, base_dir: str | Path | None) -> str | None:
+    """game.json 的教程图 → 绝对路径；没写、写坏或文件不在都返回 None。"""
+    value = (settings or {}).get(TUTORIAL_KEY)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = Path(value.strip())
+    if not path.is_absolute() and base_dir is not None:
+        path = Path(base_dir) / path
+    return str(path) if path.is_file() else None
 
 
 def item_library_of(settings: dict) -> dict[str, dict[str, str]]:
