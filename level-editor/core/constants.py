@@ -128,6 +128,9 @@ PORTAL_SIZE = (1.0, 0.3)
 LEGACY_BUTTON_SIZE = (1.0, 0.3)
 FACE_ORDER = ("up", "right", "down", "left")   # 传送门和喷口的朝向循环顺序
 FACE_LABELS = {"up": "上", "right": "右", "down": "下", "left": "左"}  # 界面上显示的中文
+# 玩家的初始朝向：只影响精灵朝左/朝右，不影响物理；缺省朝右
+PLAYER_FACE_ORDER = ("right", "left")
+PLAYER_FACE_LABELS = {"right": "右", "left": "左"}
 FACE_DIRECTIONS = {
     "up": (0.0, 1.0),
     "right": (1.0, 0.0),

@@ -40,6 +40,7 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              帧来自 game.json 的 animation_library。玩家自己的动画
                              不在这里，由 game.json 的 player_animation 生成
     player                   起点；跳高和速度默认来自 game.json，这里写了就覆盖。
+                              face 是初始朝向 left / right（缺省 right），只影响动画朝向；
                               玩家自己的显示由全局玩家动画负责，不再挂关卡里的动画对象
     destination              终点；triggers 卡片是通关条件，全部生效才进下一关，
                              没有卡片就直接通关
@@ -468,8 +469,15 @@ def build_boundaries(world: World) -> list[GameObject]:
     ]
 
 
+def player_face_of(level_definition: LevelDefinition) -> int:
+    """玩家初始朝向：left = -1（朝左），right / 缺省 / 写坏 = 1（朝右）。"""
+    entry = level_definition.get("player")
+    face = str(entry.get("face") or "").strip().lower() if isinstance(entry, dict) else ""
+    return -1 if face == "left" else 1
+
+
 def build_player(level_definition: LevelDefinition) -> list[GameObject]:
-    """玩家比一格窄，关卡可用 size 覆盖。"""
+    """玩家比一格窄，关卡可用 size 覆盖；face 只影响初始朝向，不影响物理。"""
     entry = level_definition.get("player")
     if entry is None:
         return []

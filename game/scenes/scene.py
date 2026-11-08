@@ -48,6 +48,7 @@ from world.level import (
     jump_height_of,
     load_level_file,
     move_speed_of,
+    player_face_of,
 )
 from world.world import World
 
@@ -138,6 +139,7 @@ class Scene:
             library_animations(game_settings, base_dir)
         )
         scene.animation_system.attach(objects, scene.player)
+        scene.animation_system.facing = player_face_of(level_definition)
         # 声音对象：预设/链接写在关卡里，声音来自 game.json 的声音库；没有 body，不进 objects。
         # 玩家自己的音效来自 player_sound，由这里合成，不写回关卡
         scene.sound_objects = SoundObjects(sounds)

@@ -54,6 +54,8 @@ from core.constants import (
     NOZZLE_DEFAULT_POWER,
     NOZZLE_DEFAULT_SIZE,
     NUMBER_TEXT_MAX_LENGTH,
+    PLAYER_FACE_LABELS,
+    PLAYER_FACE_ORDER,
     PORTAL_SIZE,
     ROWS,
     SCROLL_STEP,
@@ -275,6 +277,13 @@ class Editor:
         self.global_undo_stack.clear()
         self.global_prompt = None
         self.global_grab = None
+
+    def player_face(self) -> str:
+        """这一关玩家的初始朝向：left / right，缺省 right。"""
+        if self.level_in_view and isinstance(self.level.player, dict):
+            face = str(self.level.player.get("face") or "right").strip().lower()
+            return face if face in PLAYER_FACE_LABELS else "right"
+        return "right"
 
     def player_stats(self) -> tuple[float, float, bool]:
         """当前关卡实际用的跳高和速度：关卡 player 里写了就盖住 game.json 的玩家参数。
@@ -788,12 +797,14 @@ class Editor:
         return {"pos": [left, bottom], "size": [float(size[0]), float(size[1])]}
 
     def global_animation_frame(self) -> tuple[str, bool] | None:
-        """全局玩家动画在画布上的一帧：取 idle 剪辑；找不到就是没有。"""
+        """全局玩家动画在画布上的一帧：按玩家初始朝向取 idle；找不到就是没有。"""
         entry = {
             "preset": animation.PRESET_PLAYER,
             "links": self.player_animation.get("links"),
         }
-        frames, _, mirror, _ = animation.resolve_for_editor(self.animation_library, entry)
+        frames, _, mirror, _ = animation.resolve_for_editor(
+            self.animation_library, entry, side=self.player_face()
+        )
         if not frames:
             return None
         index = max(0, min(self.global_frame_index, len(frames) - 1))
@@ -807,7 +818,9 @@ class Editor:
             "preset": animation.PRESET_PLAYER,
             "links": self.player_animation.get("links"),
         }
-        frames, holds, _, _ = animation.resolve_for_editor(self.animation_library, entry)
+        frames, holds, _, _ = animation.resolve_for_editor(
+            self.animation_library, entry, side=self.player_face()
+        )
         if not frames:
             self.global_frame_index = 0
             self.global_frame_elapsed = 0.0
@@ -3468,6 +3481,9 @@ class Editor:
                 ("横向偏移", number_text(offset[0])),
                 ("纵向偏移", number_text(offset[1])),
             ]
+        elif kind == KIND_PLAYER:
+            face = self.player_face()
+            rows.append(("初始朝向", PLAYER_FACE_LABELS[face]))
         elif kind == KIND_TRIGGER_SOURCE:
             mode = str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
             rows.append(("模式", TRIGGER_SOURCE_MODE_LABELS.get(mode, mode)))
@@ -3690,6 +3706,13 @@ class Editor:
                 values = [value for _, value in TRIGGER_SOURCE_MODES]
                 index = values.index(current) if current in values else 0
                 entry["mode"] = values[(index + delta) % len(values)]
+        elif kind == KIND_PLAYER:
+            if field == 4:                 # 初始朝向：右 / 左 循环
+                current = self.player_face()
+                index = PLAYER_FACE_ORDER.index(current)
+                entry["face"] = PLAYER_FACE_ORDER[
+                    (index + delta) % len(PLAYER_FACE_ORDER)
+                ]
         elif kind == KIND_PORTAL:
             if field == 4:                 # 朝向：按 up/right/down/left 循环
                 current_face = entry.get("face", FACE_ORDER[0])
@@ -3792,6 +3815,8 @@ class Editor:
             return [(FACE_LABELS[face], face) for face in FACE_ORDER]
         if kind == KIND_TRIGGER_SOURCE and field == 4:
             return list(TRIGGER_SOURCE_MODES)
+        if kind == KIND_PLAYER and field == 4:
+            return [(PLAYER_FACE_LABELS[face], face) for face in PLAYER_FACE_ORDER]
         if kind == KIND_PORTAL and field == 5:
             names = [
                 portal.get("name", "")
@@ -3835,6 +3860,8 @@ class Editor:
             return entry.get("target") or ""
         if kind == KIND_TRIGGER_SOURCE and field == 4:
             return str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
+        if kind == KIND_PLAYER and field == 4:
+            return self.player_face()
         if kind == KIND_TEXTURE and field == 7:
             return entry.get("follow") or ""
         if kind == KIND_ANIMATION and field == 4:
@@ -3883,6 +3910,8 @@ class Editor:
                     value if value in TRIGGER_SOURCE_MODE_VALUES
                     else TRIGGER_SOURCE_MODE_DEFAULT
                 )
+            elif kind == KIND_PLAYER and field == 4:
+                entry["face"] = value if value in PLAYER_FACE_ORDER else "right"
             elif kind == KIND_TEXTURE and field == 5:
                 entry["face"] = value or FACE_ORDER[0]
             elif kind == KIND_TEXTURE and field == 7:
