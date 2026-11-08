@@ -2,7 +2,7 @@
 
 运行：uv run build.py [--with-asset]
 
-产物：
+产物（bin/ 跟着运行命令时的当前目录走）：
   bin/gravity.exe        游戏
   bin/level-editor.exe   关卡编辑器
 
@@ -31,10 +31,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-BIN_DIR = ROOT / "bin"
+BIN_DIR = Path.cwd() / "bin"
 WORK_DIR = ROOT / "build" / "pyinstaller"
 ASSETS_DIR = ROOT / "assets"
 BIN_ASSETS_DIR = BIN_DIR / "assets"
+
+
+def display_path(path: Path) -> str:
+    """打印用：优先相对当前目录，其次相对项目根，最后原样。"""
+    for base in (Path.cwd(), ROOT):
+        try:
+            return str(path.relative_to(base))
+        except ValueError:
+            continue
+    return str(path)
+
 
 TARGETS = [
     {
@@ -110,7 +121,7 @@ def copy_assets() -> None:
     if BIN_ASSETS_DIR.exists():
         shutil.rmtree(BIN_ASSETS_DIR)
     shutil.copytree(ASSETS_DIR, BIN_ASSETS_DIR)
-    print(f"[build] assets -> {BIN_ASSETS_DIR.relative_to(ROOT)}")
+    print(f"[build] assets -> {display_path(BIN_ASSETS_DIR)}")
 
 
 def main() -> None:
@@ -131,7 +142,7 @@ def main() -> None:
 
     print("[build] done:")
     for path in sorted(BIN_DIR.iterdir()):
-        print(f"  {path.relative_to(ROOT)}")
+        print(f"  {display_path(path)}")
 
 
 if __name__ == "__main__":
