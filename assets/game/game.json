@@ -168,7 +168,7 @@
     }
   },
   "backgrounds": {
-    "title": "textures/title_screen.png",
+    "title": "textures/title.png",
     "credits": ""
   },
   "cutscene": {
