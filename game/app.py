@@ -76,6 +76,7 @@ class App:
         self.backpack_open = False
         self.backpack_selected = 0
         self.backpack_page = 0
+        self.backpack_zoom = False        # 说明图放大到整屏
         # 标题画面 / 结算画面的背景图（game.json 的 backgrounds），没图就是纯色
         self.title_background = screen_background(self.game_settings, "title", game_root())
         self.credits_background = screen_background(self.game_settings, "credits", game_root())
@@ -211,12 +212,14 @@ class App:
         else:
             self.backpack_selected = 0
             self.backpack_page = 0
+        self.backpack_zoom = False
         self.backpack_open = True
         self.jump_edge = False
         self.flip_edge = False
 
     def close_backpack(self) -> None:
         self.backpack_open = False
+        self.backpack_zoom = False
 
     def backpack_page_count(self) -> int:
         per_page = ui.BACKPACK_COLUMNS * ui.BACKPACK_ROWS
@@ -231,9 +234,21 @@ class App:
         self.backpack_page = self.backpack_selected // (
             ui.BACKPACK_COLUMNS * ui.BACKPACK_ROWS
         )
+        self.backpack_zoom = False
 
     def handle_backpack_event(self, event: pygame.event.Event) -> None:
-        """背包打开时：只处理关闭、选择和翻页。"""
+        """背包打开时：只处理关闭、选择、翻页和说明图放大。"""
+        if self.backpack_zoom:
+            if event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_b,
+                pygame.K_ESCAPE,
+                pygame.K_RETURN,
+                pygame.K_SPACE,
+            ):
+                self.backpack_zoom = False
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.backpack_zoom = False
+            return
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_b, pygame.K_ESCAPE):
                 self.close_backpack()
@@ -259,6 +274,12 @@ class App:
             )
             if not geometry["panel"].collidepoint(event.pos):
                 self.close_backpack()
+                return
+            if (
+                len(self.inventory)
+                and geometry["detail"].collidepoint(event.pos)
+            ):
+                self.backpack_zoom = True
                 return
             for slot in geometry["slots"]:
                 if slot["filled"] and slot["rect"].collidepoint(event.pos):
@@ -423,6 +444,7 @@ class App:
         self.screen = Screen.PLAYING
         self.paused = False
         self.backpack_open = False
+        self.backpack_zoom = False
         self.unconsumed_seconds = 0.0
         self.jump_edge = False
         self.flip_edge = False
@@ -547,6 +569,7 @@ class App:
         self.paused = False
         self.settings_open = False
         self.backpack_open = False
+        self.backpack_zoom = False
         self.inventory.clear()          # 回标题就是放弃这次进度：背包只在内存里
         self.screen = Screen.TITLE
         # 从暂停里退回标题时音乐也停在那儿，play 会先把它叫醒

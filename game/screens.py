@@ -313,6 +313,26 @@ def _fit_picture(path: str, box: pygame.Rect) -> pygame.Surface | None:
     return load_scaled(path, size, True)
 
 
+def _draw_backpack_zoom(surface: pygame.Surface, path: str) -> None:
+    """说明图放大：几乎铺满整屏，点击或 Esc 回背包。"""
+    screen = surface.get_rect()
+    box = screen.inflate(-48, -72)
+    pygame.draw.rect(surface, (24, 24, 28), box)
+    pygame.draw.rect(surface, (90, 90, 100), box, 2)
+    picture = _fit_picture(path, box.inflate(-8, -8))
+    if picture is not None:
+        surface.blit(picture, picture.get_rect(center=box.center))
+    else:
+        ui.draw_text(
+            surface, "说明图找不到了", 20, center=box.center, color=(230, 230, 230)
+        )
+    hint = ui.font(16).render("点击 / Esc / B 返回背包", True, (235, 235, 235))
+    bar = pygame.Rect(0, 0, hint.get_width() + 28, hint.get_height() + 12)
+    bar.center = (screen.centerx, screen.bottom - 30)
+    pygame.draw.rect(surface, (35, 35, 40), bar)
+    surface.blit(hint, (bar.left + 14, bar.top + 6))
+
+
 def draw_backpack(surface: pygame.Surface, app) -> None:
     """B 背包：已捡到的物品图标和选中物品的说明图，纯展示。"""
     ui.draw_shade(surface)
@@ -324,6 +344,9 @@ def draw_backpack(surface: pygame.Surface, app) -> None:
     app.backpack_page = page
     selected = min(max(app.backpack_selected, 0), count - 1) if count else -1
     app.backpack_selected = selected
+    if app.backpack_zoom and selected >= 0:
+        _draw_backpack_zoom(surface, app.item_library[items[selected]]["description"])
+        return
     geometry = ui.backpack_rects(surface, count, page, selected)
     panel = geometry["panel"]
     ui.draw_panel(surface, panel)
@@ -376,10 +399,21 @@ def draw_backpack(surface: pygame.Surface, app) -> None:
             surface.blit(picture, picture.get_rect(center=detail.center))
         else:
             ui.draw_text(surface, "说明图找不到了", 16, center=detail.center, color=ui.DIM_TEXT)
+        ui.draw_text(
+            surface,
+            "点击放大",
+            14,
+            center=(detail.centerx, detail.bottom - 16),
+            color=ui.DIM_TEXT,
+        )
 
     footer = geometry["footer"]
     ui.draw_text(
-        surface, "点击选择 · 滚轮翻页", 16, pos=(footer.left, footer.top), color=ui.DIM_TEXT
+        surface,
+        "点击图标选择 · 点说明图放大 · 滚轮翻页",
+        16,
+        pos=(footer.left, footer.top),
+        color=ui.DIM_TEXT,
     )
     if count:
         page_text = f"第 {page + 1} / {page_count} 页"
