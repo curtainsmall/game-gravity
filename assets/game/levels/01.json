@@ -204,10 +204,6 @@
       "size": [2.0, 12.0]
     },
     {
-      "pos": [224.0, 2.0],
-      "size": [2.0, 14.0]
-    },
-    {
       "pos": [228.0, 0.0],
       "size": [12.0, 2.0]
     },
@@ -266,6 +262,14 @@
     {
       "pos": [199.5, 11.0],
       "size": [7.0, 1.0]
+    },
+    {
+      "pos": [224.0, 14.0],
+      "size": [16.0, 2.0]
+    },
+    {
+      "pos": [230.0, 12.0],
+      "size": [10.0, 2.0]
     }
   ],
   "planks": [
@@ -689,8 +693,8 @@
       "face": "down"
     },
     {
-      "pos": [8.0, 0.0],
-      "size": [6.0, 7.17],
+      "pos": [9.23, 0.03],
+      "size": [3.5, 4.5],
       "image": "textures/level1/3-3.png",
       "smooth": false
     },
@@ -811,12 +815,6 @@
       "hide": true
     },
     {
-      "pos": [223.5, -0.5],
-      "size": [3.0, 16.5],
-      "image": "textures/level1/1x6 1.png",
-      "smooth": false
-    },
-    {
       "pos": [52.5, 12.5],
       "size": [3.0, 3.0],
       "image": "textures/level1/2-2(道具).png",
@@ -859,6 +857,12 @@
         }
       ],
       "hide": true
+    },
+    {
+      "pos": [224.0, 10.0],
+      "size": [18.0, 6.0],
+      "image": "textures/level1/9x3.png",
+      "smooth": false
     }
   ],
   "animation_objects": [],
