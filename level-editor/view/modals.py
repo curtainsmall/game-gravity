@@ -13,6 +13,7 @@ from core.constants import (
     FOOTER,
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
+    GAME_ITEM_TAB,
     GAME_PLAYER_VIEW_TAB,
     GAME_SETTINGS_TABS,
     GAME_SOUND_LIBRARY_TAB,
@@ -29,6 +30,7 @@ from core.helpers import display_path, level_name_of
 from core.sound import SCENE_KEYS, key_label
 from view.animation import draw_library_page, library_geometry, library_page_height
 from view.cutscene import cutscene_geometry, cutscene_page_height, draw_cutscene_page
+from view.item import draw_item_library, item_library_geometry, item_library_height
 from view.sound import (
     draw_sound_library,
     draw_sound_menu,
@@ -479,7 +481,7 @@ def _credit_card_height(card: dict) -> int:
 
 
 def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
-    """游戏配置：常规 / 动画集 / 制作名单 / 声音 / 声音库 / 过场 / 玩家表现七页，底下是应用和取消。
+    """游戏配置：常规 / 动画集 / 制作名单 / 声音 / 声音库 / 物品 / 过场 / 玩家表现八页，底下是应用和取消。
 
     常规页是标题与玩家参数；动画集页列出 game.json 动画库里的条目（键名 + 一行帧缩略图，
     点一行打开编辑弹窗，见 view.animation）；
@@ -500,6 +502,10 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         # 声音库页也是列表，窗口矮的时候面板跟着矮
         max_height = max(240, surface.get_height() - HEADER - FOOTER - 8)
         height = min(sound_library_height(GAME_CONTENT_TOP), max_height)
+    elif tab == GAME_ITEM_TAB:
+        # 物品页同样是列表
+        max_height = max(240, surface.get_height() - HEADER - FOOTER - 8)
+        height = min(item_library_height(GAME_CONTENT_TOP), max_height)
     elif tab == 2:                      # 制作名单
         card_heights = [_credit_card_height(card) for card in cards]
         content = sum(card_height + CREDIT_CARD_GAP for card_height in card_heights)
@@ -541,6 +547,7 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         "cutscene": None,
         "animation": None,
         "sound_library": None,
+        "item_library": None,
         "player_views": None,
         "note_top": content_top,
         "backgrounds": [],
@@ -581,6 +588,10 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         geometry["animation"] = library_geometry(surface, editor, panel, content_top)
     elif tab == GAME_SOUND_LIBRARY_TAB:
         geometry["sound_library"] = sound_library_geometry(
+            surface, editor, panel, content_top
+        )
+    elif tab == GAME_ITEM_TAB:
+        geometry["item_library"] = item_library_geometry(
             surface, editor, panel, content_top
         )
     elif tab == 2:                      # 制作名单
@@ -981,6 +992,8 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         draw_library_page(surface, editor, font, geometry["animation"])
     elif editor.game_sound_library_tab():
         draw_sound_library(surface, editor, font, geometry["sound_library"])
+    elif editor.game_item_tab():
+        draw_item_library(surface, editor, font, geometry["item_library"])
     elif editor.game_tab == GAME_PLAYER_VIEW_TAB:
         _draw_game_player_views(surface, font, geometry)
     elif editor.game_tab == 0:

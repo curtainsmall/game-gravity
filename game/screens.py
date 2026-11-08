@@ -301,3 +301,93 @@ def draw_settings(surface: pygame.Surface, app) -> None:
     )
 
     ui.draw_button(surface, rects["back"], "返回")
+
+
+def _fit_picture(path: str, box: pygame.Rect) -> pygame.Surface | None:
+    """把一张图按比例缩进 box，居中留白；不拉伸。"""
+    original = image_size(path)
+    if original is None or original[0] <= 0 or original[1] <= 0:
+        return None
+    scale = min(box.width / original[0], box.height / original[1])
+    size = (max(1, round(original[0] * scale)), max(1, round(original[1] * scale)))
+    return load_scaled(path, size, True)
+
+
+def draw_backpack(surface: pygame.Surface, app) -> None:
+    """B 背包：已捡到的物品图标和选中物品的说明图，纯展示。"""
+    ui.draw_shade(surface)
+    items = [item_id for item_id in app.inventory.items() if item_id in app.item_library]
+    count = len(items)
+    slots_per_page = ui.BACKPACK_COLUMNS * ui.BACKPACK_ROWS
+    page_count = max(1, (count + slots_per_page - 1) // slots_per_page)
+    page = max(0, min(app.backpack_page, page_count - 1))
+    app.backpack_page = page
+    selected = min(max(app.backpack_selected, 0), count - 1) if count else -1
+    app.backpack_selected = selected
+    geometry = ui.backpack_rects(surface, count, page, selected)
+    panel = geometry["panel"]
+    ui.draw_panel(surface, panel)
+    ui.draw_text(
+        surface, "背包", 30, pos=(geometry["title"].left, geometry["title"].top)
+    )
+    ui.draw_text(
+        surface, "B / Esc 关闭", 18, pos=(geometry["hint"].left, geometry["hint"].top),
+        color=ui.DIM_TEXT,
+    )
+    pygame.draw.line(
+        surface,
+        ui.BORDER,
+        (panel.left + ui.BACKPACK_MARGIN, panel.top + 58),
+        (panel.right - ui.BACKPACK_MARGIN, panel.top + 58),
+    )
+
+    mouse = window.mouse_pos()
+    for slot in geometry["slots"]:
+        rect = slot["rect"]
+        index = slot["index"]
+        hovered = slot["filled"] and rect.collidepoint(mouse)
+        pygame.draw.rect(surface, (245, 240, 210) if hovered else (235, 235, 235), rect)
+        pygame.draw.rect(
+            surface,
+            (200, 160, 40) if index == selected else ui.BORDER,
+            rect,
+            3 if index == selected else 1,
+        )
+        if not slot["filled"]:
+            continue
+        item_id = items[index]
+        icon_box = rect.inflate(-16, -16)
+        picture = _fit_picture(app.item_library[item_id]["icon"], icon_box)
+        if picture is not None:
+            surface.blit(picture, picture.get_rect(center=rect.center))
+        else:
+            ui.draw_text(surface, "缺图", 14, center=rect.center, color=ui.DIM_TEXT)
+
+    detail = geometry["detail"]
+    pygame.draw.rect(surface, (230, 230, 230), detail)
+    pygame.draw.rect(surface, ui.BORDER, detail, 1)
+    if count == 0:
+        ui.draw_text(surface, "还没有捡到东西", 20, center=detail.center, color=ui.DIM_TEXT)
+    elif selected >= 0:
+        picture = _fit_picture(
+            app.item_library[items[selected]]["description"], detail.inflate(-16, -16)
+        )
+        if picture is not None:
+            surface.blit(picture, picture.get_rect(center=detail.center))
+        else:
+            ui.draw_text(surface, "说明图找不到了", 16, center=detail.center, color=ui.DIM_TEXT)
+
+    footer = geometry["footer"]
+    ui.draw_text(
+        surface, "点击选择 · 滚轮翻页", 16, pos=(footer.left, footer.top), color=ui.DIM_TEXT
+    )
+    if count:
+        page_text = f"第 {page + 1} / {page_count} 页"
+        rendered = ui.font(16).render(page_text, True, ui.DIM_TEXT)
+        surface.blit(
+            rendered,
+            (
+                panel.right - ui.BACKPACK_MARGIN - rendered.get_width(),
+                footer.top,
+            ),
+        )

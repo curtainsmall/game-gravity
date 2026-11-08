@@ -1,32 +1,8 @@
 {
-  "title": "重力",
-  "credits": {
-    "程序": [
-      "Alice",
-      "Bob",
-      "Charlie"
-    ],
-    "关卡设计": [
-      "小小的白",
-      "小小的黑",
-      "小小的灰",
-      "小小的蓝",
-      "小小的红",
-      "小小的绿",
-      "小小的黄",
-      "小小的紫",
-      "小小的橙",
-      "小小的粉",
-      "小小的棕",
-      "小小的青",
-      "小小的灰白",
-      "小小的灰黑",
-      "小小的灰蓝",
-      "小小的灰红"
-    ]
-  },
+  "title": "记忆归档",
+  "credits": {},
   "player": {
-    "jump_height": 8.5,
+    "jump_height": 8.0,
     "move_speed": 8.0
   },
   "player_animation": {
@@ -140,9 +116,70 @@
     "credits": ""
   },
   "cutscene": {
-    "pictures": [],
-    "cascade": false,
-    "sound": false
+    "pictures": [
+      {
+        "path": "animations/cutscenes/outro/01.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/02.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/03.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/04.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/05.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/06.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/07.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/08.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/09.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/outro/10.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      }
+    ],
+    "cascade": true,
+    "sound": true
   },
   "animation_library": {
     "run_left": {
@@ -700,6 +737,36 @@
     },
     "level3": {
       "path": "sounds/level3.mp3"
+    }
+  },
+  "item_library": {
+    "toy": {
+      "icon": "textures/items/toy.png",
+      "description": "textures/items/toy.png"
+    },
+    "bond": {
+      "icon": "textures/items/bond.png",
+      "description": "textures/items/bond.png"
+    },
+    "card": {
+      "icon": "textures/items/card.png",
+      "description": "textures/items/card.png"
+    },
+    "certificate": {
+      "icon": "textures/items/certificate.png",
+      "description": "textures/items/certificate.png"
+    },
+    "paper": {
+      "icon": "textures/items/paper.png",
+      "description": "textures/items/paper.png"
+    },
+    "rocket": {
+      "icon": "textures/items/rocket.png",
+      "description": "textures/items/rocket.png"
+    },
+    "wedding": {
+      "icon": "textures/items/wedding.png",
+      "description": "textures/items/wedding.png"
     }
   }
 }

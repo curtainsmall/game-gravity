@@ -86,6 +86,8 @@ class Scene:
         self.sound_objects: SoundObjects = SoundObjects({})
         self.bgm: Bgm | None = None          # 这一关的音乐，App 切场景时放
         self.cutscene: Cutscene | None = None  # 进这一关之前的过场
+        # 触发源解锁的物品 id：App 每帧取走交给背包，不写回关卡
+        self.unlocked_items: list[str] = []
 
     @classmethod
     def from_level(
@@ -179,8 +181,17 @@ class Scene:
         else:
             self.view_mode = ViewMode.VERTICAL_EXPAND
 
+    def take_unlocked_items(self) -> list[str]:
+        """取走这一帧触发源解锁的物品 id；App 把它们交给背包。"""
+        unlocked = self.unlocked_items
+        self.unlocked_items = []
+        return unlocked
+
     def update(self, delta_seconds: float) -> None:
-        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 道具 → 传送门 → 动画对象。"""
+        """一步：派发触发事件 → 控制来源 → 贴图跟随 → 物理积分与解算 → 道具 → 传送门 → 动画对象。
+
+        触发源按下的物品会先记进 unlocked_items，由 App 交给背包。
+        """
         self.elapsed_seconds += delta_seconds
         if self.world is None:
             return
@@ -188,7 +199,9 @@ class Scene:
         self.controller_system.update(self.objects, self.input_state, delta_seconds)
         self.follow_system.update()
         self.physics_system.update(self.objects, self.world, delta_seconds)
-        self.trigger_source_system.update(self.objects)
+        self.unlocked_items.extend(
+            self.trigger_source_system.update(self.objects)
+        )
         self.portal_system.update(self.objects, self.player)
         # 跟玩家的动画对象要在物理和传送之后才摆位
         self.animation_system.update(delta_seconds)

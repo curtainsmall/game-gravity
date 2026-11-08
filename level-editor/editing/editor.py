@@ -5,7 +5,7 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-from core import animation, cutscene, game, sound
+from core import animation, cutscene, game, item, sound
 from core.constants import (
     BACKGROUND_MAX_LENGTH,
     COLS,
@@ -13,6 +13,7 @@ from core.constants import (
     FACE_ORDER,
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
+    GAME_ITEM_TAB,
     GAME_PLAYER_VIEW_TAB,
     GAME_SETTINGS_TABS,
     GAME_SOUND_LIBRARY_TAB,
@@ -103,7 +104,7 @@ from core.helpers import (
 from core.level import Level, dump_level
 from editing.anim_import import AnimationImportError, import_animation_frames
 from editing.files import ask_audio_path, ask_game_file, ask_game_file_to_create, ask_image_path
-from view.texture import image_size
+from view.texture import image_size, load_scaled
 
 if TYPE_CHECKING:
     from view.layout import Layout
@@ -215,13 +216,18 @@ class Editor:
         self.game_cards: list = []                 # 浮层里的制作名单卡片：{job, names: [名字…]}
         self.game_card_scroll = 0                  # 制作名单滚轮滚了多少像素
         self.game_field = 0                        # 浮层里选中的格：标题、跳高、速度、职位、名字…
-        self.game_tab = 0                          # 游戏配置停在哪一页：常规/动画集/制作名单/声音/声音库/过场
+        self.game_tab = 0                          # 游戏配置停在哪一页：常规/动画集/制作名单/声音/声音库/物品/过场
         self.game_sound: dict = {}                 # 声音页：键 → {sound, loop, fade_in, fade_out}
         # 声音库：game.json 的 sound_library（键 → {"path"}）；关卡和音乐链接都从这里取键
         self.sound_library: dict = {}
         self.sound_library_scroll = 0.0            # 声音库页的列表滚了多少像素
         self.sound_selected = ""                   # 声音库页选中的键
         self.sound_library_dirty = False           # 库里有还没写回 game.json 的改动
+        # 物品库：game.json 的 item_library（id → {"icon", "description"}）；触发源按 id 解锁
+        self.item_library: dict = {}
+        self.item_library_saved: dict | None = None  # 打开游戏配置时的快照：取消就还原
+        self.item_library_scroll = 0.0
+        self.item_selected = ""
         # 选 BGM 的下拉：{"target": 目标, "scroll": 滚了几行}；target 见 open_sound_menu
         self.sound_menu: dict | None = None
         self.preview = sound.Preview()             # 试听（和游戏共用一个混音器）
@@ -937,6 +943,10 @@ class Editor:
         self.sound_library_scroll = 0.0
         self.sound_selected = next(iter(self.sound_library), "")
         self.sound_library_dirty = False
+        # 物品库：触发源的「物品」链接和 B 背包都从这里取 id
+        self.item_library = item.library_of(settings)
+        self.item_library_scroll = 0.0
+        self.item_selected = next(iter(self.item_library), "")
         self._load_player_views(settings)
         self.startup = False
         self.level = Level()
@@ -1227,6 +1237,14 @@ class Editor:
             path = rebased(sound.entry_path(entry))
             if path is not None:
                 self.sound_library[key] = {"path": path}
+        # 物品库的图标和说明图也都是文件路径
+        for entry in self.item_library.values():
+            if not isinstance(entry, dict):
+                continue
+            for field in ("icon", "description"):
+                path = rebased(str(entry.get(field) or ""))
+                if path is not None:
+                    entry[field] = path
         if self.level.cutscene:
             for picture in self.level.cutscene.get("pictures", []):
                 value = picture.get("path")
@@ -1285,6 +1303,10 @@ class Editor:
         self.animation_library_scroll = 0.0
         self.animation_edit = None
         self.animation_link = None
+        self.item_library = item.library_of(settings)
+        self.item_library_saved = copy.deepcopy(self.item_library)
+        self.item_selected = next(iter(self.item_library), "")
+        self.item_library_scroll = 0.0
         self.game_card_scroll = 0
         self.game_tab = 0
         self.game_field = 0
@@ -1296,7 +1318,9 @@ class Editor:
         self.cutscene_scroll = 0
         self.preview.stop()
         self.level_select_open = False
-        self.status = "游戏配置：常规、动画集、制作名单、音乐与结尾过场将写入 game.json。"
+        self.status = (
+            "游戏配置：常规、动画集、制作名单、音乐、物品与结尾过场将写入 game.json。"
+        )
 
     def close_game_settings(self, commit: bool) -> None:
         settings = self.game_settings
@@ -1306,6 +1330,8 @@ class Editor:
         cutscene_state = self.cutscene
         animations = self.game_animation_library
         backgrounds = dict(self.game_backgrounds)
+        items_saved = self.item_library_saved
+        self.item_library_saved = None
         self.game_settings = None
         self.game_cards = []
         self.game_numbers = {}
@@ -1320,6 +1346,10 @@ class Editor:
         self.preview.stop()                # 试听只在面板开着的时候有意义
         self.sound_menu = None
         if settings is None or not commit or self.game_path is None:
+            if not commit and items_saved is not None:
+                self.item_library = items_saved      # 取消：物品页的改动一起丢掉
+                if self.item_selected not in self.item_library:
+                    self.item_selected = next(iter(self.item_library), "")
             return
         title = str(settings.get("title") or "").strip() or game.DEFAULT_TITLE
         settings["title"] = title
@@ -1358,6 +1388,8 @@ class Editor:
         settings[cutscene.CUTSCENE_KEY] = cutscene_value
         # 动画库：整张表写进去，老的玩家动画字段顺手删掉
         settings = animation.to_settings(settings, animations)
+        # 物品库：触发源按 id 解锁，背包按 id 取图
+        settings = item.to_settings(settings, self.item_library)
         try:
             game.save_settings(settings, self.game_path)
         except OSError as error:
@@ -1367,6 +1399,7 @@ class Editor:
         self.game_player = player
         self.animation_library = animation.from_settings(settings)
         self.sound_library = sound.library_of(settings)
+        self.item_library = item.library_of(settings)
         self.sound_library_dirty = False
         names = sum(len(names) for names in settings["credits"].values())
         pictures = len(cutscene_value["pictures"])
@@ -1395,6 +1428,9 @@ class Editor:
     def game_sound_library_tab(self) -> bool:
         return self.game_tab == GAME_SOUND_LIBRARY_TAB
 
+    def game_item_tab(self) -> bool:
+        return self.game_tab == GAME_ITEM_TAB
+
     def select_game_tab(self, index: int) -> None:
         """点页签切页；换页时把试听停下，选中格回到这一页的第一格。"""
         if not 0 <= index < len(GAME_SETTINGS_TABS) or index == self.game_tab:
@@ -1416,9 +1452,12 @@ class Editor:
         elif index == GAME_SOUND_LIBRARY_TAB:
             self.sound_selected = next(iter(self.sound_library), "")
             self.sound_library_scroll = 0.0
+        elif index == GAME_ITEM_TAB:
+            self.item_selected = next(iter(self.item_library), "")
+            self.item_library_scroll = 0.0
 
     def switch_game_tab(self, delta: int) -> None:
-        """Tab / Shift+Tab：在常规、动画集、制作名单、声音、声音库、过场之间转。"""
+        """Tab / Shift+Tab：在常规、动画集、制作名单、声音、声音库、物品、过场之间转。"""
         self.select_game_tab((self.game_tab + delta) % len(GAME_SETTINGS_TABS))
 
     # 每一页的格子：常规是标题与两个玩家参数；动画集页没有这种格子；
@@ -1436,6 +1475,7 @@ class Editor:
             GAME_ANIMATION_TAB,
             GAME_CUTSCENE_TAB,
             GAME_SOUND_LIBRARY_TAB,
+            GAME_ITEM_TAB,
             GAME_PLAYER_VIEW_TAB,
         ):
             return []
@@ -1526,6 +1566,8 @@ class Editor:
             return
         if self.game_sound_library_tab():
             return                      # 声音库页没有输入格
+        if self.game_item_tab():
+            return                      # 物品页没有输入格
         cell = self.current_game_cell()
         text = self.game_field_text()
         kind = cell[0]
@@ -1563,6 +1605,8 @@ class Editor:
             return
         if self.game_sound_library_tab():
             return                      # 声音库页没有输入格
+        if self.game_item_tab():
+            return                      # 物品页没有输入格
         if self.current_game_cell()[0] == "sound":
             return                  # 声音是库里的键，退格不删它
         self.set_game_field_text(self.game_field_text()[:-1])
@@ -1577,6 +1621,8 @@ class Editor:
             return
         if self.game_sound_library_tab():
             return                      # 声音库页没有格子
+        if self.game_item_tab():
+            return                      # 物品页没有数字格
         cell = self.current_game_cell()
         kind = cell[0]
         if kind == "sound":
@@ -1634,6 +1680,8 @@ class Editor:
             return
         if self.game_sound_library_tab():
             return                      # 声音库页用点击选行
+        if self.game_item_tab():
+            return                      # 物品页用点击选行
         cells = self.game_cells()
         self.game_field = max(0, min(self.game_field + delta, len(cells) - 1))
 
@@ -1951,6 +1999,129 @@ class Editor:
             return
         self.sound_library = sound.library_of(settings)
         self.sound_library_dirty = False
+
+    # ---- 物品库（游戏配置的「物品」页） -----------------------------
+    def item_library_items(self) -> list:
+        """物品库：按 id 字母序的 (id, 条目)。"""
+        return sorted(
+            self.item_library.items(), key=lambda pair: pair[0].casefold()
+        )
+
+    def item_picture(self, key: str, which: str, size: int):
+        """物品条目的图标或说明图，缩成 size×size 给列表/预览；找不到返回 None。"""
+        entry = self.item_library.get(str(key or ""))
+        if not isinstance(entry, dict):
+            return None
+        path = resolve_level_path(
+            str(entry.get(which) or ""), self.media_base_dir
+        )
+        if path is None:
+            return None
+        return load_scaled(path, (size, size), True)
+
+    def select_item(self, key: str) -> None:
+        self.item_selected = str(key)
+
+    def scroll_item_library(self, delta: float) -> None:
+        """物品页的滚轮：按像素滚（上界在绘制时按内容高度夹住）。"""
+        self.item_library_scroll = max(
+            0.0, self.item_library_scroll + float(delta) * SCROLL_STEP
+        )
+
+    def add_item(self) -> None:
+        """选两张图登记一个物品：图标 + 说明图；同一张图标已有条目就更新。"""
+        base = self.media_base_dir
+        if base is None:
+            self.status = "尚未打开游戏配置，无法添加物品。"
+            return
+        icon = ask_image_path("选择物品图标", base)
+        if not icon:
+            self.status = "已取消添加物品。"
+            return
+        description = ask_image_path("选择物品说明图", base)
+        if not description:
+            self.status = "已取消添加物品。"
+            return
+        icon_path = relative_level_path(icon, base)
+        description_path = relative_level_path(description, base)
+        if not icon_path or not description_path:
+            self.status = "物品图必须放在游戏根目录里，路径没能换算出来。"
+            return
+        key = item.key_for(self.item_library, icon_path)
+        existed = key in self.item_library
+        self.item_library[key] = {
+            "icon": icon_path,
+            "description": description_path,
+        }
+        self.item_selected = key
+        self.status = (
+            f"已更新物品 {key}；点「应用」后写入 game.json。"
+            if existed
+            else f"已添加物品 {key}；点「应用」后写入 game.json。"
+        )
+
+    def replace_item_picture(self, which: str) -> None:
+        """换选中物品的图标或说明图；id 不变，触发源的链接也就不断。"""
+        key = self.item_selected
+        if key not in self.item_library:
+            self.status = "先选中物品库里的一条。"
+            return
+        base = self.media_base_dir
+        if base is None:
+            return
+        title = "选择物品图标" if which == "icon" else "选择物品说明图"
+        path = ask_image_path(title, base)
+        if not path:
+            self.status = "已取消更换物品图片。"
+            return
+        relative = relative_level_path(path, base)
+        if not relative:
+            self.status = "图片必须放在游戏根目录里，路径没能换算出来。"
+            return
+        self.item_library[key][which] = relative
+        self.status = f"已更新物品 {key}；点「应用」后写入 game.json。"
+
+    def delete_item(self, key: str) -> None:
+        """删掉一个物品；还被触发源引用着的不能删。"""
+        key = str(key or "")
+        if key not in self.item_library:
+            self.status = "先选中物品库里的一条。"
+            return
+        references = self.item_key_references(key)
+        if references:
+            self.status = (
+                f"物品 {key} 还被这些关卡引用着，不能删除："
+                f"{'、'.join(references)}。"
+            )
+            return
+        keys = [name for name, _ in self.item_library_items()]
+        index = keys.index(key)
+        self.item_library.pop(key, None)
+        keys.remove(key)
+        self.item_selected = keys[min(index, len(keys) - 1)] if keys else ""
+        self.status = f"已删除物品 {key}；点「应用」后写入 game.json。"
+
+    def item_key_references(self, key: str) -> list:
+        """哪些关卡还有触发源引用这个物品：当前关卡 + 已保存的关卡。"""
+        if not key:
+            return []
+        names = []
+        if self.level_in_view and any(
+            str(source.get("item") or "").strip() == key
+            for source in self.level.trigger_sources
+            if isinstance(source, dict)
+        ):
+            names.append(self.level.name or "当前关卡")
+        if self.game_path is not None:
+            for path in game.level_files(self.game_path):
+                if self.path is not None and os.path.normpath(path) == os.path.normpath(
+                    self.path
+                ):
+                    continue
+                definition = sound.read_definition(path)
+                if definition is not None and item.references_in(definition, key):
+                    names.append(level_name_of(path))
+        return names
 
     # ---- 动画弹窗里的帧 ---------------------------------------------
     def animation_edit_frames(self) -> list:
@@ -2520,6 +2691,9 @@ class Editor:
             return
         if self.game_animation_tab():
             self.scroll_animation_page(delta)
+            return
+        if self.game_item_tab():
+            self.scroll_item_library(delta)
             return
         self.game_card_scroll = max(
             0.0, self.game_card_scroll + float(delta) * SCROLL_STEP
@@ -3488,6 +3662,7 @@ class Editor:
             mode = str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
             rows.append(("模式", TRIGGER_SOURCE_MODE_LABELS.get(mode, mode)))
             rows.append(("跳高变化", number_text(entry.get("jump_offset", 0.0))))
+            rows.append(("物品", item.label(self.item_library, entry.get("item"))))
         elif kind == KIND_PORTAL:
             rows += [
                 ("朝向", FACE_LABELS.get(entry.get("face", ""), FACE_LABELS[FACE_ORDER[0]])),
@@ -3706,6 +3881,15 @@ class Editor:
                 values = [value for _, value in TRIGGER_SOURCE_MODES]
                 index = values.index(current) if current in values else 0
                 entry["mode"] = values[(index + delta) % len(values)]
+            elif field == 6:               # 物品：无 / 物品库里的 id 循环
+                values = [""] + [key for key, _ in self.item_library_items()]
+                current = str(entry.get("item") or "")
+                index = values.index(current) if current in values else 0
+                chosen = values[(index + delta) % len(values)]
+                if chosen:
+                    entry["item"] = chosen
+                else:
+                    entry.pop("item", None)
         elif kind == KIND_PLAYER:
             if field == 4:                 # 初始朝向：右 / 左 循环
                 current = self.player_face()
@@ -3815,6 +3999,11 @@ class Editor:
             return [(FACE_LABELS[face], face) for face in FACE_ORDER]
         if kind == KIND_TRIGGER_SOURCE and field == 4:
             return list(TRIGGER_SOURCE_MODES)
+        if kind == KIND_TRIGGER_SOURCE and field == 6:
+            return [("无", "")] + [
+                (item.label(self.item_library, key), key)
+                for key, _ in self.item_library_items()
+            ]
         if kind == KIND_PLAYER and field == 4:
             return [(PLAYER_FACE_LABELS[face], face) for face in PLAYER_FACE_ORDER]
         if kind == KIND_PORTAL and field == 5:
@@ -3860,6 +4049,8 @@ class Editor:
             return entry.get("target") or ""
         if kind == KIND_TRIGGER_SOURCE and field == 4:
             return str(entry.get("mode") or TRIGGER_SOURCE_MODE_DEFAULT)
+        if kind == KIND_TRIGGER_SOURCE and field == 6:
+            return str(entry.get("item") or "")
         if kind == KIND_PLAYER and field == 4:
             return self.player_face()
         if kind == KIND_TEXTURE and field == 7:
@@ -3910,6 +4101,12 @@ class Editor:
                     value if value in TRIGGER_SOURCE_MODE_VALUES
                     else TRIGGER_SOURCE_MODE_DEFAULT
                 )
+            elif kind == KIND_TRIGGER_SOURCE and field == 6:
+                chosen = str(value or "").strip()
+                if chosen:
+                    entry["item"] = chosen
+                else:
+                    entry.pop("item", None)
             elif kind == KIND_PLAYER and field == 4:
                 entry["face"] = value if value in PLAYER_FACE_ORDER else "right"
             elif kind == KIND_TEXTURE and field == 5:

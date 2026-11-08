@@ -393,15 +393,25 @@
       "name": "prop1",
       "pos": [53.0, 13.0],
       "size": [2.0, 2.0],
-      "jump_offset": -1.0,
-      "mode": "once"
+      "jump_offset": -2.0,
+      "mode": "once",
+      "item": "wedding"
     },
     {
       "name": "prop2",
       "pos": [139.0, 0.0],
       "size": [3.0, 3.0],
       "jump_offset": -1.0,
-      "mode": "once"
+      "mode": "once",
+      "item": "toy"
+    },
+    {
+      "name": "prop3",
+      "pos": [181.0, 11.5],
+      "size": [2.0, 2.5],
+      "mode": "hold",
+      "jump_offset": -1.0,
+      "item": "rocket"
     }
   ],
   "portals": [],
@@ -421,7 +431,7 @@
     {
       "pos": [14.5, 0.0],
       "face": "up",
-      "power": 12.0,
+      "power": 11.0,
       "size": [1.0, 6.0]
     }
   ],
@@ -863,6 +873,31 @@
       "size": [18.0, 6.0],
       "image": "textures/level1/9x3.png",
       "smooth": false
+    },
+    {
+      "pos": [178.0, 14.0],
+      "size": [4.0, 4.0],
+      "image": "textures/level1/2x2 1.png",
+      "smooth": false
+    },
+    {
+      "pos": [182.5, 10.0],
+      "size": [4.0, 6.0],
+      "image": "textures/level1/2x3.png",
+      "smooth": false
+    },
+    {
+      "pos": [181.0, 11.5],
+      "size": [2.0, 2.5],
+      "image": "textures/level1/1.5x2.png.png",
+      "smooth": false,
+      "triggers": [
+        {
+          "source": "prop3",
+          "behavior": "hide",
+          "mode": "once"
+        }
+      ]
     }
   ],
   "animation_objects": [],
@@ -884,6 +919,11 @@
         "source": "prop2",
         "behavior": "unlock",
         "mode": "once"
+      },
+      {
+        "source": "prop3",
+        "behavior": "unlock",
+        "mode": "once"
       }
     ]
   },
@@ -895,8 +935,21 @@
     "fade_out": 1.0
   },
   "cutscene": {
-    "pictures": [],
-    "cascade": false,
-    "sound": false
+    "pictures": [
+      {
+        "path": "animations/cutscenes/intro/01.jpeg",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      },
+      {
+        "path": "animations/cutscenes/intro/02.png",
+        "fade_in": 0.5,
+        "hold": 2.0,
+        "fade_out": 0.5
+      }
+    ],
+    "cascade": true,
+    "sound": true
   }
 }

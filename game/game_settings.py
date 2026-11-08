@@ -5,6 +5,7 @@
                        player 是玩家默认的跳高和速度，player_animation / player_sound 是
                        所有关卡共用的玩家表现（size + 相对玩家 AABB 底边中点的 offset +
                        动画/音效 links），animation_library 是动画库，
+                       item_library 是物品库（图标与说明图，触发源按 id 解锁），
                        sounds 是标题与制作名单的音乐，backgrounds 是标题画面和结算画面的背景图
     levels/<名字>.json 一个文件是一关，文件名（去掉 .json）就是关卡名
 game.json 和 levels/*.json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
@@ -31,6 +32,26 @@ DEFAULT_TITLE = "重力"      # game.json 读不出来时用这个，启动不�
 # 玩家表现：所有关卡共用一份。player 里的跳高/速度仍按关卡覆盖，这两份不覆盖。
 PLAYER_ANIMATION_KEY = "player_animation"
 PLAYER_SOUND_KEY = "player_sound"
+
+# 物品库：触发源按 id 解锁物品，背包只显示这些图标和说明图；路径同样相对游戏根
+ITEM_LIBRARY_KEY = "item_library"
+
+
+def item_library_of(settings: dict) -> dict[str, dict[str, str]]:
+    """game.json → 物品库（id → {"icon": …, "description": …}）；坏条目跳过。"""
+    table = (settings or {}).get(ITEM_LIBRARY_KEY)
+    library: dict[str, dict[str, str]] = {}
+    if not isinstance(table, dict):
+        return library
+    for key, value in table.items():
+        if not isinstance(value, dict):
+            continue
+        name = str(key).strip()
+        icon = str(value.get("icon") or "").strip()
+        description = str(value.get("description") or "").strip()
+        if name and icon and description:
+            library[name] = {"icon": icon, "description": description}
+    return library
 
 
 def _pair(value, default: tuple[float, float]) -> list[float]:

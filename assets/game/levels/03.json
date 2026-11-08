@@ -428,14 +428,16 @@
       "pos": [158.0, 9.5],
       "size": [1.27, 1.64],
       "mode": "once",
-      "jump_offset": -1.0
+      "jump_offset": -1.0,
+      "item": "card"
     },
     {
       "name": "prop2",
       "pos": [223.0, 13.0],
       "size": [1.0, 1.0],
       "mode": "once",
-      "jump_offset": -0.5
+      "jump_offset": -0.5,
+      "item": "certificate"
     }
   ],
   "portals": [
@@ -802,7 +804,8 @@
   "sound_objects": [],
   "player": {
     "pos": [122.5, 8.0],
-    "size": [1.0, 2.0]
+    "size": [1.0, 2.0],
+    "jump_height": 2.0
   },
   "destination": {
     "pos": [122.77, 0.0],

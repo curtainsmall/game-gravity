@@ -36,6 +36,67 @@ VOLUME_STEP_WIDTH = 26
 VOLUME_VALUE_WIDTH = 48
 SETTINGS_PANEL_SIZE = (460, 386)
 
+# 背包：4 列 × 3 行，右边是 1:1 的说明图；物品多时按页翻
+BACKPACK_PANEL_SIZE = (760, 460)
+BACKPACK_COLUMNS = 4
+BACKPACK_ROWS = 3
+BACKPACK_SLOT = 88
+BACKPACK_GAP = 12
+BACKPACK_DETAIL = 300
+BACKPACK_MARGIN = 24
+
+
+def backpack_rects(
+    surface: pygame.Surface, count: int, page: int, selected: int
+) -> dict:
+    """背包浮层的几何：格子、说明图和页码。画与点击共用这一套矩形。"""
+    width, height = surface.get_size()
+    panel = pygame.Rect(0, 0, *BACKPACK_PANEL_SIZE)
+    panel.center = (width // 2, height // 2)
+    title = pygame.Rect(panel.left + BACKPACK_MARGIN, panel.top + 14, 240, 34)
+    hint = pygame.Rect(panel.right - BACKPACK_MARGIN - 150, panel.top + 20, 150, 24)
+    grid_top = panel.top + 68
+    grid_left = panel.left + BACKPACK_MARGIN
+    slots = []
+    for row in range(BACKPACK_ROWS):
+        for column in range(BACKPACK_COLUMNS):
+            index = page * BACKPACK_COLUMNS * BACKPACK_ROWS + row * BACKPACK_COLUMNS + column
+            slots.append(
+                {
+                    "rect": pygame.Rect(
+                        grid_left + column * (BACKPACK_SLOT + BACKPACK_GAP),
+                        grid_top + row * (BACKPACK_SLOT + BACKPACK_GAP),
+                        BACKPACK_SLOT,
+                        BACKPACK_SLOT,
+                    ),
+                    "index": index,
+                    "filled": index < count,
+                }
+            )
+    detail = pygame.Rect(
+        panel.left + BACKPACK_MARGIN + BACKPACK_COLUMNS * BACKPACK_SLOT
+        + (BACKPACK_COLUMNS - 1) * BACKPACK_GAP + 24,
+        panel.top + 84,
+        BACKPACK_DETAIL,
+        BACKPACK_DETAIL,
+    )
+    footer = pygame.Rect(panel.left + BACKPACK_MARGIN, panel.bottom - 38, 400, 24)
+    page_count = max(1, (count + BACKPACK_COLUMNS * BACKPACK_ROWS - 1) // (
+        BACKPACK_COLUMNS * BACKPACK_ROWS
+    ))
+    page = max(0, min(int(page), page_count - 1))
+    return {
+        "panel": panel,
+        "title": title,
+        "hint": hint,
+        "slots": slots,
+        "detail": detail,
+        "footer": footer,
+        "page": page,
+        "page_count": page_count,
+        "selected": int(selected),
+    }
+
 _FONTS: dict[int, pygame.font.Font] = {}
 
 

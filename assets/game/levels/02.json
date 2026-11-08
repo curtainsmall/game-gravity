@@ -440,7 +440,8 @@
       "pos": [21.0, 0.0],
       "size": [3.0, 3.0],
       "mode": "once",
-      "jump_offset": -1.0
+      "jump_offset": -1.0,
+      "item": "bond"
     },
     {
       "name": "l_button_2",
@@ -483,6 +484,14 @@
       "size": [2.0, 1.0],
       "mode": "hold",
       "jump_offset": 0.0
+    },
+    {
+      "name": "prop2",
+      "pos": [129.0, 10.0],
+      "size": [3.0, 3.0],
+      "mode": "once",
+      "jump_offset": -1.0,
+      "item": "paper"
     }
   ],
   "portals": [
@@ -572,6 +581,64 @@
       "size": [240.0, 16.0],
       "image": "textures/level2/IMG_9896.PNG",
       "smooth": false
+    },
+    {
+      "pos": [19.0, 0.0],
+      "size": [2.16, 4.16],
+      "image": "textures/level2/IMG_9899.PNG",
+      "smooth": false,
+      "triggers": [],
+      "follow": "l_gate_3"
+    },
+    {
+      "pos": [97.0, 0.0],
+      "size": [2.16, 4.16],
+      "image": "textures/level2/IMG_9899.PNG",
+      "smooth": false,
+      "triggers": [],
+      "follow": "l_gate_2"
+    },
+    {
+      "pos": [147.0, 0.0],
+      "size": [2.16, 4.16],
+      "image": "textures/level2/IMG_9899.PNG",
+      "smooth": false,
+      "triggers": [],
+      "follow": "r_gate_4"
+    },
+    {
+      "pos": [161.0, 5.0],
+      "size": [2.16, 4.16],
+      "image": "textures/level2/IMG_9899.PNG",
+      "smooth": false,
+      "triggers": [],
+      "follow": "r_gate_3"
+    },
+    {
+      "pos": [211.0, 10.0],
+      "size": [2.16, 4.16],
+      "image": "textures/level2/IMG_9899.PNG",
+      "smooth": false,
+      "triggers": [],
+      "follow": "r_gate_1"
+    },
+    {
+      "pos": [194.0, 7.0],
+      "size": [4.0, 2.0],
+      "image": "textures/level2/IMG_9899.PNG",
+      "smooth": false,
+      "triggers": [],
+      "follow": "r_gate_2",
+      "face": "right"
+    },
+    {
+      "pos": [106.0, 6.0],
+      "size": [4.0, 2.0],
+      "image": "textures/level2/IMG_9899.PNG",
+      "smooth": false,
+      "triggers": [],
+      "follow": "l_gate_1",
+      "face": "right"
     }
   ],
   "animation_objects": [],
@@ -584,7 +651,19 @@
   },
   "destination": {
     "pos": [1.0, 6.0],
-    "size": [1.0, 2.0]
+    "size": [1.0, 2.0],
+    "triggers": [
+      {
+        "source": "prop1",
+        "behavior": "unlock",
+        "mode": "once"
+      },
+      {
+        "source": "prop2",
+        "behavior": "unlock",
+        "mode": "once"
+      }
+    ]
   },
   "background": "textures/level2/IMG_9889.PNG",
   "sound": {

@@ -15,7 +15,9 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
     trigger_sources          触发源：整块 pos/size 矩形就是触发区，name 供触发卡片引用；
                              mode 是 hold / once（压着才算 / 第一次压到后一直算），
                              jump_offset 是按下期间跳高的变化量（格，正数跳更高、负数跳更低、
-                             0 只是开关）；老数据的 buttons / items 会并进这里：
+                             0 只是开关）；item 是按下后解锁的物品 id（见 game.json 的
+                             item_library），只解锁一次，按住松开都不收回；
+                             老数据的 buttons / items 会并进这里：
                              按钮按实际矩形换算成 hold + 0，道具的 persist 变成 hold
     portals                  传送门：pos/size 是门本身（底边中点），face 是出来的朝向，target 引用另一个门
     items                    老数据：道具，读进来并进 trigger_sources（persist 变成 hold，
@@ -554,7 +556,7 @@ def build_nozzles(level_definition: LevelDefinition) -> list[GameObject]:
 def build_trigger_sources(level_definition: LevelDefinition) -> list[GameObject]:
     """触发源：矩形就是触发区，玩家压上去算按下。
 
-    新数据写在 trigger_sources 里：{name, pos, size, mode, jump_offset}。
+    新数据写在 trigger_sources 里：{name, pos, size, mode, jump_offset, item}。
     老数据里的 buttons（棱台，pos 是底面中点）和 items（道具）在这里并进来：
     按钮按它的实际矩形换算成 hold + jump_offset 0，道具的 persist 换成 hold。
     """
@@ -603,7 +605,11 @@ def _make_trigger_source(
     game_object = _make(
         entry, GameObjectKind.TRIGGER_SOURCE, is_static=True, is_sensor=True
     )
-    game_object.trigger_source = TriggerSource(mode=mode, jump_offset=jump_offset)
+    game_object.trigger_source = TriggerSource(
+        mode=mode,
+        jump_offset=jump_offset,
+        item=str(entry.get("item") or "").strip(),
+    )
     return game_object
 
 

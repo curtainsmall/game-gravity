@@ -168,13 +168,23 @@ SETTINGS_TABS = (
     ("过场", ()),
 )
 SETTINGS_CUTSCENE_TAB = 3
-# 游戏配置分七页：常规、动画集、制作名单、声音、声音库、过场、玩家表现。每页有哪些格子由
-# editor.game_cells 按页给；玩家表现页只负责跳到属性面板里的全局项。
-GAME_SETTINGS_TABS = ("常规", "动画集", "制作名单", "声音", "声音库", "过场", "玩家表现")
+# 游戏配置分八页：常规、动画集、制作名单、声音、声音库、物品、过场、玩家表现。
+# 每页有哪些格子由 editor.game_cells 按页给；玩家表现页只负责跳到属性面板里的全局项。
+GAME_SETTINGS_TABS = (
+    "常规",
+    "动画集",
+    "制作名单",
+    "声音",
+    "声音库",
+    "物品",
+    "过场",
+    "玩家表现",
+)
 GAME_ANIMATION_TAB = 1
 GAME_SOUND_LIBRARY_TAB = 4
-GAME_CUTSCENE_TAB = 5
-GAME_PLAYER_VIEW_TAB = 6
+GAME_ITEM_TAB = 5
+GAME_CUTSCENE_TAB = 6
+GAME_PLAYER_VIEW_TAB = 7
 BACKGROUND_MAX_LENGTH = 120
 
 # 编辑器里可滚的页面：滚轮一格滚多少像素

@@ -3,7 +3,8 @@
 游戏根就是 game.json 所在的那个文件夹：
     game.json    游戏自己的配置：title 是标题，credits 是制作名单（职位 → 名字数组），
                  backgrounds 是标题画面 / 结算画面的背景；player_animation /
-                 player_sound 是所有关卡共用的玩家表现
+                 player_sound 是所有关卡共用的玩家表现；item_library 是物品库
+                 （id → 图标 + 说明图，触发源按 id 解锁）
     levels/      一个 <名字>.json 是一关
 编辑器在启动时让用户打开或新建一份 game.json，之后关卡都从它的兄弟目录 levels/ 里找。
 配置里只改自己认识的键，别的键原样保留。

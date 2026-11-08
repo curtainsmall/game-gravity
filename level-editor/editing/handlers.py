@@ -454,6 +454,26 @@ def handle_sound_library_click(editor: Editor, position: tuple, page: dict) -> N
             return
 
 
+def handle_item_library_click(editor: Editor, position: tuple, page: dict) -> None:
+    """物品页：添加、换图标、换说明图、删除，以及点一行选中。"""
+    if page["add"].collidepoint(position):
+        editor.add_item()
+        return
+    if page["icon"].collidepoint(position):
+        editor.replace_item_picture("icon")
+        return
+    if page["description"].collidepoint(position):
+        editor.replace_item_picture("description")
+        return
+    if page["delete"].collidepoint(position):
+        editor.delete_item(editor.item_selected)
+        return
+    for row in page["rows"]:
+        if row["rect"].collidepoint(position):
+            editor.select_item(row["key"])
+            return
+
+
 def handle_animation_edit_click(
     surface: pygame.Surface, editor: Editor, position: tuple
 ) -> None:
@@ -643,6 +663,11 @@ def handle_game_settings_click(
         return
     if editor.game_sound_library_tab():
         handle_sound_library_click(editor, position, geometry["sound_library"])
+        if not panel.collidepoint(position):
+            editor.close_game_settings(False)
+        return
+    if editor.game_item_tab():
+        handle_item_library_click(editor, position, geometry["item_library"])
         if not panel.collidepoint(position):
             editor.close_game_settings(False)
         return

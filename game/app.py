@@ -24,6 +24,7 @@ from game_settings import (
     screen_background,
     title_of,
 )
+from inventory import Inventory, item_pictures
 from levels import discover_levels, load_scene
 from renderer.viewport import ViewMode
 from scenes.scene import Scene
@@ -69,6 +70,12 @@ class App:
         self.game_settings = load_game_settings()
         self.title = title_of(self.game_settings)
         self.credits = credits_of(self.game_settings)
+        # 物品库：触发源按 id 解锁，B 背包只显示这里有的图标和说明图
+        self.item_library = item_pictures(self.game_settings, game_root())
+        self.inventory = Inventory()      # 只存在内存里，换关保留、不写文件
+        self.backpack_open = False
+        self.backpack_selected = 0
+        self.backpack_page = 0
         # 标题画面 / 结算画面的背景图（game.json 的 backgrounds），没图就是纯色
         self.title_background = screen_background(self.game_settings, "title", game_root())
         self.credits_background = screen_background(self.game_settings, "credits", game_root())
@@ -115,6 +122,9 @@ class App:
             return
         if self.settings_open:
             self.handle_settings_event(event)
+            return
+        if self.backpack_open:
+            self.handle_backpack_event(event)
             return
         if self.cutscene_player is not None:
             self.handle_cutscene_event(event)
@@ -187,6 +197,73 @@ class App:
             self.jump_edge = True
         elif event.key == pygame.K_SPACE:
             self.flip_edge = True
+        elif event.key == pygame.K_b:
+            self.open_backpack()
+
+    def open_backpack(self) -> None:
+        """打开背包：玩法暂停，BGM 继续。"""
+        count = len(self.inventory)
+        if count:
+            self.backpack_selected = max(0, min(self.backpack_selected, count - 1))
+            self.backpack_page = self.backpack_selected // (
+                ui.BACKPACK_COLUMNS * ui.BACKPACK_ROWS
+            )
+        else:
+            self.backpack_selected = 0
+            self.backpack_page = 0
+        self.backpack_open = True
+        self.jump_edge = False
+        self.flip_edge = False
+
+    def close_backpack(self) -> None:
+        self.backpack_open = False
+
+    def backpack_page_count(self) -> int:
+        per_page = ui.BACKPACK_COLUMNS * ui.BACKPACK_ROWS
+        return max(1, (len(self.inventory) + per_page - 1) // per_page)
+
+    def backpack_select(self, index: int) -> None:
+        """键盘移动选择：跨页时页码跟着走。"""
+        count = len(self.inventory)
+        if not count:
+            return
+        self.backpack_selected = max(0, min(int(index), count - 1))
+        self.backpack_page = self.backpack_selected // (
+            ui.BACKPACK_COLUMNS * ui.BACKPACK_ROWS
+        )
+
+    def handle_backpack_event(self, event: pygame.event.Event) -> None:
+        """背包打开时：只处理关闭、选择和翻页。"""
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_b, pygame.K_ESCAPE):
+                self.close_backpack()
+            elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                step = -1 if event.key == pygame.K_LEFT else 1
+                self.backpack_select(self.backpack_selected + step)
+            elif event.key in (pygame.K_UP, pygame.K_DOWN):
+                step = -ui.BACKPACK_COLUMNS if event.key == pygame.K_UP else ui.BACKPACK_COLUMNS
+                self.backpack_select(self.backpack_selected + step)
+            return
+        if event.type == pygame.MOUSEWHEEL:
+            page = max(
+                0,
+                min(self.backpack_page - event.y, self.backpack_page_count() - 1),
+            )
+            self.backpack_page = page
+            if len(self.inventory):
+                self.backpack_select(page * ui.BACKPACK_COLUMNS * ui.BACKPACK_ROWS)
+            return
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            geometry = ui.backpack_rects(
+                self.surface, len(self.inventory), self.backpack_page, self.backpack_selected
+            )
+            if not geometry["panel"].collidepoint(event.pos):
+                self.close_backpack()
+                return
+            for slot in geometry["slots"]:
+                if slot["filled"] and slot["rect"].collidepoint(event.pos):
+                    self.backpack_select(slot["index"])
+                    return
 
     def handle_cutscene_event(self, event: pygame.event.Event) -> None:
         """过场里：Esc 暂停，按住空格跳过，其它输入都不接。"""
@@ -345,6 +422,7 @@ class App:
         self.scene.enter()
         self.screen = Screen.PLAYING
         self.paused = False
+        self.backpack_open = False
         self.unconsumed_seconds = 0.0
         self.jump_edge = False
         self.flip_edge = False
@@ -468,6 +546,8 @@ class App:
         self.fade_in_seconds = 0.0
         self.paused = False
         self.settings_open = False
+        self.backpack_open = False
+        self.inventory.clear()          # 回标题就是放弃这次进度：背包只在内存里
         self.screen = Screen.TITLE
         # 从暂停里退回标题时音乐也停在那儿，play 会先把它叫醒
         self.sound.play(self.title_bgm)
@@ -475,6 +555,14 @@ class App:
     def clamp_level_scroll(self) -> None:
         limit = ui.max_level_scroll(self.surface, len(self.levels))
         self.level_scroll = max(0, min(self.level_scroll, limit))
+
+    def collect_unlocked_items(self) -> None:
+        """把这一帧触发源解锁的物品收进背包；没有物品库的 id 直接忽略。"""
+        if self.scene is None:
+            return
+        for item_id in self.scene.take_unlocked_items():
+            if item_id in self.item_library:
+                self.inventory.unlock(item_id)
 
     # ---- 每帧 -------------------------------------------------------
     def update(self, elapsed_seconds: float) -> None:
@@ -500,7 +588,12 @@ class App:
                 self.credits_page += 1
                 self.credits_elapsed = 0.0
             return
-        if self.screen != Screen.PLAYING or self.paused or self.settings_open:
+        if (
+            self.screen != Screen.PLAYING
+            or self.paused
+            or self.settings_open
+            or self.backpack_open
+        ):
             return
         if self.scene is None or self.scene.world is None:
             return
@@ -515,6 +608,7 @@ class App:
         if ran_a_step:
             self.jump_edge = False
             self.flip_edge = False
+        self.collect_unlocked_items()
         if self.scene.destination_reached:
             self.destination_was_locked = False
             self.advance_level()
@@ -536,6 +630,8 @@ class App:
             self.scene.draw(surface)
             if self.player_debug:
                 debug_display.draw_player_debug(surface, InputSource.jump_height())
+            if self.backpack_open:
+                screens.draw_backpack(surface, self)
         elif self.screen == Screen.LEVEL_SELECT:
             screens.draw_level_select(surface, self)
         elif self.screen == Screen.ENDING:
