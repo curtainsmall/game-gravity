@@ -2,7 +2,9 @@
 
 游戏根就是 assets/game 这个文件夹：
     game.json          游戏自己的设置：title 是标题，credits 是制作名单（职位 → 名字数组），
-                       player 是玩家默认的跳高和速度，animation_library 是动画库，
+                       player 是玩家默认的跳高和速度，player_animation / player_sound 是
+                       所有关卡共用的玩家表现（size + 相对玩家 AABB 底边中点的 offset +
+                       动画/音效 links），animation_library 是动画库，
                        sounds 是标题与制作名单的音乐，backgrounds 是标题画面和结算画面的背景图
     levels/<名字>.json 一个文件是一关，文件名（去掉 .json）就是关卡名
 game.json 和 levels/*.json 里写的相对路径，一律相对 game.json 所在的文件夹（游戏根）；
@@ -25,6 +27,49 @@ GAME_FILE_NAME = "game.json"
 LEVELS_DIR = GAME_DIR / "levels"
 
 DEFAULT_TITLE = "重力"      # game.json 读不出来时用这个，启动不会因为缺设置就崩
+
+# 玩家表现：所有关卡共用一份。player 里的跳高/速度仍按关卡覆盖，这两份不覆盖。
+PLAYER_ANIMATION_KEY = "player_animation"
+PLAYER_SOUND_KEY = "player_sound"
+
+
+def _pair(value, default: tuple[float, float]) -> list[float]:
+    """读 [x, y]：写坏了就退回默认值。"""
+    try:
+        first, second = value
+        return [float(first), float(second)]
+    except (TypeError, ValueError):
+        return [float(default[0]), float(default[1])]
+
+
+def player_animation_of(settings: dict) -> dict | None:
+    """全局玩家动画：尺寸、相对玩家 AABB 底边中点的偏移、六个动作的链接。
+
+    没写这块就返回 None（这一份配置没有玩家精灵），不猜尺寸。
+    """
+    value = settings.get(PLAYER_ANIMATION_KEY)
+    if not isinstance(value, dict):
+        return None
+    try:
+        width, height = value.get("size")
+        size = [max(0.01, float(width)), max(0.01, float(height))]
+    except (TypeError, ValueError):
+        return None
+    links = value.get("links")
+    return {
+        "size": size,
+        "offset": _pair(value.get("offset"), (0.0, 0.0)),
+        "links": links if isinstance(links, dict) else {},
+    }
+
+
+def player_sound_of(settings: dict) -> dict | None:
+    """全局玩家音效：六个动作的声音链接；没写就返回 None。"""
+    value = settings.get(PLAYER_SOUND_KEY)
+    if not isinstance(value, dict):
+        return None
+    links = value.get("links")
+    return {"links": links if isinstance(links, dict) else {}}
 
 
 def load_game_settings() -> dict:

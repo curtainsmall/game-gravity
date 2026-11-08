@@ -2,7 +2,8 @@
 
 游戏根就是 game.json 所在的那个文件夹：
     game.json    游戏自己的配置：title 是标题，credits 是制作名单（职位 → 名字数组），
-                 backgrounds 是标题画面 / 结算画面的背景
+                 backgrounds 是标题画面 / 结算画面的背景；player_animation /
+                 player_sound 是所有关卡共用的玩家表现
     levels/      一个 <名字>.json 是一关
 编辑器在启动时让用户打开或新建一份 game.json，之后关卡都从它的兄弟目录 levels/ 里找。
 配置里只改自己认识的键，别的键原样保留。
@@ -18,6 +19,63 @@ DEFAULT_TITLE = "重力"      # game.json 丢了或没写标题时用它，编�
 # 标题画面 / 结算画面的背景图，写在 game.json 的 backgrounds 里
 BACKGROUNDS_KEY = "backgrounds"
 SCREEN_BACKGROUND_KEYS = ("title", "credits")
+
+# 玩家表现：所有关卡共用一份，放在 game.json 的独立键里，不写进关卡
+PLAYER_ANIMATION_KEY = "player_animation"
+PLAYER_SOUND_KEY = "player_sound"
+
+
+def _pair(value, default: tuple[float, float]) -> list[float]:
+    try:
+        first, second = value
+        return [float(first), float(second)]
+    except (TypeError, ValueError):
+        return [float(default[0]), float(default[1])]
+
+
+def player_animation_of(settings: dict) -> dict | None:
+    """玩家动画：尺寸、相对 AABB 底边中点的偏移、六动作链接；没写返回 None。"""
+    value = settings.get(PLAYER_ANIMATION_KEY)
+    if not isinstance(value, dict):
+        return None
+    try:
+        width, height = value.get("size")
+        size = [max(0.01, float(width)), max(0.01, float(height))]
+    except (TypeError, ValueError):
+        return None
+    links = value.get("links")
+    return {
+        "size": size,
+        "offset": _pair(value.get("offset"), (0.0, 0.0)),
+        "links": links if isinstance(links, dict) else {},
+    }
+
+
+def player_sound_of(settings: dict) -> dict | None:
+    """玩家音效：六动作声音链接；没写返回 None。"""
+    value = settings.get(PLAYER_SOUND_KEY)
+    if not isinstance(value, dict):
+        return None
+    links = value.get("links")
+    return {"links": links if isinstance(links, dict) else {}}
+
+
+def player_views_to_object(animation: dict, sound: dict) -> tuple[dict, dict]:
+    """编辑态 → 要写进 game.json 的两块；只保留约定字段。"""
+    size = list(animation.get("size") or [1.0, 1.0])
+    offset = list(animation.get("offset") or [0.0, 0.0])
+    links = animation.get("links")
+    sound_links = sound.get("links")
+    return (
+        {
+            "size": [float(size[0]), float(size[1])],
+            "offset": [float(offset[0]), float(offset[1])],
+            "links": links if isinstance(links, dict) else {},
+        },
+        {
+            "links": sound_links if isinstance(sound_links, dict) else {},
+        },
+    )
 
 
 def new_settings() -> dict:

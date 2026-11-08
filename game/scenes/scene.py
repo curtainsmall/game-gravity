@@ -11,7 +11,13 @@ from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
 from core.game_object import GameObjectKind
 from cutscene.cutscene import Cutscene, cutscene_of
-from game_settings import game_root, load_game_settings, player_of
+from game_settings import (
+    game_root,
+    load_game_settings,
+    player_animation_of,
+    player_of,
+    player_sound_of,
+)
 from physics.physics_system import PhysicsSystem
 from portal.portal_system import PortalSystem
 from renderer.render_system import RenderSystem
@@ -31,6 +37,8 @@ from world.level import (
     build_nozzles,
     build_movable_blocks,
     build_player,
+    build_player_animation,
+    build_player_sound,
     build_portals,
     build_sound_objects,
     build_textures,
@@ -99,6 +107,8 @@ class Scene:
             flip_area_offsets_of(level_definition), world.height_in_blocks
         )
         players = build_player(level_definition)
+        player_animation = player_animation_of(game_settings or {})
+        player_sound = player_sound_of(game_settings or {})
         # 声音库里键 → 路径：这一关的音乐、过场和声音对象都从这里取
         sounds = library_sounds(game_settings, base_dir)
         objects = (
@@ -113,6 +123,7 @@ class Scene:
             + build_nozzles(level_definition)
             + build_destination(level_definition)
             + players
+            + build_player_animation(player_animation, players[0] if players else None)
         )
         scene = cls(world=world, objects=objects)
         scene.player = players[0] if players else None
@@ -121,15 +132,19 @@ class Scene:
         # 触发行为：来源名字解析一次，之后每帧派发事件
         scene.trigger_system.attach(objects)
         scene.flip_area_offsets = flip_area_offsets_of(level_definition)
-        # 动画对象：预设/链接写在关卡里，帧来自 game.json 的动画库
+        # 动画对象：预设/链接写在关卡里，帧来自 game.json 的动画库；玩家的全局动画
+        # 由 player_animation 生成，挂在这一关的玩家上，不进关卡数据
         scene.animation_system = AnimationSystem(
             library_animations(game_settings, base_dir)
         )
         scene.animation_system.attach(objects, scene.player)
-        # 声音对象：预设/链接写在关卡里，声音来自 game.json 的声音库；没有 body，不进 objects
+        # 声音对象：预设/链接写在关卡里，声音来自 game.json 的声音库；没有 body，不进 objects。
+        # 玩家自己的音效来自 player_sound，由这里合成，不写回关卡
         scene.sound_objects = SoundObjects(sounds)
         scene.sound_objects.attach(
-            build_sound_objects(level_definition), objects, scene.player
+            build_sound_objects(level_definition) + build_player_sound(player_sound),
+            objects,
+            scene.player,
         )
         # 这一关的音乐也跟着关卡文件走，曲子找不到就是没有音乐
         scene.bgm = level_bgm(level_definition, base_dir, sounds)

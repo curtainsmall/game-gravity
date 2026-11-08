@@ -29,8 +29,13 @@ PANEL_TABS = (("properties", "属性"), ("objects", "对象列表"))
 
 
 def dock_visible(editor: "Editor") -> bool:
-    """右侧面板露不露出来：视图里有关卡，并且「视图」菜单里没把侧栏关掉。"""
-    return bool(editor.level_in_view and editor.view_settings.get("dock", True))
+    """右侧面板露不露出来：视图里有关卡，或者正在编辑全局玩家表现（关卡可以还没开）。
+
+    「视图」菜单里没把侧栏关掉才露。
+    """
+    if not editor.view_settings.get("dock", True):
+        return False
+    return bool(editor.level_in_view or editor.global_active())
 
 
 def dock_reserved(editor: "Editor", window_width: int) -> int:

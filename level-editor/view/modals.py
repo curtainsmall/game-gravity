@@ -13,6 +13,7 @@ from core.constants import (
     FOOTER,
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
+    GAME_PLAYER_VIEW_TAB,
     GAME_SETTINGS_TABS,
     GAME_SOUND_LIBRARY_TAB,
     HEADER,
@@ -478,13 +479,14 @@ def _credit_card_height(card: dict) -> int:
 
 
 def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
-    """游戏配置：常规 / 动画集 / 制作名单 / 声音 / 过场五页，底下是应用和取消。
+    """游戏配置：常规 / 动画集 / 制作名单 / 声音 / 声音库 / 过场 / 玩家表现七页，底下是应用和取消。
 
     常规页是标题与玩家参数；动画集页列出 game.json 动画库里的条目（键名 + 一行帧缩略图，
     点一行打开编辑弹窗，见 view.animation）；
     制作名单页每个职位一张卡片，装不下就用滚轮按像素上下滚（滚了多少记在编辑器的
     game_card_scroll 上）；声音页把标题与制作名单两块上下排开，每块是路径、循环和淡入淡出；
-    过场页和关卡设置里的是同一页（见 view.cutscene）。只有当前页的那些矩形有值。
+    过场页和关卡设置里的是同一页（见 view.cutscene）；玩家表现页放两个按钮，关掉本页
+    并选中对象列表里的全局项，真正的编辑在属性面板里做。只有当前页的那些矩形有值。
     """
     tab = editor.game_tab
     cards = editor.game_cards
@@ -508,6 +510,8 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
     elif tab == GAME_CUTSCENE_TAB:
         max_height = max(360, surface.get_height() - HEADER - FOOTER - 8)
         height = min(cutscene_page_height(editor, GAME_CONTENT_TOP), max_height)
+    elif tab == GAME_PLAYER_VIEW_TAB:
+        height = 250
     else:
         height = GAME_SOUND_HEIGHT
     panel = place_panel(surface, pygame.Rect(0, 0, GAME_PANEL_WIDTH, height))
@@ -537,6 +541,7 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         "cutscene": None,
         "animation": None,
         "sound_library": None,
+        "player_views": None,
         "note_top": content_top,
         "backgrounds": [],
         "apply": pygame.Rect(panel.right - MARGIN - 140, button_y, 68, BUTTON_HEIGHT),
@@ -654,6 +659,18 @@ def game_settings_geometry(surface: pygame.Surface, editor: Editor) -> dict:
         geometry["note_top"] = panel.bottom - BUTTON_HEIGHT - 36
     elif tab == GAME_CUTSCENE_TAB:
         geometry["cutscene"] = cutscene_geometry(surface, editor, panel, content_top)
+    elif tab == GAME_PLAYER_VIEW_TAB:
+        geometry["player_views"] = {
+            "title": pygame.Rect(
+                panel.left + MARGIN, content_top, row_width, ROW_HEIGHT
+            ),
+            "animation": pygame.Rect(
+                panel.left + MARGIN, content_top + 58, row_width, ROW_HEIGHT + 8
+            ),
+            "sound": pygame.Rect(
+                panel.left + MARGIN, content_top + 104, row_width, ROW_HEIGHT + 8
+            ),
+        }
     else:
         for scene_index, (key, label) in enumerate(SCENE_KEYS):
             top = content_top + scene_index * SCENE_STEP
@@ -921,6 +938,23 @@ def _draw_game_sound(
         )
 
 
+def _draw_game_player_views(
+    surface: pygame.Surface, font: pygame.font.Font, geometry: dict
+) -> None:
+    """玩家表现页：只放两个入口，真正的编辑在右侧属性面板里做，画布不会被挡住。"""
+    page = geometry.get("player_views")
+    if page is None:
+        return
+    surface.blit(
+        font.render("玩家动画 / 音效由所有关卡共用，编辑在属性面板里进行。", True, TEXT),
+        (page["title"].left, page["title"].top),
+    )
+    draw_button(surface, font, page["animation"], "编辑玩家动画（在属性面板）")
+    draw_button(surface, font, page["sound"], "编辑玩家音效（在属性面板）")
+    note = font.render("点上面的按钮会关掉本窗口并选中全局项；不会写入关卡。", True, DIM_TEXT)
+    surface.blit(note, (page["sound"].left, page["sound"].bottom + 10))
+
+
 def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
     geometry = game_settings_geometry(surface, editor)
     panel = geometry["panel"]
@@ -947,6 +981,8 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         draw_library_page(surface, editor, font, geometry["animation"])
     elif editor.game_sound_library_tab():
         draw_sound_library(surface, editor, font, geometry["sound_library"])
+    elif editor.game_tab == GAME_PLAYER_VIEW_TAB:
+        _draw_game_player_views(surface, font, geometry)
     elif editor.game_tab == 0:
         _draw_game_general(surface, editor, font, geometry)
     elif editor.game_tab == 2:
@@ -963,6 +999,34 @@ def draw_game_settings(surface: pygame.Surface, editor: Editor, font: pygame.fon
         from view.animation import draw_animation_edit
 
         draw_animation_edit(surface, editor, font)
+
+
+def global_prompt_geometry(surface: pygame.Surface) -> tuple:
+    """离开全局玩家表现页时的保存提示：应用 / 放弃 / 取消。"""
+    panel = place_panel(surface, pygame.Rect(0, 0, 500, 166))
+    button_y = panel.bottom - 12 - BUTTON_HEIGHT
+    apply_rect = pygame.Rect(panel.right - 12 - 120, button_y, 120, BUTTON_HEIGHT)
+    discard_rect = pygame.Rect(apply_rect.left - 10 - 120, button_y, 120, BUTTON_HEIGHT)
+    cancel_rect = pygame.Rect(discard_rect.left - 10 - 76, button_y, 76, BUTTON_HEIGHT)
+    return panel, apply_rect, discard_rect, cancel_rect
+
+
+def draw_global_prompt(surface: pygame.Surface, editor: Editor, font: pygame.font.Font) -> None:
+    panel, apply_rect, discard_rect, cancel_rect = global_prompt_geometry(surface)
+    draw_panel(surface, panel)
+    surface.blit(
+        font.render("玩家表现有未应用的修改", True, HIGHLIGHT),
+        (panel.left + 14, panel.top + 12),
+    )
+    surface.blit(
+        font.render("玩家动画 / 音效是所有关卡共用的，应用后会写入 game.json。", True, TEXT),
+        (panel.left + 14, panel.top + 44),
+    )
+    hint = font.render("Y / Enter 应用并继续；N 放弃并继续；Esc 取消", True, DIM_TEXT)
+    surface.blit(hint, (panel.left + 14, panel.top + 96))
+    draw_button(surface, font, apply_rect, "应用并继续")
+    draw_button(surface, font, discard_rect, "放弃并继续")
+    draw_button(surface, font, cancel_rect, "取消")
 
 
 def switch_geometry(surface: pygame.Surface) -> tuple:

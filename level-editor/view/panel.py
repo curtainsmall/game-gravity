@@ -13,6 +13,8 @@ from core.constants import (
     FOOTER,
     HEADER,
     HIGHLIGHT,
+    KIND_GLOBAL_ANIMATION,
+    KIND_GLOBAL_SOUND,
     KIND_HAS_NAME,
     KIND_ANIMATION,
     KIND_DESTINATION,
@@ -67,6 +69,10 @@ def _detail_slot_kinds(editor) -> list:
     if kind == KIND_ANIMATION:
         slots.append(("anim_link", None))
     if kind == KIND_SOUND:
+        slots.append(("sound_link", None))
+    if kind == KIND_GLOBAL_ANIMATION:
+        slots.append(("anim_link", None))
+    if kind == KIND_GLOBAL_SOUND:
         slots.append(("sound_link", None))
     return slots
 
@@ -489,27 +495,33 @@ def draw_detail_panel(surface: pygame.Surface, editor: Editor, font: pygame.font
 
     anim_link = detail_slot_rect(surface, editor, "anim_link")
     if anim_link is not None and editor.dialog is not None:
-        draw_button(
-            surface,
-            font,
-            anim_link,
-            editor.animation_link_button_label(editor.dialog["entry"]),
-        )
+        if editor.dialog["kind"] == KIND_GLOBAL_ANIMATION:
+            label = "动画链接…（玩家，全局）"
+        else:
+            label = editor.animation_link_button_label(editor.dialog["entry"])
+        draw_button(surface, font, anim_link, label)
 
     sound_link = detail_slot_rect(surface, editor, "sound_link")
     if sound_link is not None and editor.dialog is not None:
-        draw_button(
-            surface,
-            font,
-            sound_link,
-            editor.sound_link_button_label(editor.dialog["entry"]),
-        )
+        if editor.dialog["kind"] == KIND_GLOBAL_SOUND:
+            label = "声音链接…（玩家，全局）"
+        else:
+            label = editor.sound_link_button_label(editor.dialog["entry"])
+        draw_button(surface, font, sound_link, label)
 
     surface.set_clip(previous_clip)
     draw_scrollbar(surface, viewport, detail_content_height(editor), scroll)
 
     # 底部按钮固定在面板底部，不跟着内容滚
     delete_rect, close_rect, copy_rect = detail_button_rects(surface, editor)
+    global_page = (
+        editor.dialog is not None
+        and editor.dialog["kind"] in (KIND_GLOBAL_ANIMATION, KIND_GLOBAL_SOUND)
+    )
+    if global_page:
+        draw_button(surface, font, delete_rect, "应用")
+        draw_button(surface, font, close_rect, "取消")
+        return
     texture = editor.dialog is not None and editor.dialog["kind"] == KIND_TEXTURE
     draw_button(surface, font, delete_rect, "删除" if texture else "删除对象")
     if copy_rect is not None:

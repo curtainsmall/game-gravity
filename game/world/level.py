@@ -31,15 +31,16 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
                              hide 表示初始隐藏，triggers 的 hide / show 由触发源切换显示
                              （卡片同样带 mode：一次 / 按住 / 切换）
     animation_objects        动画对象：和贴图一样只显示、不碰撞，pos/size 是自己的；
-                             follow 写对象名字（或 "@player"）就跟着它平移；
+                             follow 写对象名字就跟着它平移（不能跟玩家）；
                              preset 是 general（links.general.clip 一条剪辑，播一遍）或
                              player（links.player.<动作>.<left/right> 指向动画库的键），
-                             动作是 idle/run/takeoff/raise/fall/landing，来自玩家的
+                             动作是 idle/run/takeoff/raise/fall/landing，来自跟随对象的
                              物理状态，空着的一侧用另一侧镜像；循环由动作决定
                              （idle/run/raise/fall 循环，takeoff/landing 一次）；
-                             帧来自 game.json 的 animation_library
+                             帧来自 game.json 的 animation_library。玩家自己的动画
+                             不在这里，由 game.json 的 player_animation 生成
     player                   起点；跳高和速度默认来自 game.json，这里写了就覆盖。
-                             玩家自己不再有动画，显示用动画对象（跟随玩家、预设 player）
+                              玩家自己的显示由全局玩家动画负责，不再挂关卡里的动画对象
     destination              终点；triggers 卡片是通关条件，全部生效才进下一关，
                              没有卡片就直接通关
     background               背景图，相对 game.json 的路径；不写就退回游戏根里的 background.png
@@ -57,7 +58,12 @@ game.json 和关卡 json 里写的相对路径，一律相对 game.json 所在�
 import json
 from pathlib import Path
 
-from animation.sprite import PRESET_GENERAL, AnimationSprite
+from animation.sprite import (
+    PLAYER_FOLLOW,
+    PRESET_GENERAL,
+    PRESET_PLAYER,
+    AnimationSprite,
+)
 from controller.controller import Controller
 from controller.flip_rule import FLIP_AREA_OFFSETS_DEFAULT
 from controller.input_source import InputSource
@@ -67,6 +73,8 @@ from physics.body import Body
 from portal.portal import Portal
 from renderer.palette import color_for_kind
 from renderer.render_spec import PlaceholderFace, PlaceholderShape, RenderSpec
+from sound.objects import PLAYER_FOLLOW as SOUND_PLAYER_FOLLOW
+from sound.objects import PRESET_PLAYER as SOUND_PRESET_PLAYER
 from sound.objects import SoundSprite
 from trigger.trigger import (
     MODE_HOLD,
@@ -185,17 +193,20 @@ def build_animation_objects(level_definition: LevelDefinition) -> list[GameObjec
     """动画对象：只显示、不碰撞，和贴图同级。
 
     条目写 pos / size / follow / preset / links；预设和链接由 animation.sprite 解释，
-    帧来自 game.json 的动画库。follow 写名字就跟着那个对象走，写 "@player" 跟玩家。
-    位置尺寸是它自己的，跟随只平移。
+    帧来自 game.json 的动画库。follow 写对象名字就跟着那个对象走；跟随玩家的旧对象
+    跳过——玩家精灵现在来自 game.json 的 player_animation。
     """
     sprites = []
     for entry in level_definition.get("animation_objects", []):
         if not isinstance(entry, dict):
             continue
+        follow = str(entry.get("follow") or "").strip()
+        if follow in PLAYER_FOLLOW:
+            continue                      # 玩家精灵现在来自 game.json，关卡里的旧对象跳过
         game_object = _make(
             entry, GameObjectKind.ANIMATION, is_static=True, is_sensor=True
         )
-        game_object.follow = str(entry.get("follow") or "").strip()
+        game_object.follow = follow
         game_object.sprite = AnimationSprite(
             str(entry.get("preset") or PRESET_GENERAL), entry.get("links")
         )
@@ -203,19 +214,56 @@ def build_animation_objects(level_definition: LevelDefinition) -> list[GameObjec
     return sprites
 
 
+def build_player_animation(animation: dict | None, player) -> list[GameObject]:
+    """把 game.json 的全局玩家动画做成一个跟随玩家的动画对象。
+
+    位置按玩家 AABB 的底边中点加 offset 算；运行时跟随时沿用动画系统的相对位置。
+    """
+    if animation is None or player is None or player.body is None:
+        return []
+    body = player.body
+    width, height = animation["size"]
+    offset_x, offset_y = animation["offset"]
+    left = body.left + body.width / 2.0 + offset_x - width / 2.0
+    bottom = body.bottom + offset_y
+    game_object = _make(
+        {"pos": [left, bottom], "size": [width, height]},
+        GameObjectKind.ANIMATION,
+        is_static=True,
+        is_sensor=True,
+    )
+    game_object.follow = "@player"
+    game_object.sprite = AnimationSprite(PRESET_PLAYER, animation.get("links"))
+    return [game_object]
+
+
+def build_player_sound(player_sound: dict | None) -> list[GameObject]:
+    """把 game.json 的全局玩家音效做成一个跟随玩家的声音对象。"""
+    if player_sound is None:
+        return []
+    links = player_sound.get("links")
+    if not isinstance(links, dict):
+        return []
+    game_object = GameObject(kind=GameObjectKind.SOUND, follow="@player")
+    game_object.sound = SoundSprite(SOUND_PRESET_PLAYER, links)
+    return [game_object]
+
+
 def build_sound_objects(level_definition: LevelDefinition) -> list[GameObject]:
     """声音对象：只出声、不画不碰撞，和动画对象同级。
 
     条目写 preset / follow / links；预设和链接由 sound.objects 解释，声音来自 game.json 的
     声音库。声音对象不参与物理，所以没有位置、大小和 body，也不进关卡对象列表。
+    跟随玩家的旧对象跳过——玩家音效现在来自 game.json 的 player_sound。
     """
     sprites = []
     for entry in level_definition.get("sound_objects", []):
         if not isinstance(entry, dict):
             continue
-        game_object = GameObject(
-            kind=GameObjectKind.SOUND, follow=str(entry.get("follow") or "")
-        )
+        follow = str(entry.get("follow") or "")
+        if follow in SOUND_PLAYER_FOLLOW:
+            continue                      # 玩家音效现在来自 game.json，关卡里的旧对象跳过
+        game_object = GameObject(kind=GameObjectKind.SOUND, follow=follow)
         game_object.sound = SoundSprite(
             str(entry.get("preset") or "general"), entry.get("links")
         )

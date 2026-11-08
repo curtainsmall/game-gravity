@@ -165,11 +165,13 @@ SETTINGS_TABS = (
     ("过场", ()),
 )
 SETTINGS_CUTSCENE_TAB = 3
-# 游戏配置分六页：常规、动画集、制作名单、声音、声音库、过场。每页有哪些格子由 editor.game_cells 按页给。
-GAME_SETTINGS_TABS = ("常规", "动画集", "制作名单", "声音", "声音库", "过场")
+# 游戏配置分七页：常规、动画集、制作名单、声音、声音库、过场、玩家表现。每页有哪些格子由
+# editor.game_cells 按页给；玩家表现页只负责跳到属性面板里的全局项。
+GAME_SETTINGS_TABS = ("常规", "动画集", "制作名单", "声音", "声音库", "过场", "玩家表现")
 GAME_ANIMATION_TAB = 1
 GAME_SOUND_LIBRARY_TAB = 4
 GAME_CUTSCENE_TAB = 5
+GAME_PLAYER_VIEW_TAB = 6
 BACKGROUND_MAX_LENGTH = 120
 
 # 编辑器里可滚的页面：滚轮一格滚多少像素
@@ -187,6 +189,11 @@ KIND_DESTINATION = "destination"
 KIND_TEXTURE = "texture"
 KIND_ANIMATION = "animation"
 KIND_SOUND = "sound"
+# 全局项：只属于游戏配置，不写进关卡；在对象列表里固定排在最上面
+KIND_GLOBAL_HEADER = "global_header"
+KIND_GLOBAL_ANIMATION = "global_animation"
+KIND_GLOBAL_SOUND = "global_sound"
+GLOBAL_KINDS = (KIND_GLOBAL_ANIMATION, KIND_GLOBAL_SOUND)
 MIN_SIZE = 0.05   # 对象最小宽高（格），防止拖成一条看不见的线
 HANDLE_PIXELS = 7  # 缩放手柄的热区半径（像素）：比画出来的把手大一点点
 NUMBER_TEXT_MAX_LENGTH = 8  # 属性面板里数字字段最多敲几个字符（含负号和小数点）
@@ -207,6 +214,9 @@ KIND_TITLES = {
     KIND_TEXTURE: "贴图",
     KIND_ANIMATION: "动画",
     KIND_SOUND: "声音",
+    KIND_GLOBAL_HEADER: "全局",
+    KIND_GLOBAL_ANIMATION: "玩家动画",
+    KIND_GLOBAL_SOUND: "玩家音效",
 }
 
 # 左侧对象列表里的种类顺序（筛选菜单也按这个顺序列）

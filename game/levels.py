@@ -91,6 +91,8 @@ def level_preview(entry: LevelEntry, size: tuple[int, int]) -> pygame.Surface | 
     )
     band = pygame.Surface(render_size)
     band.fill(PREVIEW_BAND_BACKGROUND)
+    # 缩略图也要套一次动画系统：纹理路径、跟随位置和玩家精灵都是它写进 render 的
+    scene.animation_system.update(0.0)
     RenderSystem().update(scene.objects, world, band, None, ViewMode.HORIZONTAL_EXPAND)
 
     surface = pygame.Surface(size)

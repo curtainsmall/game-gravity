@@ -444,17 +444,22 @@ def _draw_delay(
 # ---- 动画对象的链接弹窗 ---------------------------------------------
 def animation_link_geometry(surface: pygame.Surface, editor) -> dict:
     link = editor.animation_link
-    height = LINK_GENERAL_HEIGHT if link is not None and link["preset"] == PRESET_GENERAL else LINK_PLAYER_HEIGHT
+    global_link = link is not None and bool(link.get("global"))
+    height = (
+        LINK_GENERAL_HEIGHT
+        if link is not None and not global_link and link["preset"] == PRESET_GENERAL
+        else LINK_PLAYER_HEIGHT
+    )
     panel = place_panel(surface, pygame.Rect(0, 0, LINK_PANEL_WIDTH, height))
     left = panel.left + 16
     width = panel.width - 32
     title = pygame.Rect(left, panel.top + 10, width, 24)
-    preset = pygame.Rect(left, title.bottom + 8, 220, 24)
-    rows_top = preset.bottom + 12
+    preset = None if global_link else pygame.Rect(left, title.bottom + 8, 220, 24)
+    rows_top = title.bottom + 12 if global_link else preset.bottom + 12
     button_y = panel.bottom - 12 - BUTTON_HEIGHT
     rows = []
     if link is not None:
-        if link["preset"] == PRESET_GENERAL:
+        if not global_link and link["preset"] == PRESET_GENERAL:
             y = rows_top
             label = pygame.Rect(left, y, 70, 24)
             field = pygame.Rect(left + 78, y, width - 78, 24)
@@ -541,16 +546,20 @@ def draw_animation_link(
     geometry = animation_link_geometry(surface, editor)
     panel = geometry["panel"]
     draw_panel(surface, panel)
-    title = font.render("动画对象：预设与链接", True, TEXT)
-    surface.blit(title, (geometry["title"].left, geometry["title"].top))
-    draw_button(surface, font, geometry["preset"], f"预设：{preset_label(link['preset'])}")
-    triangle = geometry["preset"].right - 12
-    middle = geometry["preset"].centery
-    pygame.draw.polygon(
-        surface,
-        TEXT,
-        [(triangle - 4, middle - 2), (triangle + 4, middle - 2), (triangle, middle + 4)],
+    global_link = bool(link.get("global"))
+    title = font.render(
+        "玩家动画：全局链接" if global_link else "动画对象：预设与链接", True, TEXT
     )
+    surface.blit(title, (geometry["title"].left, geometry["title"].top))
+    if not global_link:
+        draw_button(surface, font, geometry["preset"], f"预设：{preset_label(link['preset'])}")
+        triangle = geometry["preset"].right - 12
+        middle = geometry["preset"].centery
+        pygame.draw.polygon(
+            surface,
+            TEXT,
+            [(triangle - 4, middle - 2), (triangle + 4, middle - 2), (triangle, middle + 4)],
+        )
 
     for row in geometry["rows"]:
         label = font.render(

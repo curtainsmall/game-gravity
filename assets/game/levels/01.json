@@ -861,69 +861,7 @@
       "hide": true
     }
   ],
-  "animation_objects": [
-    {
-      "pos": [0.75, -0.16],
-      "size": [2.02, 2.68],
-      "follow": "@player",
-      "preset": "player",
-      "links": {
-        "general": {
-          "clip": ""
-        },
-        "player": {
-          "idle": {
-            "left": {
-              "clip": "idle_left"
-            },
-            "right": {
-              "clip": "idle_right"
-            }
-          },
-          "run": {
-            "left": {
-              "clip": "run_left"
-            },
-            "right": {
-              "clip": "run_right"
-            }
-          },
-          "takeoff": {
-            "left": {
-              "clip": "takeoff_left"
-            },
-            "right": {
-              "clip": "takeoff_right"
-            }
-          },
-          "raise": {
-            "left": {
-              "clip": "raise_left"
-            },
-            "right": {
-              "clip": "raise_right"
-            }
-          },
-          "fall": {
-            "left": {
-              "clip": "raise_left"
-            },
-            "right": {
-              "clip": "raise_right"
-            }
-          },
-          "landing": {
-            "left": {
-              "clip": "landing_left"
-            },
-            "right": {
-              "clip": "landing_right"
-            }
-          }
-        }
-      }
-    }
-  ],
+  "animation_objects": [],
   "sound_objects": [],
   "player": {
     "pos": [1.2, -0.02],

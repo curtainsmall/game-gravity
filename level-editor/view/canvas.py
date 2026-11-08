@@ -19,9 +19,12 @@ from core.constants import (
     GROUND_COLOR,
     HANDLE_COLOR,
     HIGHLIGHT,
+    KIND_ANIMATION,
+    KIND_GLOBAL_ANIMATION,
     KIND_PORTAL,
     KIND_SOUND,
     KIND_TEXTURE,
+    GLOBAL_KINDS,
     MIN_SIZE,
     MOVABLE_COLOR,
     NOZZLE_COLOR,
@@ -140,6 +143,7 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
     if show_textures:
         draw_textures(surface, layout, level, editor.media_base_dir, debug)
     draw_animation_objects(surface, layout, level, editor)
+    draw_global_player(surface, layout, editor)
 
     if debug:
         for entry in level.portals:
@@ -186,9 +190,13 @@ def draw_canvas(surface: pygame.Surface, editor: Editor, layout: Layout) -> None
         # 选中的对象都亮着；只有"唯一选中"的那个才画四角把手
         grabbed = (editor.object_grab["kind"], editor.object_grab["entry"]) if editor.object_grab else None
         selected = grabbed or (editor.selection[0] if len(editor.selection) == 1 else None)
+        if selected is not None and selected[0] in GLOBAL_KINDS:
+            selected = None             # 全局项由 draw_global_player 单独画 gizmo
         if selected is not None and selected[0] == KIND_TEXTURE and not show_textures:
             selected = None                 # 藏起来的贴图不画把手
         for kind, entry in editor.selection:
+            if kind in GLOBAL_KINDS:
+                continue
             if kind == KIND_TEXTURE and not show_textures:
                 continue
             if kind == KIND_SOUND:
@@ -239,6 +247,30 @@ def draw_animation_objects(
             if image is not None:
                 surface.blit(image, rect.topleft)
         pygame.draw.rect(surface, ANIMATION_COLOR, rect, 1)
+
+
+def draw_global_player(surface: pygame.Surface, layout: Layout, editor) -> None:
+    """全局玩家动画：画在玩家起点上；打开玩家动画页时再画可拖的 gizmo。"""
+    box = editor.global_animation_box()
+    if box is None:
+        return
+    rect = layout.entry_rect(box)
+    frame = editor.global_animation_frame()
+    if frame is not None:
+        path, mirror = frame
+        image = load_scaled(path, rect.size, True, flip=mirror)
+        if image is not None:
+            surface.blit(image, rect.topleft)
+    if editor.global_kind() == KIND_GLOBAL_ANIMATION:
+        draw_object_outline(
+            surface,
+            layout,
+            KIND_ANIMATION,
+            box,
+            HIGHLIGHT,
+            2,
+            handles=True,
+        )
 
 
 def draw_object_outline(

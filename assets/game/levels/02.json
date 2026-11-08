@@ -487,7 +487,7 @@
   ],
   "portals": [
     {
-      "name": "l_portalr",
+      "name": "l_portal",
       "pos": [125.0, 12.0],
       "size": [2.0, 1.0],
       "face": "up",
@@ -498,21 +498,21 @@
       "pos": [129.0, 2.0],
       "size": [2.0, 1.0],
       "face": "right",
-      "target": "l_portalr"
+      "target": "l_portal"
     },
     {
       "name": "r_portal_2",
       "pos": [205.0, 2.0],
       "size": [2.0, 1.0],
       "face": "up",
-      "target": ""
+      "target": "r_portal_1"
     },
     {
       "name": "r_portal_1",
       "pos": [240.0, 7.0],
       "size": [2.0, 1.0],
       "face": "left",
-      "target": ""
+      "target": "r_portal_2"
     }
   ],
   "nozzles": [
@@ -562,69 +562,7 @@
       "smooth": false
     }
   ],
-  "animation_objects": [
-    {
-      "pos": [237.55, 11.86],
-      "size": [2.02, 2.68],
-      "follow": "@player",
-      "preset": "player",
-      "links": {
-        "general": {
-          "clip": ""
-        },
-        "player": {
-          "idle": {
-            "left": {
-              "clip": "idle_left"
-            },
-            "right": {
-              "clip": "idle_right"
-            }
-          },
-          "run": {
-            "left": {
-              "clip": "run_left"
-            },
-            "right": {
-              "clip": "run_right"
-            }
-          },
-          "takeoff": {
-            "left": {
-              "clip": "takeoff_left"
-            },
-            "right": {
-              "clip": "takeoff_right"
-            }
-          },
-          "raise": {
-            "left": {
-              "clip": "raise_left"
-            },
-            "right": {
-              "clip": "raise_right"
-            }
-          },
-          "fall": {
-            "left": {
-              "clip": "raise_left"
-            },
-            "right": {
-              "clip": "raise_right"
-            }
-          },
-          "landing": {
-            "left": {
-              "clip": "landing_left"
-            },
-            "right": {
-              "clip": "landing_right"
-            }
-          }
-        }
-      }
-    }
-  ],
+  "animation_objects": [],
   "sound_objects": [],
   "player": {
     "pos": [238.0, 12.0],

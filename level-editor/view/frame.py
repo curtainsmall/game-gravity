@@ -12,6 +12,7 @@ from view.dock import dock_visible, draw_dock
 from view.layout import Layout
 from view.modals import (
     draw_game_settings,
+    draw_global_prompt,
     draw_level_select,
     draw_quit_confirm,
     draw_save_notice,
@@ -63,3 +64,5 @@ def draw(surface: pygame.Surface, editor: "Editor", font: pygame.font.Font, layo
         draw_save_notice(surface, editor, font)
     if editor.confirm_quit:
         draw_quit_confirm(surface, editor, font)
+    if editor.global_prompt is not None:
+        draw_global_prompt(surface, editor, font)

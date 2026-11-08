@@ -4,7 +4,13 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from core.constants import ROW_HEIGHT
+from core.constants import (
+    GAME_PLAYER_VIEW_TAB,
+    KIND_GLOBAL_ANIMATION,
+    KIND_GLOBAL_SOUND,
+    KIND_GLOBAL_HEADER,
+    ROW_HEIGHT,
+)
 from core.animation import PRESET_GENERAL, PRESET_PLAYER
 from core.sound import PRESET_GENERAL as SOUND_GENERAL, PRESET_PLAYER as SOUND_PLAYER
 from view.animation import (
@@ -93,7 +99,10 @@ def handle_toolbar(editor: Editor, position: tuple, window_width: int) -> str | 
         elif action == "save":
             editor.save()
         elif action == "undo":
-            editor.undo()
+            if editor.global_active():
+                editor.undo_global()
+            else:
+                editor.undo()
         elif action == "settings":
             editor.open_settings()
         elif action == "view":
@@ -170,6 +179,39 @@ def handle_detail_click(surface: pygame.Surface, editor: Editor, position: tuple
             editor.clear_selection()
         return
     delete_rect, close_rect, copy_rect = detail_button_rects(surface, editor)
+    if editor.global_active():
+        if delete_rect.collidepoint(position):
+            editor.apply_global()
+            return
+        if close_rect.collidepoint(position):
+            editor.discard_global()
+            return
+        if not detail_viewport(detail_panel_rect(surface)).collidepoint(position):
+            return
+        anim_link = detail_slot_rect(surface, editor, "anim_link")
+        if anim_link is not None and anim_link.collidepoint(position):
+            editor.blur_number()
+            editor.open_global_animation_link()
+            return
+        sound_link = detail_slot_rect(surface, editor, "sound_link")
+        if sound_link is not None and sound_link.collidepoint(position):
+            editor.blur_number()
+            editor.open_global_sound_link()
+            return
+        for rect, index in detail_row_rects(surface, editor):
+            if not rect.collidepoint(position):
+                continue
+            if not editor.dialog_focusable(index):
+                return
+            editor.blur_number()
+            editor.dialog_field = index
+            left, right = stepper_rects(rect)
+            if left.collidepoint(position):
+                editor.adjust_dialog(-1)
+            elif right.collidepoint(position):
+                editor.adjust_dialog(1)
+            return
+        return
     if copy_rect is not None and copy_rect.collidepoint(position):
         editor.duplicate_selection()
         return
@@ -530,7 +572,7 @@ def handle_animation_link_click(
                 return
         editor.close_animation_link_dropdown()
         return
-    if geometry["preset"].collidepoint(position):
+    if geometry["preset"] is not None and geometry["preset"].collidepoint(position):
         editor.toggle_animation_link_dropdown("preset")
         return
     for row in geometry["rows"]:
@@ -601,6 +643,19 @@ def handle_game_settings_click(
         return
     if editor.game_sound_library_tab():
         handle_sound_library_click(editor, position, geometry["sound_library"])
+        if not panel.collidepoint(position):
+            editor.close_game_settings(False)
+        return
+    if editor.game_tab == GAME_PLAYER_VIEW_TAB:
+        page = geometry["player_views"]
+        if page is not None and page["animation"].collidepoint(position):
+            editor.close_game_settings(True)
+            editor.select_global(KIND_GLOBAL_ANIMATION)
+            return
+        if page is not None and page["sound"].collidepoint(position):
+            editor.close_game_settings(True)
+            editor.select_global(KIND_GLOBAL_SOUND)
+            return
         if not panel.collidepoint(position):
             editor.close_game_settings(False)
         return

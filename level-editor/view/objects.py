@@ -1,8 +1,10 @@
 """右侧面板的「对象列表」页：这一关有哪些对象一目了然，还能按种类筛。
 
-列表和画布用同一份对象清单（Editor.go_list_objects），所以看得见、点得中的东西
-才会列出来；点一行就在画布上选中它。筛选用列表顶上那个「类型」下拉，菜单里只列
-这一关里真有的种类和个数。列表和筛选都只属于编辑器当前这一关，不写进关卡文件。
+列表最上面固定是「全局」组（玩家动画 / 玩家音效，来自 game.json，不能删），
+往下才是这一关的对象。列表和画布用同一份对象清单（Editor.go_list_objects），
+所以看得见、点得中的东西才会列出来；点一行就在画布上选中它。筛选用列表顶上那个
+「类型」下拉，菜单里只列这一关里真有的种类和个数。列表和筛选都只属于编辑器当前
+这一关，不写进关卡文件。
 """
 
 from typing import TYPE_CHECKING
@@ -15,6 +17,7 @@ from core.constants import (
     DIM_TEXT,
     DOCK_TAB_HEIGHT,
     HIGHLIGHT,
+    KIND_GLOBAL_HEADER,
     KIND_TITLES,
     ROW_HEIGHT,
     TEXT,
@@ -109,7 +112,7 @@ def draw_go_list(
 
     title = font.render("对象列表", True, TEXT)
     surface.blit(title, (geometry["title"].left, geometry["title"].top))
-    count = font.render(f"{len(geometry['items'])} 个", True, DIM_TEXT)
+    count = font.render(f"本关 {len(editor.go_list_objects())} 个 · 全局 2 项", True, DIM_TEXT)
     surface.blit(
         count,
         (geometry["title"].right - count.get_width(), geometry["title"].top),
@@ -187,7 +190,11 @@ def _draw_rows(
     surface.set_clip(previous.clip(area))
     selected_entries = [entry for _, entry in editor.selection]
     for row in geometry["rows"]:
-        selected = any(row["entry"] is entry for entry in selected_entries)
+        header = row["kind"] == KIND_GLOBAL_HEADER
+        selected = (
+            not header
+            and any(row["entry"] is entry for entry in selected_entries)
+        )
         pygame.draw.rect(
             surface, (62, 62, 72) if selected else (48, 48, 54), row["rect"]
         )
@@ -197,7 +204,7 @@ def _draw_rows(
         label = font.render(
             editor.go_list_label(row["kind"], row["entry"]),
             True,
-            HIGHLIGHT if selected else TEXT,
+            DIM_TEXT if header else (HIGHLIGHT if selected else TEXT),
         )
         surface.blit(
             label,

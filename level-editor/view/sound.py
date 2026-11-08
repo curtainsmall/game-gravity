@@ -258,11 +258,17 @@ def draw_sound_link(
     panel = geometry["panel"]
     draw_panel(surface, panel)
     surface.blit(
-        font.render("声音对象：链接", True, TEXT),
+        font.render(
+            "玩家音效：全局链接" if link.get("global") else "声音对象：链接", True, TEXT
+        ),
         (geometry["title"].left, geometry["title"].top),
     )
     preset = font.render(
-        f"预设：{sound_data.preset_label(link['preset'])}（在属性面板里改）", True, DIM_TEXT
+        "预设：玩家（所有关卡共用，应用后写入 game.json）"
+        if link.get("global")
+        else f"预设：{sound_data.preset_label(link['preset'])}（在属性面板里改）",
+        True,
+        DIM_TEXT,
     )
     surface.blit(preset, (geometry["preset"].left, geometry["preset"].top))
 
@@ -307,7 +313,9 @@ def draw_sound_link(
         )
 
     hint = font.render(
-        "通用：关卡加载时放一次；玩家：按动作切换，起跳/落地播一遍，其余循环。",
+        "玩家：按动作切换，起跳/落地播一遍，其余循环；所有关卡共用。"
+        if link.get("global")
+        else "通用：关卡加载时放一次；玩家：按动作切换，起跳/落地播一遍，其余循环。",
         True,
         DIM_TEXT,
     )

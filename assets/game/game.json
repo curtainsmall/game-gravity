@@ -29,6 +29,95 @@
     "jump_height": 8.5,
     "move_speed": 8.0
   },
+  "player_animation": {
+    "size": [
+      2.02,
+      2.68
+    ],
+    "offset": [
+      -0.115,
+      -0.14
+    ],
+    "links": {
+      "general": {
+        "clip": ""
+      },
+      "player": {
+        "idle": {
+          "left": {
+            "clip": "idle_left"
+          },
+          "right": {
+            "clip": "idle_right"
+          }
+        },
+        "run": {
+          "left": {
+            "clip": "run_left"
+          },
+          "right": {
+            "clip": "run_right"
+          }
+        },
+        "takeoff": {
+          "left": {
+            "clip": "takeoff_left"
+          },
+          "right": {
+            "clip": "takeoff_right"
+          }
+        },
+        "raise": {
+          "left": {
+            "clip": "raise_left"
+          },
+          "right": {
+            "clip": "raise_right"
+          }
+        },
+        "fall": {
+          "left": {
+            "clip": "raise_left"
+          },
+          "right": {
+            "clip": "raise_right"
+          }
+        },
+        "landing": {
+          "left": {
+            "clip": "landing_left"
+          },
+          "right": {
+            "clip": "landing_right"
+          }
+        }
+      }
+    }
+  },
+  "player_sound": {
+    "links": {
+      "player": {
+        "idle": {
+          "sound": ""
+        },
+        "run": {
+          "sound": ""
+        },
+        "takeoff": {
+          "sound": ""
+        },
+        "raise": {
+          "sound": ""
+        },
+        "fall": {
+          "sound": ""
+        },
+        "landing": {
+          "sound": ""
+        }
+      }
+    }
+  },
   "sounds": {
     "title": {
       "sound": "开场曲beta",

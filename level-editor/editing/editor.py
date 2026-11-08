@@ -13,8 +13,10 @@ from core.constants import (
     FACE_ORDER,
     GAME_ANIMATION_TAB,
     GAME_CUTSCENE_TAB,
+    GAME_PLAYER_VIEW_TAB,
     GAME_SETTINGS_TABS,
     GAME_SOUND_LIBRARY_TAB,
+    GLOBAL_KINDS,
     HANDLE_PIXELS,
     HEADER,
     JUMP_HEIGHT_DEFAULT,
@@ -25,6 +27,9 @@ from core.constants import (
     KIND_ANIMATION,
     KIND_BLOCK,
     KIND_DESTINATION,
+    KIND_GLOBAL_ANIMATION,
+    KIND_GLOBAL_HEADER,
+    KIND_GLOBAL_SOUND,
     KIND_HAS_NAME,
     KIND_MOVABLE,
     KIND_NOZZLE,
@@ -190,6 +195,17 @@ class Editor:
         self.animation_edit: dict | None = None    # 编辑单条动画的弹窗状态
         self.animation_link: dict | None = None    # 动画对象的「动画…」弹窗状态
         self.sound_link: dict | None = None        # 声音对象的「声音…」弹窗状态
+        # 全局玩家表现：game.json 里的 player_animation / player_sound。编辑在属性面板，
+        # 改动先进这份 pending，应用后才写盘；撤销也只动这两块。
+        self.player_animation: dict = self._default_player_animation()
+        self.player_sound: dict = self._default_player_sound()
+        self.player_animation_saved: dict = copy.deepcopy(self.player_animation)
+        self.player_sound_saved: dict = copy.deepcopy(self.player_sound)
+        self.global_undo_stack: list = []
+        self.global_prompt: dict | None = None      # 离开全局页时等确认的保存提示
+        self.global_grab: dict | None = None        # 画布上拖玩家动画的全局 gizmo
+        self.global_frame_index = 0                 # 画布预览用：idle 播到第几帧
+        self.global_frame_elapsed = 0.0
         self.animation_object_states: dict = {}    # 画布上每个动画对象的播放状态：id(entry) → {…}
         self.game_settings: dict | None = None     # 游戏配置浮层：game.json 的内容
         self.game_numbers: dict = {}               # 浮层里的跳高与速度（编辑期间是字符串）
@@ -225,6 +241,40 @@ class Editor:
     def media_base_dir(self) -> str | None:
         """图片路径的基准目录：game.json 所在的文件夹（游戏根），关卡里的路径也相对它。"""
         return game.game_root_of(self.game_path) if self.game_path else None
+
+    @staticmethod
+    def _default_player_animation() -> dict:
+        """新建游戏或 game.json 还没写玩家动画时的默认形状：尺寸/偏移用第一关的数值。"""
+        return {
+            "size": [2.02, 2.68],
+            "offset": [-0.115, -0.14],
+            "links": animation.new_links(),
+        }
+
+    @staticmethod
+    def _default_player_sound() -> dict:
+        return {"links": sound.new_object_links()}
+
+    def _load_player_views(self, settings: dict) -> None:
+        """从 game.json 读全局玩家动画/音效；缺了就用默认形状。"""
+        loaded = game.player_animation_of(settings)
+        if loaded is None:
+            self.player_animation = self._default_player_animation()
+        else:
+            loaded["links"] = animation.links_of(loaded, self.animation_library)
+            self.player_animation = loaded
+        loaded_sound = game.player_sound_of(settings)
+        if loaded_sound is None:
+            self.player_sound = self._default_player_sound()
+        else:
+            self.player_sound = {
+                "links": sound.object_links_of(loaded_sound)
+            }
+        self.player_animation_saved = copy.deepcopy(self.player_animation)
+        self.player_sound_saved = copy.deepcopy(self.player_sound)
+        self.global_undo_stack.clear()
+        self.global_prompt = None
+        self.global_grab = None
 
     def player_stats(self) -> tuple[float, float, bool]:
         """当前关卡实际用的跳高和速度：关卡 player 里写了就盖住 game.json 的玩家参数。
@@ -321,7 +371,10 @@ class Editor:
         """有缩放手柄的对象：拖动中的那个，或者唯一选中的那个（和画出来的手柄一致）。"""
         if self.object_grab is not None:
             return self.object_grab["kind"], self.object_grab["entry"]
-        return self.selected_entry()
+        target = self.selected_entry()
+        if target is not None and target[0] in GLOBAL_KINDS:
+            return None
+        return target
 
     # ---- 取光标下的对象（Alt+点击） --------------------------------
     def open_pick_menu(self, position: tuple, layout: Layout) -> bool:
@@ -527,6 +580,9 @@ class Editor:
         self.status = "已添加声音对象：在属性面板里选预设，再点「声音…」选声音。"
 
     def delete_entry(self, kind: str, entry: dict) -> None:
+        if kind in GLOBAL_KINDS:
+            self.status = "全局玩家表现不能删除，只能在属性面板里改。"
+            return
         self.push_undo()
         self.dirty = True
         self.remove_entry(kind, entry)
@@ -564,6 +620,291 @@ class Editor:
         self.dirty = True
         self.status = "已撤销上一步操作。"
 
+    # ---- 全局玩家表现：game.json 的 player_animation / player_sound ----
+    def global_active(self) -> bool:
+        return self.dialog is not None and self.dialog["kind"] in GLOBAL_KINDS
+
+    def global_kind(self) -> str | None:
+        return self.dialog["kind"] if self.global_active() else None
+
+    def global_entry(self, kind: str) -> dict | None:
+        if kind == KIND_GLOBAL_ANIMATION:
+            return self.player_animation
+        if kind == KIND_GLOBAL_SOUND:
+            return self.player_sound
+        return None
+
+    def global_dirty(self) -> bool:
+        return (
+            self.player_animation != self.player_animation_saved
+            or self.player_sound != self.player_sound_saved
+        )
+
+    def select_global(self, kind: str) -> None:
+        """选中全局项：直接打开属性页，不经过关卡对象的选择。"""
+        entry = self.global_entry(kind)
+        if entry is None:
+            return
+        self.selection = [(kind, entry)]
+        self.dialog = {"kind": kind, "entry": entry}
+        self.dialog_field = 0
+        self.detail_scroll = 0.0
+        self.dropdown_field = None
+        self.name_focused = False
+        self.number_buffer = None
+        self.go_list_menu = False
+        self.panel_tab = "properties"
+        self.global_frame_index = 0
+        self.global_frame_elapsed = 0.0
+        self.status = f"已选中{KIND_TITLES.get(kind, '全局项')}（所有关卡共用）。"
+
+    def _defer_global(self, action: tuple) -> bool:
+        """有没应用的全局改动、又要离开全局页：先挂起等用户选应用/放弃。"""
+        if not self.global_active() or not self.global_dirty():
+            return False
+        self.global_prompt = {"action": action}
+        self.status = "玩家表现有未应用的修改：先应用或放弃再离开。"
+        return True
+
+    def resolve_global_prompt(self, choice: str | None) -> str | None:
+        """保存提示的结果：apply / discard / None；返回 "quit" 表示外层可以退出。"""
+        prompt = self.global_prompt
+        if prompt is None:
+            return None
+        if choice is None:
+            self.global_prompt = None
+            self.status = "已取消离开。"
+            return None
+        if choice == "apply":
+            if not self.apply_global():
+                return None
+        elif choice == "discard":
+            self.discard_global()
+        self.global_prompt = None
+        return self._run_global_action(prompt["action"])
+
+    def _run_global_action(self, action: tuple) -> str | None:
+        """全局保存提示处理完，继续用户原来要做的事。"""
+        name = action[0]
+        if name == "select":
+            self.select(action[1], action[2])
+        elif name == "select_many":
+            self.select_many(action[1])
+        elif name == "clear":
+            self.select_many([])
+        elif name == "open_game_settings":
+            self.open_game_settings()
+        elif name == "open_settings":
+            self.open_settings()
+        elif name == "open_level_select":
+            self.open_level_select()
+        elif name == "choose_level":
+            self.choose_level(action[1])
+        elif name == "create_level":
+            self.create_level()
+        elif name == "request_open_game":
+            self.request_open_game()
+        elif name == "quit":
+            return "quit" if self.request_quit() else None
+        return None
+
+    def push_global_undo(self) -> None:
+        """全局撤销只记 player_animation / player_sound，不碰关卡和别的游戏配置。"""
+        self.global_undo_stack.append(
+            {
+                "animation": copy.deepcopy(self.player_animation),
+                "sound": copy.deepcopy(self.player_sound),
+            }
+        )
+        if len(self.global_undo_stack) > 200:
+            self.global_undo_stack.pop(0)
+
+    def undo_global(self) -> None:
+        if not self.global_undo_stack:
+            self.status = "当前没有可撤销的全局修改。"
+            return
+        snapshot = self.global_undo_stack.pop()
+        self.player_animation = copy.deepcopy(snapshot["animation"])
+        self.player_sound = copy.deepcopy(snapshot["sound"])
+        if self.global_active():
+            kind = self.dialog["kind"]
+            self.dialog = {"kind": kind, "entry": self.global_entry(kind)}
+        self.number_buffer = None
+        self.dropdown_field = None
+        self.global_frame_index = 0
+        self.global_frame_elapsed = 0.0
+        self.status = "已撤销上一步全局修改（尚未应用）。"
+
+    def apply_global(self) -> bool:
+        """把 pending 的玩家动画/音效写进 game.json；不动关卡 dirty。"""
+        if self.game_path is None:
+            self.status = "尚未打开游戏配置，无法应用玩家表现。"
+            return False
+        animation_data, sound_data = game.player_views_to_object(
+            self.player_animation, self.player_sound
+        )
+        settings = game.load_settings(self.game_path)
+        settings[game.PLAYER_ANIMATION_KEY] = animation_data
+        settings[game.PLAYER_SOUND_KEY] = sound_data
+        try:
+            game.save_settings(settings, self.game_path)
+        except OSError as error:
+            self.status = f"无法保存 game.json：{error}。"
+            return False
+        self.player_animation_saved = copy.deepcopy(self.player_animation)
+        self.player_sound_saved = copy.deepcopy(self.player_sound)
+        self.status = "玩家表现已应用到 game.json（所有关卡共用）。"
+        return True
+
+    def discard_global(self) -> None:
+        """放弃 pending：回到最近一次应用（或读盘时）的状态。"""
+        self.player_animation = copy.deepcopy(self.player_animation_saved)
+        self.player_sound = copy.deepcopy(self.player_sound_saved)
+        self.global_undo_stack.clear()
+        if self.global_active():
+            kind = self.dialog["kind"]
+            self.dialog = {"kind": kind, "entry": self.global_entry(kind)}
+        self.number_buffer = None
+        self.dropdown_field = None
+        self.global_frame_index = 0
+        self.global_frame_elapsed = 0.0
+        self.status = "已放弃未应用的玩家表现修改。"
+
+    def global_animation_box(self) -> dict | None:
+        """玩家动画在关卡里的世界矩形：玩家 AABB 底边中点 + 全局 offset。"""
+        player = self.level.player if self.level_in_view else None
+        if not isinstance(player, dict) or not isinstance(player.get("pos"), list):
+            return None
+        size = self.player_animation.get("size") or [1.0, 1.0]
+        offset = self.player_animation.get("offset") or [0.0, 0.0]
+        player_size = player.get("size") or [1.0, 1.0]
+        left = (
+            float(player["pos"][0])
+            + float(player_size[0]) / 2.0
+            + float(offset[0])
+            - float(size[0]) / 2.0
+        )
+        bottom = float(player["pos"][1]) + float(offset[1])
+        return {"pos": [left, bottom], "size": [float(size[0]), float(size[1])]}
+
+    def global_animation_frame(self) -> tuple[str, bool] | None:
+        """全局玩家动画在画布上的一帧：取 idle 剪辑；找不到就是没有。"""
+        entry = {
+            "preset": animation.PRESET_PLAYER,
+            "links": self.player_animation.get("links"),
+        }
+        frames, _, mirror, _ = animation.resolve_for_editor(self.animation_library, entry)
+        if not frames:
+            return None
+        index = max(0, min(self.global_frame_index, len(frames) - 1))
+        path = resolve_level_path(frames[index], self.media_base_dir)
+        if path is None:
+            return None
+        return path, mirror
+
+    def advance_global_animation(self, seconds: float) -> None:
+        entry = {
+            "preset": animation.PRESET_PLAYER,
+            "links": self.player_animation.get("links"),
+        }
+        frames, holds, _, _ = animation.resolve_for_editor(self.animation_library, entry)
+        if not frames:
+            self.global_frame_index = 0
+            self.global_frame_elapsed = 0.0
+            return
+        if len(frames) <= 1:
+            self.global_frame_index = 0
+            return
+        self.global_frame_elapsed += max(0.0, seconds)
+        index = max(0, min(self.global_frame_index, len(frames) - 1))
+        for _ in range(1000):
+            hold = holds[index] if index < len(holds) else animation.DEFAULT_HOLD
+            if self.global_frame_elapsed < hold - 1e-9:
+                break
+            self.global_frame_elapsed = max(0.0, self.global_frame_elapsed - hold)
+            index = index + 1 if index + 1 < len(frames) else 0
+        self.global_frame_index = index
+
+    def begin_global_grab(self, position: tuple, layout: Layout) -> bool:
+        """全局玩家动画的 gizmo：拖框改 offset，拖角改尺寸。"""
+        if self.global_kind() != KIND_GLOBAL_ANIMATION:
+            return False
+        box = self.global_animation_box()
+        if box is None:
+            return False
+        corner = self.handle_at(layout, KIND_ANIMATION, box, position)
+        rect = layout.entry_rect(box)
+        if corner is None and not rect.collidepoint(position):
+            return False
+        self.push_global_undo()
+        self.global_grab = {
+            "corner": corner,
+            "start": layout.world_point(position),
+            "box": (
+                float(box["pos"][0]),
+                float(box["pos"][1]),
+                float(box["size"][0]),
+                float(box["size"][1]),
+            ),
+            "offset": list(self.player_animation.get("offset") or [0.0, 0.0]),
+            "moved": False,
+        }
+        return True
+
+    def update_global_grab(self, position: tuple, layout: Layout) -> None:
+        grab = self.global_grab
+        if grab is None:
+            return
+        point = layout.world_point(position)
+        dx = point[0] - grab["start"][0]
+        dy = point[1] - grab["start"][1]
+        if not grab["moved"] and abs(dx) * layout.tile < 1 and abs(dy) * layout.tile < 1:
+            return
+        grab["moved"] = True
+        corner = grab["corner"]
+        if corner is None:
+            offset = [
+                grab["offset"][0] + dx,
+                grab["offset"][1] + dy,
+            ]
+            if self.snapping:
+                offset = [snap(value) for value in offset]
+            self.player_animation["offset"] = [round(value, 2) for value in offset]
+            return
+        left, bottom, width, height = grab["box"]
+        right, top = left + width, bottom + height
+        if "l" in corner:
+            left = point[0]
+        if "r" in corner:
+            right = point[0]
+        if "b" in corner:
+            bottom = point[1]
+        if "t" in corner:
+            top = point[1]
+        if self.snapping:
+            left, bottom, right, top = (snap(value) for value in (left, bottom, right, top))
+        width = max(MIN_SIZE, right - left)
+        height = max(MIN_SIZE, top - bottom)
+        player = self.level.player if self.level_in_view else None
+        if not isinstance(player, dict):
+            return
+        player_size = player.get("size") or [1.0, 1.0]
+        center_x = left + width / 2.0
+        self.player_animation["size"] = [round(width, 2), round(height, 2)]
+        self.player_animation["offset"] = [
+            round(center_x - (float(player["pos"][0]) + float(player_size[0]) / 2.0), 2),
+            round(bottom - float(player["pos"][1]), 2),
+        ]
+
+    def end_global_grab(self) -> bool:
+        grab = self.global_grab
+        self.global_grab = None
+        if grab is None:
+            return False
+        if not grab["moved"] and self.global_undo_stack:
+            self.global_undo_stack.pop()
+        return True
+
     # ---- 文件：游戏（game.json） ------------------------------------
     def open_game(self, path: str | None = None) -> None:
         """打开一份 game.json：没给路径就弹选择框；打开后请用户挑关卡。"""
@@ -583,6 +924,7 @@ class Editor:
         self.sound_library_scroll = 0.0
         self.sound_selected = next(iter(self.sound_library), "")
         self.sound_library_dirty = False
+        self._load_player_views(settings)
         self.startup = False
         self.level = Level()
         self.level_in_view = False
@@ -625,6 +967,8 @@ class Editor:
 
     def request_open_game(self) -> None:
         """换一个游戏：先选 game.json，当前关卡有没保存的修改再问一句。"""
+        if self._defer_global(("request_open_game",)):
+            return
         path = ask_game_file("打开游戏配置文件")
         if not path:
             self.status = "已取消打开游戏配置。"
@@ -662,6 +1006,8 @@ class Editor:
 
     def create_level(self) -> None:
         """关卡列表里的「新建关卡」：有没保存的修改就先问。"""
+        if self._defer_global(("create_level",)):
+            return
         if self.dirty:
             self.level_select_open = False
             self.pending_switch = ("new", "")
@@ -677,6 +1023,8 @@ class Editor:
 
     def open_level_select(self) -> None:
         """摊开关卡列表浮层。"""
+        if self._defer_global(("open_level_select",)):
+            return
         self.level_select_open = True
         self.level_select_scroll = 0
         self.view_menu_open = False
@@ -694,6 +1042,8 @@ class Editor:
         if self.path is not None and os.path.normpath(path) == os.path.normpath(self.path):
             self.level_select_open = False
             self.status = f"当前已打开关卡「{name}」。"
+            return
+        if self._defer_global(("choose_level", path)):
             return
         if self.dirty:
             self.pending_switch = ("level", path)
@@ -883,6 +1233,8 @@ class Editor:
     # ---- 游戏配置（game.json） --------------------------------------
     def open_game_settings(self) -> None:
         """打开游戏配置：常规（标题、玩家参数、画面背景）、动画、制作名单、声音与结尾过场。"""
+        if self._defer_global(("open_game_settings",)):
+            return
         if self.game_path is None:
             self.status = "尚未打开游戏配置。"
             return
@@ -1067,7 +1419,12 @@ class Editor:
                 ("title_bg",),
                 ("credits_bg",),
             ]
-        if self.game_tab in (GAME_ANIMATION_TAB, GAME_CUTSCENE_TAB, GAME_SOUND_LIBRARY_TAB):
+        if self.game_tab in (
+            GAME_ANIMATION_TAB,
+            GAME_CUTSCENE_TAB,
+            GAME_SOUND_LIBRARY_TAB,
+            GAME_PLAYER_VIEW_TAB,
+        ):
             return []
         if self.game_tab == 2:              # 制作名单
             cells: list[tuple] = []
@@ -1146,6 +1503,8 @@ class Editor:
 
     def type_game_settings(self, char: str) -> None:
         """键盘输入：跳高、速度、淡入淡出吃数字和小数点，路径与文字什么都能打。"""
+        if self.game_tab == GAME_PLAYER_VIEW_TAB:
+            return                  # 玩家表现页只有两个跳转按钮，没有输入格
         if self.game_cutscene_tab():
             self.type_cutscene(char)
             return
@@ -1181,6 +1540,8 @@ class Editor:
             self.set_game_field_text(text + char)
 
     def erase_game_settings_char(self) -> None:
+        if self.game_tab == GAME_PLAYER_VIEW_TAB:
+            return
         if self.game_cutscene_tab():
             self.erase_cutscene_char()
             return
@@ -1904,8 +2265,8 @@ class Editor:
 
     # ---- 动画对象：跟随与链接弹窗 -----------------------------------
     def animation_follow_options(self) -> list:
-        """跟随下拉：无 / 玩家 / 关卡里有名字的对象。"""
-        options = [("无", ""), ("玩家", "@player")]
+        """跟随下拉：无 / 关卡里有名字的对象；玩家现在由全局玩家动画单独负责。"""
+        options = [("无", "")]
         seen = set()
         for entries in (
             self.level.movable_blocks,
@@ -1943,12 +2304,35 @@ class Editor:
         }
         self.status = "编辑这个动画对象的动画链接；确定后随关卡保存。"
 
+    def open_global_animation_link(self) -> None:
+        """全局玩家动画的链接弹窗：预设固定玩家，不碰关卡。"""
+        self.animation_link = {
+            "entry": self.player_animation,
+            "preset": animation.PRESET_PLAYER,
+            "links": copy.deepcopy(
+                animation.links_of(self.player_animation, self.animation_library)
+            ),
+            "dropdown": None,
+            "dropdown_scroll": 0,
+            "global": True,
+        }
+        self.status = "编辑所有关卡共用的玩家动画链接；应用后写入 game.json。"
+
     def close_animation_link(self, commit: bool) -> None:
         link = self.animation_link
         self.animation_link = None
         if link is None or not commit:
             if link is not None:
                 self.status = "已取消编辑动画链接。"
+            return
+        if link.get("global"):
+            new_links = copy.deepcopy(link["links"])
+            if new_links == self.player_animation.get("links"):
+                self.status = "玩家动画链接没有变化。"
+                return
+            self.push_global_undo()
+            self.player_animation["links"] = new_links
+            self.status = "玩家动画链接已更新（尚未应用）。"
             return
         entry = link["entry"]
         self.push_undo()
@@ -1961,7 +2345,9 @@ class Editor:
 
     def set_animation_link_preset(self, preset: str) -> None:
         link = self.animation_link
-        if link is None or preset not in (animation.PRESET_GENERAL, animation.PRESET_PLAYER):
+        if link is None or link.get("global"):
+            return
+        if preset not in (animation.PRESET_GENERAL, animation.PRESET_PLAYER):
             return
         link["preset"] = preset
         link["dropdown"] = None
@@ -2015,7 +2401,7 @@ class Editor:
         return f"声音…（{sound.preset_label(sound.preset_of(entry))}）"
 
     def open_sound_link(self, entry: dict) -> None:
-        """打开声音对象的链接弹窗：通用一条，玩家按四个动作各一条。"""
+        """打开声音对象的链接弹窗：通用一条，玩家按六个动作各一条。"""
         if not isinstance(entry, dict):
             return
         self.sound_link = {
@@ -2027,6 +2413,18 @@ class Editor:
         }
         self.status = "编辑这个声音对象的链接；确定后随关卡保存。"
 
+    def open_global_sound_link(self) -> None:
+        """全局玩家音效的链接弹窗：预设固定玩家，不碰关卡。"""
+        self.sound_link = {
+            "entry": self.player_sound,
+            "preset": sound.PRESET_PLAYER,
+            "links": copy.deepcopy(sound.object_links_of(self.player_sound)),
+            "dropdown": None,
+            "dropdown_scroll": 0,
+            "global": True,
+        }
+        self.status = "编辑所有关卡共用的玩家音效；应用后写入 game.json。"
+
     def close_sound_link(self, commit: bool) -> None:
         link = self.sound_link
         self.sound_link = None
@@ -2034,6 +2432,15 @@ class Editor:
             return
         if not commit:
             self.status = "已取消编辑声音链接。"
+            return
+        if link.get("global"):
+            new_links = copy.deepcopy(link["links"])
+            if new_links == self.player_sound.get("links"):
+                self.status = "玩家音效链接没有变化。"
+                return
+            self.push_global_undo()
+            self.player_sound["links"] = new_links
+            self.status = "玩家音效链接已更新（尚未应用）。"
             return
         entry = link["entry"]
         self.push_undo()
@@ -2621,6 +3028,8 @@ class Editor:
     # ---- 选择 -------------------------------------------------------
     def select(self, kind: str, entry: dict) -> None:
         """单选：同时打开属性面板。"""
+        if kind not in GLOBAL_KINDS and self._defer_global(("select", kind, entry)):
+            return
         self.selection = [(kind, entry)]
         self.dialog = {"kind": kind, "entry": entry}
         self.dialog_field = 0
@@ -2628,10 +3037,15 @@ class Editor:
         self.dropdown_field = None
         self.name_focused = False
         self.number_buffer = None
+        if kind in GLOBAL_KINDS:
+            self.panel_tab = "properties"
         self.status = f"已选中{KIND_TITLES.get(kind, '对象')}。"
 
     def select_many(self, pairs: list) -> None:
         """多选：面板只列清单和数量，不给属性；正好一个时回到属性面板。"""
+        global_only = len(pairs) == 1 and pairs[0][0] in GLOBAL_KINDS
+        if not global_only and self._defer_global(("select_many", pairs)):
+            return
         self.selection = list(pairs)
         self.pick_menu = None
         self.detail_scroll = 0.0
@@ -2710,19 +3124,33 @@ class Editor:
         return [(kind, counts[kind]) for kind in KIND_ORDER if kind in counts]
 
     def go_list_items(self) -> list:
-        """按种类筛过一遍的对象；筛的那种这一关里没有就是空列表。"""
+        """列表最上面是固定的「全局」组，再是按种类筛过的关卡对象。
+
+        全局项只属于 game.json，不写进关卡，也不能删除；选中后进属性页编辑。
+        """
+        rows = [
+            (KIND_GLOBAL_HEADER, None),
+            (KIND_GLOBAL_ANIMATION, self.player_animation),
+            (KIND_GLOBAL_SOUND, self.player_sound),
+        ]
         entries = self.go_list_objects()
         if not self.go_list_filter:
-            return entries
-        return [
+            return rows + entries
+        return rows + [
             (kind, entry) for kind, entry in entries if kind == self.go_list_filter
         ]
 
     def go_list_label(self, kind: str, entry: dict) -> str:
         """一行写什么：种类、名字（有的话）和位置（格，去掉多余的小数位）。
 
-        声音对象没有位置，写预设就够了。
+        声音对象没有位置，写预设就够了；全局组单独成一组。
         """
+        if kind == KIND_GLOBAL_HEADER:
+            return "全局（游戏配置）"
+        if kind == KIND_GLOBAL_ANIMATION:
+            return "玩家动画（全局）"
+        if kind == KIND_GLOBAL_SOUND:
+            return "玩家音效（全局）"
         title = KIND_TITLES.get(kind, "对象")
         if kind == KIND_SOUND:
             return f"{title}（{sound.preset_label(sound.preset_of(entry))}）"
@@ -2759,8 +3187,13 @@ class Editor:
         self.go_list_scroll = max(0.0, self.go_list_scroll + float(delta) * SCROLL_STEP)
 
     def select_go_list_item(self, kind: str, entry: dict) -> None:
-        """点一行：在画布上选中这个对象，属性面板跟着打开。"""
+        """点一行：全局项直接进属性页，关卡对象在画布上选中。"""
         self.go_list_menu = False
+        if kind == KIND_GLOBAL_HEADER:
+            return
+        if kind in GLOBAL_KINDS:
+            self.select_global(kind)
+            return
         self.select(kind, entry)
 
     def reset_go_list(self) -> None:
@@ -2773,6 +3206,9 @@ class Editor:
         """删掉所有选中的对象，算一步撤销。"""
         if not self.selection:
             self.status = "当前没有选中的对象。"
+            return
+        if any(kind in GLOBAL_KINDS for kind, _ in self.selection):
+            self.status = "全局玩家表现不能删除。"
             return
         self.push_undo()
         count = len(self.selection)
@@ -2912,6 +3348,8 @@ class Editor:
     # ---- 退出确认 ---------------------------------------------------
     def request_quit(self) -> bool:
         """真能退出就返回 True；有未保存的改动就先弹确认。"""
+        if self._defer_global(("quit",)):
+            return False
         if self.dirty:
             self.confirm_quit = True
             return False
@@ -3002,6 +3440,18 @@ class Editor:
             return []
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
+        if kind == KIND_GLOBAL_ANIMATION:
+            size = entry.get("size") or [1.0, 1.0]
+            offset = entry.get("offset") or [0.0, 0.0]
+            return [
+                ("宽度", number_text(size[0])),
+                ("高度", number_text(size[1])),
+                ("横向偏移", number_text(offset[0])),
+                ("纵向偏移", number_text(offset[1])),
+                ("范围", "所有关卡共用"),
+            ]
+        if kind == KIND_GLOBAL_SOUND:
+            return [("范围", "所有关卡共用")]
         if kind == KIND_SOUND:
             # 声音没有位置和大小：只有预设和跟随两格
             return [
@@ -3197,6 +3647,10 @@ class Editor:
         if self.dialog is None:
             return ""
         kind = self.dialog["kind"]
+        if kind == KIND_GLOBAL_ANIMATION:
+            return "玩家动画（全局）"
+        if kind == KIND_GLOBAL_SOUND:
+            return "玩家音效（全局）"
         name = self.dialog["entry"].get("name", "")
         return f"{KIND_TITLES.get(kind, '')} {name}".strip()
 
@@ -3204,9 +3658,18 @@ class Editor:
         """方向键与加减按钮：数字字段加 delta，其余字段循环切换。"""
         if self.dialog is None:
             return
+        if (
+            self.global_active()
+            and self.dialog_number_value(self.dialog_field) is None
+            and self.trigger_field_parts(self.dialog_field) is None
+        ):
+            return                      # 全局页只有数字字段，不要在说明行上记空撤销
         self.number_buffer = None          # 改用加减就把键盘输入状态收起来
-        self.push_undo()
-        self.dirty = True
+        if self.global_active():
+            self.push_global_undo()
+        else:
+            self.push_undo()
+            self.dirty = True
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
         field = self.dialog_field
@@ -3446,6 +3909,13 @@ class Editor:
             return None
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
+        if kind == KIND_GLOBAL_ANIMATION:
+            size = entry.get("size") or [1.0, 1.0]
+            offset = entry.get("offset") or [0.0, 0.0]
+            values = (size[0], size[1], offset[0], offset[1])
+            return values[field] if 0 <= field < len(values) else None
+        if kind == KIND_GLOBAL_SOUND:
+            return None
         if kind == KIND_SOUND:
             return None                     # 声音只有预设一格，没有数字字段
         if field == 0:
@@ -3466,6 +3936,16 @@ class Editor:
         """把一个数字字段设成 value：位置、尺寸、偏移、力度都可以带小数。"""
         kind = self.dialog["kind"]
         entry = self.dialog["entry"]
+        if kind == KIND_GLOBAL_ANIMATION:
+            size = list(entry.get("size") or [1.0, 1.0])
+            offset = list(entry.get("offset") or [0.0, 0.0])
+            if field in (0, 1):
+                size[field] = max(MIN_SIZE, round(value, 2))
+                entry["size"] = size
+            elif field in (2, 3):
+                offset[field - 2] = round(value, 2)
+                entry["offset"] = offset
+            return
         pos = entry["pos"]
         if field == 0:
             pos[0] = round(value, 2)
@@ -3507,12 +3987,18 @@ class Editor:
         if char.isdigit():
             if self.number_buffer is None:
                 self.number_buffer = ""
-                self.push_undo()           # 一次完整输入只记一步撤销
+                if self.global_active():
+                    self.push_global_undo()
+                else:
+                    self.push_undo()       # 一次完整输入只记一步撤销
             if len(self.number_buffer) < NUMBER_TEXT_MAX_LENGTH:
                 self.number_buffer += char
         elif char == "-" and self.number_buffer is None:
             self.number_buffer = "-"       # 负号只允许打头（力度回头会被夹到 0）
-            self.push_undo()
+            if self.global_active():
+                self.push_global_undo()
+            else:
+                self.push_undo()
         elif char == "." and "." not in (self.number_buffer or ""):
             if self.number_buffer is None:
                 self.number_buffer = "0"   # 空着就敲小数点：当成在打「0.」
@@ -3534,7 +4020,8 @@ class Editor:
         except ValueError:
             return
         self.set_dialog_number(self.dialog_field, value)
-        self.dirty = True
+        if not self.global_active():
+            self.dirty = True
 
     def erase_dialog_number(self) -> None:
         if not self.number_buffer:
@@ -3564,6 +4051,8 @@ class Editor:
         return f"{player[key]:g}" if isinstance(player[key], (int, float)) else str(player[key])
 
     def open_settings(self) -> None:
+        if self._defer_global(("open_settings",)):
+            return
         # 名称以外的数字项都按字符串编辑：可以直接敲数字，也可以点右边的加减
         flip_up, flip_down = self.level.flip_area_offsets
         music = sound.fields_of(self.level.sound)

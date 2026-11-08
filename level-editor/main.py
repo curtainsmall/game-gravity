@@ -32,7 +32,7 @@ from view.chrome import handle_file_menu_click, handle_view_menu_click
 from view.dock import dock_reserved, dock_visible
 from view.frame import draw
 from view.layout import Layout
-from view.modals import quit_geometry, startup_rects
+from view.modals import global_prompt_geometry, quit_geometry, startup_rects
 from view.panel import detail_panel_rect
 
 MODIFIER_KEYS = (pygame.K_LCTRL, pygame.K_RCTRL, pygame.K_LSHIFT, pygame.K_RSHIFT)
@@ -168,6 +168,29 @@ def run() -> None:
                         if rect.collidepoint(event.pos):
                             editor.create_game() if action == "create" else editor.open_game()
                             break
+            elif editor.global_prompt is not None:
+                # 离开全局玩家表现页：应用 / 放弃 / 取消
+                handled = False
+                choice = None
+                if event.type == pygame.KEYDOWN:
+                    handled = True
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_y):
+                        choice = "apply"
+                    elif event.key == pygame.K_n:
+                        choice = "discard"
+                    elif event.key != pygame.K_ESCAPE:
+                        handled = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    panel, apply_rect, discard_rect, cancel_rect = global_prompt_geometry(screen)
+                    if apply_rect.collidepoint(event.pos):
+                        handled, choice = True, "apply"
+                    elif discard_rect.collidepoint(event.pos):
+                        handled, choice = True, "discard"
+                    elif cancel_rect.collidepoint(event.pos) or not panel.collidepoint(event.pos):
+                        handled, choice = True, None
+                if handled:
+                    if editor.resolve_global_prompt(choice) == "quit":
+                        running = False
             elif editor.sound_link is not None:
                 # 声音对象的链接弹窗：Esc 取消、回车确定，滚轮翻声音下拉
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -359,6 +382,9 @@ def run() -> None:
                 if editor.object_grab is not None:
                     editor.update_object_grab(event.pos, layout)
                     continue
+                if editor.global_grab is not None:
+                    editor.update_global_grab(event.pos, layout)
+                    continue
                 if editor.marquee_start is not None:
                     editor.update_marquee(event.pos, layout)
                     continue
@@ -434,6 +460,12 @@ def run() -> None:
                         editor.open_create_menu(event.pos)
                 elif event.button == 1 and editor.creating:
                     editor.press_canvas(event.pos, layout)
+                elif event.button == 1 and editor.begin_global_grab(event.pos, layout):
+                    continue
+                elif event.button == 1 and editor.global_active():
+                    # 全局页里画布只接 gizmo；点别处只做选择/离开提示，不直接拖关卡对象
+                    editor.select_at(event.pos, layout)
+                    continue
                 elif event.button == 1:
                     editor.update_hover(event.pos, layout)
                     # Alt+点击：叠着多个对象时先列出它们，让用户挑一个
@@ -449,6 +481,8 @@ def run() -> None:
                     editor.pan_drag = None
                 elif event.button == 1 and editor.object_grab is not None:
                     editor.end_object_grab()
+                elif event.button == 1 and editor.global_grab is not None:
+                    editor.end_global_grab()
                 elif event.button == 1 and editor.marquee_start is not None:
                     editor.finish_marquee(layout)
                 elif event.button == 1 and editor.drag_start is not None:
@@ -458,7 +492,9 @@ def run() -> None:
                 if editor.pick_menu is not None and event.key == pygame.K_ESCAPE:
                     editor.close_pick_menu()
                 elif ctrl and event.key == pygame.K_z:
-                    if editor.level_in_view:
+                    if editor.global_active():
+                        editor.undo_global()
+                    elif editor.level_in_view:
                         editor.undo()
                 elif ctrl and event.key == pygame.K_s:
                     if editor.level_in_view:
@@ -521,6 +557,7 @@ def run() -> None:
         # 动画集里的预览和画布上的动画对象各走各的
         editor.advance_animation_edit(dt)
         editor.advance_animation_objects(dt)
+        editor.advance_global_animation(dt)
 
         draw(screen, editor, font, layout)
         pygame.display.flip()
