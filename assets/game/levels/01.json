@@ -885,7 +885,7 @@
   },
   "background": "textures/level1/background.png",
   "sound": {
-    "sound": "开场曲beta",
+    "sound": "level1",
     "loop": true,
     "fade_in": 0.5,
     "fade_out": 1.0

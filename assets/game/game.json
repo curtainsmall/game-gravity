@@ -120,7 +120,7 @@
   },
   "sounds": {
     "title": {
-      "sound": "开场曲beta",
+      "sound": "title_screen",
       "loop": true,
       "fade_in": 0.5,
       "fade_out": 1.0
@@ -498,8 +498,17 @@
     }
   },
   "sound_library": {
-    "开场曲beta": {
-      "path": "sounds/开场曲beta.mp3"
+    "title_screen": {
+      "path": "sounds/title_screen.mp3"
+    },
+    "level2": {
+      "path": "sounds/level2.wav"
+    },
+    "level1": {
+      "path": "sounds/level1.mp3"
+    },
+    "level3": {
+      "path": "sounds/level3.mp3"
     }
   }
 }
