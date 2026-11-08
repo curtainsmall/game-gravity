@@ -1,7 +1,7 @@
 {
   "width": 240,
   "height": 16,
-  "flip_area_offsets": [8.0, 8.0],
+  "flip_area_offsets": [10.0, 10.0],
   "blocks": [
     {
       "pos": [4.0, 0.0],
